@@ -97,8 +97,8 @@ def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673
         f.pop(name)
         
     
-    factor=1./f[0].header['EXPTIME']
-    factor=10**(28.0 - f[0].header['MAGZERO'])
+    # factor=1./f[0].header['EXPTIME']
+    factor=10**(0.4*(28.0 - f[0].header['MAGZERO']))
     f[1].data*=factor
 
     mean,median,std=sigma_clipped_stats(f[1].data,sigma_lower=3,sigma_upper=2,grow=3)
