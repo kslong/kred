@@ -6,6 +6,17 @@ Magellanic Clouds
 To use these tools this directory should be placed both
 in PATH and PYTHONPATh
 
+If one has placed kred in one's home directory, the following
+should be added to ones .bashrc or .bash\_profile
+
+    export KRED=$HOME/kred/
+    PATH=$PATH:$KRED/py_progs/
+    PYTHONPATH=$PYTHONPATH:$KRED/py_progs/
+
+
+There is an Jupyter script that performs very basic tests
+of the installation in the exmaples directory.
+
 The tools require a set of relatively commmon modules, such
 as astropy, and normally are run from within an appropriate 
 conda enviromnment.

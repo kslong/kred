@@ -1,12 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Create Combined images of the different filters in the field
-# 
-# This can only be run after PrepFiles and SumFiles have benn run.    The routines here generate 
-# inputs to run swarp which combines the individual CCD images into tile images.  It does not
-# actually run swarp at present
+'''
 
+Create Combined images of the different filters in the field
+
+This can only be run after PrepFiles and SumFiles have benn run.    The routines here generate 
+inputs to run swarp which combines the individual CCD images into tile images.  It does not
+actually run swarp at present
+
+
+'''
 
 
 import os, stat
@@ -17,6 +21,12 @@ from astropy.table import vstack
 
 
 def get_sum_tab(field='LMC_c42',tile=7):
+    '''
+    Read a table that summarizes information about
+    the various files athat are used for a tile
+    
+    The location of the table files is currently hardocaded
+    '''
     
     xname='../workspace/Summary/%s_%d_imsum.txt' % (field,tile)
     xtab=ascii.read(xname)
@@ -25,6 +35,13 @@ def get_sum_tab(field='LMC_c42',tile=7):
 
 
 def summarize(field='LMC_c42',tile=7):
+    '''
+    Summarize the various fits files that are relevant to
+    a specific tile
+    '''
+
+
+
     x=get_sum_tab(field,tile)
 
     ra=np.average(x['RA'])
@@ -147,7 +164,7 @@ GAIN_DEFAULT           0.0             # Default gain if no FITS keyword found
 
 #--------------------------- Background subtraction ---------------------------
 
-SUBTRACT_BACK          Y               # Subtraction sky background (Y/N)?
+SUBTRACT_BACK          N               # Subtraction sky background (Y/N)?
                                        # (all or for each image)
 
 BACK_TYPE              AUTO            # AUTO or MANUAL
@@ -274,7 +291,9 @@ def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=
 
 def steer(argv):
     '''
-    This is just a steering routine
+    This is just a steering routine for running from the command line
+
+    (Currently this is not set up for this routine)
     '''
     field=''
     tiles=[]
