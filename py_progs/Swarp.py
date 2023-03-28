@@ -3,11 +3,28 @@
 
 '''
 
-Create Combined images of the different filters in the field
+Create Combined images of the different filters in the field using swarp
 
 This can only be run after PrepFiles and SumFiles have benn run.    The routines here generate 
-inputs to run swarp which combines the individual CCD images into tile images.  It does not
-actually run swarp at present
+inputs to run swarp which combines the individual CCD images into tile images.   This is normally
+carried out inside a Jupyter scripts.
+
+It is also possible to run swarp once the inputs have been generated.   This can be done
+either in a Jupyter script or from the command line.
+
+To run swarp from the command line (one must be in the normal run directory) since
+a particular directory structure is assumed here)
+
+Usage:   Swarp.py [-all] field [tiles]
+
+where -all will cause swarp to be run on all 16 tiles.
+
+If one wants to run only 1 or a few tiles then the command will be something like
+
+Swarp.py LMC_c42  1 3 5
+
+Note that the filed name doos NOT include _d 
+
 
 
 '''
@@ -18,6 +35,11 @@ from astropy.io import ascii
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import vstack
+from glob import glob
+import timeit
+import subprocess
+
+exec_dir=os.getcwd()
 
 
 def get_sum_tab(field='LMC_c42',tile=7):
@@ -205,7 +227,8 @@ NTHREADS               0               # Number of simultaneous threads for
 
 def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=xdefault):
     '''
-    Generate the inputs necessary to run swarp
+    Generate the inputs necessary to run swarp where exp corresponds to one
+    or more exposure times for a particular filter and tile.  
     '''
     print('\n### Creating swarp inputs for %s tile %d and filter %s' % (field,tile,filt))
     x=get_sum_tab(field,tile)
@@ -289,11 +312,71 @@ def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=
 
 
 
+def run_swarp(field='LMC_c42',tile=7):
+    '''
+    run_all of the swarp commands in a particular field and tile
+
+    The normal outputs from swarp are writeen to a .txt file,
+    a few are written to the screen here so that one can see 
+    that the routines have run correctly.  
+    '''
+    run_dir='../workspace/%s_d/%d/' % (field,tile)
+    try:
+        os.chdir(run_dir)
+    except:
+        print('Error: Could not cd to %s' % run_dir)
+        os.chdir(exec_dir)
+
+    run_files=glob('*.run')
+    # print(run_files)
+    qstart=start_time=timeit.default_timer()
+    nfiles=len(run_files)
+    n=1
+    for one in run_files:
+        print('\n***Beginning %s (%d of %d)' % (one,n,nfiles))
+        outfile=one.replace('.run','.txt')
+        command=one
+        xout=subprocess.run(command,shell=True,capture_output=True)
+        current_time=timeit.default_timer()
+
+        print('***Writing last portion of swarp outputs\n')
+
+        z=open(outfile,'w')
+        zz=xout.stderr.decode()
+        lines=zz.split('\n')
+        xlines=[]
+        for line in lines:
+            if line.count('\x1b[1M>')==0:
+                xlines.append(line)
+                z.write('%s\n' % line)
+        z.close()
+
+
+        for xline in xlines[-10:]:
+            print(xline)
+
+        print('***Finished writing end of outputs')
+
+        print('***Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
+        start_time=current_time
+
+
+        n+=1
+
+
+    print('\n***Completely done for tile %d in %d s\n' % (tile,current_time-qstart))
+
+
+    os.chdir(exec_dir)
+    return 
+
+
+
 def steer(argv):
     '''
-    This is just a steering routine for running from the command line
+    This is just a steering routine for running swarp on one or more
+    tiles from the command line
 
-    (Currently this is not set up for this routine)
     '''
     field=''
     tiles=[]
@@ -319,12 +402,16 @@ def steer(argv):
         i+=1
 
     if xall:
-        prep_all_tiles(field,redo)
-    else:
-        if len(tiles)==0:
-            print('The tiles to be processed must be listed after the field, unless -all is invoked')
-        for one in tiles:
-            prep_one_tile(field,one,redo)
+        tiles=[]
+        i=1
+        while i<17:
+            tiles.append(i)
+            i+=1
+
+    for one in tiles:
+        run_swarp(field,one)
+
+
     return
 
 
