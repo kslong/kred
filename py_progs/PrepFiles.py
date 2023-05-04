@@ -72,6 +72,14 @@ def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673
     '''
     Prepare one file for combining with swarp.  This version scales by MAGZERO
     where 1DN will be a flux corresponding to mag 28
+
+    History:
+
+    230504 - Removed .fz from output file names.  Note that this does not mean that the
+    data is not compressed.   Added extra keywords to primary header of output file
+    that may be useful for swarp, including the rescaled saturation level
+
+    :
     '''
 
  
@@ -80,6 +88,7 @@ def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673
     words=filename.split('/')
     new_file=words[-1]
     outfile='%s/%s' %(workdir,new_file)
+    outfile=outfile.replace('.fz','')
     
     if redo==False and os.path.isfile(outfile):
         return outfile
@@ -101,7 +110,6 @@ def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673
         f.pop(name)
         
     
-    # factor=1./f[0].header['EXPTIME']
     factor=10**(0.4*(28.0 - f[0].header['MAGZERO']))
     f[1].data*=factor
 
@@ -111,6 +119,19 @@ def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673
 
     f[0].header['XFACTOR']=factor
     f[0].header['XMED']=median
+
+    xgain=0.5*(f[1].header['GAINA']+f[1].header['GAINB'])
+
+    f[0].header['GAIN']=xgain*factor
+
+    xsat=np.minimum(f[1].header['SATURATA'],f[1].header['SATURATB'])
+    f[0].header['SATURAT']=xsat*factor
+
+
+    xread=0.5*(f[1].header['RDNOISEA']+f[1.header['RDNOISEB'])
+
+    f[0].header['RDNOISE']=xread*factor
+
     
     f.writeto(outfile,overwrite=True)
     return outfile

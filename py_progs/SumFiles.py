@@ -33,8 +33,10 @@ Primary routines:
 
 
 Notes:
+
                                        
 History:
+    230504 - Modified so files gets fits files with and without .fz extension
 
 
 '''
@@ -62,9 +64,9 @@ def get_tile_files(field='LMC_c42',tile=7):
         print('Error: the tile directory %s does not exist' % tile_dir)
         return []
     
-    xfiles='%s/L*fits.fz' % tile_dir
-
+    xfiles='%s/L*fits.*' % tile_dir
     files=glob(xfiles)
+
     print('get_tile_files found %d files' % len(files))
     
     i=0
