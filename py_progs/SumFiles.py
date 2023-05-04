@@ -62,12 +62,15 @@ def get_tile_files(field='LMC_c42',tile=7):
     print('The tile directory is ',tile_dir)
     if os.path.isdir(tile_dir)==False:
         print('Error: the tile directory %s does not exist' % tile_dir)
-        return []
+        return tile_dir,[]
     
-    xfiles='%s/L*fits.*' % tile_dir
+    xfiles='%s/L*fits*' % tile_dir
     files=glob(xfiles)
 
     print('get_tile_files found %d files' % len(files))
+
+    if len(files)==0:
+        print('Error no files found for %s' % xfiles)
     
     i=0
     while i<len(files):
@@ -157,7 +160,13 @@ def make_summary(filenames='',work_dir='',outroot=''):
 
 def do_one_tile(field='LMC_c45',tile=7):
     tile_dir,files=get_tile_files(field,tile)
+    if len(files)==0:
+        print('Houston: There is a problem for field %s and tile %d.  No files were found' % (field,tile))
+        return
     make_summary(filenames=files,work_dir=tile_dir,outroot='')
+
+    summarize(field,tile)
+    return
 
 
 def do_all_tiles(field='LMC_c42'):
@@ -169,6 +178,121 @@ def do_all_tiles(field='LMC_c42'):
     while i<17:
         do_one_tile(field,tile=i)
         i+=1
+
+def get_sum_tab(field='LMC_c42',tile=7):
+    '''
+    Read a table that summarizes information about
+    the various files athat are used for a tile
+
+    The location of the table files is currently hardocaded
+    '''
+
+    xname='../workspace/Summary/%s_%d_imsum.txt' % (field,tile)
+    xtab=ascii.read(xname)
+    return xtab
+
+def summarize(field='LMC_c42',tile=7):
+    '''
+    Summarize the various fits files that are relevant to
+    a specific tile
+
+    History
+
+    230504 - Moved this functionality from Swarp.py to SumFiles.py, and 
+    created an summary in the Summary directory)
+    '''
+
+    f=open('../workspace/Summary/%s_%d.exsum.txt' % (field,tile),'w')
+
+    string=('Summary for field %s tile %d' % (field,tile))
+
+    print(string)
+    f.write('%s/n' % string)
+
+    x=get_sum_tab(field,tile)
+
+    ra=np.average(x['RA'])
+    dec=np.average(x['Dec'])
+
+    string='The center of this tile is %.5f  %.5f' % (ra,dec)
+
+    print(string)
+    f.write('%s\n' % string)
+
+
+    ha=x[x['Filter']=='Ha']
+    s2=x[x['Filter']=='SII']
+    r=x[x['Filter']=='R']
+    n708=x[x['Filter']=='N708']
+
+    string=('Ha  images  : %3d' % len(ha))
+    print(string)
+    f.write('%s\n' % string)
+
+    string=('SII images  : %3d' % len(s2))
+    print(string)
+    f.write('%s\n' % string)
+
+    string=('R   images  : %3d' % len(r))
+    print(string)
+    f.write('%s\n' % string)
+
+    string=('N708 images : %3d' % len(n708))
+    print(string)
+    f.write('%s\n' % string)
+
+    string=('\nHa')
+    print(string)
+    f.write('%s\n' % string)
+
+    times,counts=np.unique(ha['Exptime'],return_counts=True)
+    i=0
+    while i<len(times):
+        string=('   exp %8s  no %4d' % (times[i],counts[i]))
+        print(string)
+        f.write('%s\n' % string)
+        i+=1
+
+    string=('\nSII')
+    print(string)
+    f.write('%s\n' % string)
+    times,counts=np.unique(s2['Exptime'],return_counts=True)
+    i=0
+    while i<len(times):
+        string=('   exp %8s  no %4d' % (times[i],counts[i]))
+        print(string)
+        f.write('%s\n' % string)
+        i+=1
+
+    string=('\nR')
+    print(string)
+    f.write('%s\n' % string)
+
+    times,counts=np.unique(r['Exptime'],return_counts=True)
+    i=0
+    while i<len(times):
+        string=('   exp %8s  no %4d' % (times[i],counts[i]))
+        print(string)
+        f.write('%s\n' % string)
+        i+=1
+
+    string=('\nN708')
+    print(string)
+    f.write('%s\n' % string)
+
+    times,counts=np.unique(n708['Exptime'],return_counts=True)
+    i=0
+    while i<len(times):
+        string=('   exp %8s  no %4d' % (times[i],counts[i]))
+        print(string)
+        f.write('%s\n' % string)
+        i+=1
+
+    print('\n')
+    f.close()
+    return ra,dec
+
+
     
 def steer(argv):
     '''
