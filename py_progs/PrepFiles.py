@@ -32,6 +32,10 @@ from astropy.stats import sigma_clipped_stats
 from glob import glob
 import numpy as np
 import timeit
+import time
+import multiprocessing
+multiprocessing.set_start_method("spawn",force=True)
+
 
 
 
@@ -141,6 +145,102 @@ def prep_one_tile(field='LMC_c42',tile=7,redo=False):
     elapsed = timeit.default_timer() - start_time
     print('All done in %f s' % elapsed)    
     return
+
+def get_no_jobs(jobs):
+    '''
+    Check how many jobs are running
+    '''
+    njobs=0
+    for one in jobs:
+        if one.is_alive():
+            njobs+=1
+    return njobs
+
+
+def xprep_one_tile(field='LMC_c42',tile=7,redo=False,np=4):
+    '''
+    Process tiles with using more than one core.
+
+    This routine creates a bundle of files to process 
+    at once. This is necessary because multiprocessing
+    opens many files (note that in linux everything is
+    a file, so this does not refer to fits files), and
+    this can exceed the file limit.  The sympton of this
+    is a message that says too many files are open.  If
+    one sees this message, one may need to reduce n
+    below.
+
+    '''
+
+    try:
+        rawdir,workdir,xfiles=setup_one_tile(field,tile)
+    except:
+        print('Failed')
+        return
+    
+    
+    start_time = timeit.default_timer()
+    
+    nn=len(xfiles)
+    nncount=0
+
+    n=200  # This is the maximum number of jobs that will be run in a Cycle
+
+    bounds=[]
+    k=0
+    while k<nn:
+        bounds.append(k)
+        k+=100
+    if bounds[-1]<nn:
+        bounds.append(nn)
+
+
+    k=1
+    while k<len(bounds):
+        files=xfiles[bounds[k-1]:bounds[k]]
+
+        print(' Started processing of files %4d - %4d' % (bounds[k-1],bounds[k]))
+
+        jobs=[]
+        for one in files:
+            p=multiprocessing.Process(target=prep_one_file,args=(one,workdir,redo))
+            jobs.append(p)
+
+
+        i=0
+        while i<np and i<len(jobs):
+            t = time.localtime()
+            one=jobs[i]
+            one.start()
+            nncount+=1
+            i+=1
+
+
+        njobs=get_no_jobs(jobs)
+
+        while i<len(jobs):
+            time.sleep(2)
+            njobs=get_no_jobs(jobs)
+
+            while njobs<np and i<len(jobs):
+                t = time.localtime()
+                one=jobs[i]
+                one.start()
+                nncount+=1
+                njobs+=1
+                i+=1
+
+        p.join()
+        p.close()
+        
+        elapsed = timeit.default_timer() - start_time
+        print('Finished processing of files %4d - %4d of %4d total at elapsed time %8.1f' % (bounds[k-1],bounds[k],nn, elapsed))
+        k+=1
+
+    print('Completed multiprocessing of field %s  tile %d ' % (field,tile))
+
+
+
         
 
 def prep_all_tiles(field='LMC_c42',redo=False):
@@ -161,6 +261,7 @@ def steer(argv):
     tiles=[]
     xall=False
     redo=True 
+    np=1
 
     i=1
     while i<len(argv):
@@ -171,6 +272,9 @@ def steer(argv):
             xall=True
         elif argv[i]=='-finish':
             redo=False
+        elif argv[i]=='-np':
+            i+=1
+            np=int(argv[i])
         elif argv[i][0]=='-':
             print('Error: Unknwon switch' % argv[i])
             return
@@ -186,7 +290,11 @@ def steer(argv):
         if len(tiles)==0:
             print('The tiles to be processed must be listed after the field, unless -all is invoked')
         for one in tiles:
-            prep_one_tile(field,one,redo)
+            if np<2:
+                prep_one_tile(field,one,redo)
+            else:
+                print('Processing in parallel with %d cores' % (np))
+                xprep_one_tile(field,one,redo,np)
     return
 
 
