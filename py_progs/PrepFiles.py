@@ -128,7 +128,7 @@ def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673
     f[0].header['SATURAT']=xsat*factor
 
 
-    xread=0.5*(f[1].header['RDNOISEA']+f[1.header['RDNOISEB'])
+    xread=0.5*(f[1].header['RDNOISEA']+f[1].header['RDNOISEB'])
 
     f[0].header['RDNOISE']=xread*factor
 
@@ -178,7 +178,7 @@ def get_no_jobs(jobs):
     return njobs
 
 
-def xprep_one_tile(field='LMC_c42',tile=7,redo=False,np=4):
+def xprep_one_tile(field='LMC_c42',tile=7,redo=False,nproc=4):
     '''
     Process tiles with using more than one core.
 
@@ -229,7 +229,7 @@ def xprep_one_tile(field='LMC_c42',tile=7,redo=False,np=4):
 
 
         i=0
-        while i<np and i<len(jobs):
+        while i<nproc and i<len(jobs):
             t = time.localtime()
             one=jobs[i]
             one.start()
@@ -243,7 +243,7 @@ def xprep_one_tile(field='LMC_c42',tile=7,redo=False,np=4):
             time.sleep(2)
             njobs=get_no_jobs(jobs)
 
-            while njobs<np and i<len(jobs):
+            while njobs<nproc and i<len(jobs):
                 t = time.localtime()
                 one=jobs[i]
                 one.start()
@@ -264,15 +264,6 @@ def xprep_one_tile(field='LMC_c42',tile=7,redo=False,np=4):
 
         
 
-def prep_all_tiles(field='LMC_c42',redo=False):
-    '''
-    Prepare all of the tiles in one set of data
-    '''
-
-    i=1
-    while i<17:
-        prep_one_tile(field,tile=i,redo=redo)
-        i+=1
     
 def steer(argv):
     '''
@@ -282,7 +273,7 @@ def steer(argv):
     tiles=[]
     xall=False
     redo=True 
-    np=1
+    nproc=1
 
     i=1
     while i<len(argv):
@@ -295,7 +286,7 @@ def steer(argv):
             redo=False
         elif argv[i]=='-np':
             i+=1
-            np=int(argv[i])
+            nproc=int(argv[i])
         elif argv[i][0]=='-':
             print('Error: Unknwon switch' % argv[i])
             return
@@ -305,17 +296,24 @@ def steer(argv):
             tiles.append(int(argv[i]))
         i+=1
 
+
     if xall:
-        prep_all_tiles(field,redo)
-    else:
-        if len(tiles)==0:
-            print('The tiles to be processed must be listed after the field, unless -all is invoked')
-        for one in tiles:
-            if np<2:
-                prep_one_tile(field,one,redo)
-            else:
-                print('Processing in parallel with %d cores' % (np))
-                xprep_one_tile(field,one,redo,np)
+        tiles=[]
+        i=1
+        while i<17:
+            tiles.append(i)
+            i+=1
+
+    if len(tiles)==0:
+        print('The tiles to be processed must be listed after the field, unless -all is invoked')
+        return
+
+    for one in tiles:
+        if nproc<2:
+             prep_one_tile(field,one,redo)
+        else:
+            print('Processing in parallel with %d cores' % (nproc))
+            xprep_one_tile(field,one,redo,nproc)
     return
 
 

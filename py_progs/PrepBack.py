@@ -12,7 +12,7 @@ background
 
 Command line usage (if any):
 
-    usage: GenSwarpInputs.py tile field
+    usage: GenSwarpInputs.py [-all ] tile field
 
 Description:  
 
