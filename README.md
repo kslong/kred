@@ -21,13 +21,39 @@ The tools require a set of relatively commmon modules, such
 as astropy, and normally are run from within an appropriate 
 conda enviromnment.
 
-The routines assume a specfic directory structure
+The routines assume a specfic directory structure THAT IS
+CURRENTLY UNDER DEVELOPMENT as we switch from a PHOTPIPE
+model to one of our own.  At present the new structure
+presumes:
+
+The programs are all run from a toplevel directory:
+
+* a rawdata directory that is (or is symbolically linked) to the
+(some or all of) DECam\_MEF directory stucture.  The raw direcctor
+should be named DECam\_MEF
+
+
+At present two programs exist that use the new directory
+structure
+
+* MEFSum.py - This summarizes the mef files in a directory 
+that is created called Summary.  
+
+* SetupTile.py - This is intended to identify CCD images
+that need to be processed.  It produces additional
+tables in the Summary directory.
+
+-----
+
+Portion of the README file beyound this point has not
+yet been pudated.
+
+
+
 
 The top level directory can be named whatever one wishes,
 within this directory one should create two directories
 
-* a rawdata directory that is (or is symbolically linked) to the
-(some or all of) DECam_MEF directory stucture
 
 * a directory from which to run all of the programs, e.g. progs.
 At present the easiest thing to do, is to copy the .py in py\_progs
