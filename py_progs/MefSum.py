@@ -259,7 +259,11 @@ def steer(argv):
 
     start_time = timeit.default_timer()
 
-    if nproc==1 or len(fields)<nproc:
+    if len(fields)<nproc:
+        nproc=len(fields)
+        print('Reducing the number of proocess threads to %d, which is the number of fields' % nproc)
+
+    if nproc==1:
         for one in fields:
             do_one(one)
     else:

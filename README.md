@@ -26,8 +26,8 @@ The routines assume a specfic directory structure
 The top level directory can be named whatever one wishes,
 within this directory one should create two directories
 
-* a rawdata directory that is symbolically linked to the
-photpipe rawdata directory.  
+* a rawdata directory that is (or is symbolically linked) to the
+(some or all of) DECam_MEF directory stucture
 
 * a directory from which to run all of the programs, e.g. progs.
 At present the easiest thing to do, is to copy the .py in py\_progs
