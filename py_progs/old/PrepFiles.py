@@ -1,62 +1,32 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-
 '''
-                    Space Telescope Science Institute
-
-Synopsis:
-
 Prepare files for Combining into tile images
+
+This extracts a relevent set of CCD images from the raw MEF files and writes them to a simpler version of the same files with be desired science data in the only image extension.  It also does background subraction etc if that is requred
+# 
+The names are the same as used by Photpipe
  
-This is where any processing of the individal files is done that cannot be done by swarp.
-
-Prior to running PrepFiles one must have 
-
-* Downladed the MEF an put them in the standard directory structure
-* Run MefSum on the apprate fields to create tables that contain the RA's and DECs of the corrners of CCDs
-* Run SetupTile to define which images and extensions are contained in specific tiles
-
-
+This the first step after the data has been prepared with Photopipe, and deposited in the raw directories
+j 
+This is where any processing of the individal files is done that cannot be done by swarp**
  
+This versions uses zero points for rescaling, and does background subtrraction
 
-Usage:  PrepFiles.py [-h] [-finish] [-all] [-sub_back] [-np 4] Field_name  [T01 T02 ... one or more tile numbers]
+Usage:  PrepFiles.py [-finish] [-all]  Field_name  [one or more tile numbers]
 
-where -h   --- to print this documentation and exit
-       -finish --> do not redo files that have already been processed
+where -finish --> do not redo files that have already been processed
       -all    --> do all tiles for a fields
-      -sub_back --> causes background to be estimated from individula images
-      -np 4   --. To run with multiple threads
 
-If -all is not provide then there must be one or more tile numbes, e. g. T01 T05 T07, listed
-
-
-Description:
-
-    If the preliminaries indicated above have taken place, PrepFiles will create directories if 
-    necessary to store the results.  The program then reads tables files in the Summary directory
-    where there is a table that identify the files and extension associated with a tile, and
-    processes these files individually.
-
-Primary routines:
-
-
-Notes:
-
-    As written one can only PrepFiles from a specific MEF directory
-
-
-History:
-
-230513 ksl Coding begun
-
+If -all is not provide then there must be one or more tile numbes, e. g. 1 5 7, listed
 '''
-
+ 
 
 
 
 import os
-from astropy.io import fits, ascii
+from astropy.io import fits
 from astropy.table import Table
 from astropy.stats import sigma_clipped_stats
 from glob import glob
@@ -67,46 +37,42 @@ import multiprocessing
 multiprocessing.set_start_method("spawn",force=True)
 
 
-MEFDIR='DECam_MEF/'
-PREPDIR='DECam_PREP/'
 
 
-
-
-def setup_one_tile(field='LMC_c42',tile='T07'):
+def setup_one_tile(field='LMC_c42',tile=7):
     # First check that we have data 
     
-    mefdir='%s/%s/mef/' % (MEFDIR,field)
+    rawdir='../rawdata/%s/%d' % (field,tile)
 
-    if os.path.isdir(mefdir) == False:
-        print('Error: %s does not appear to exist' % mefdir)
+    if os.path.isdir(rawdir) == False:
+        print('Error: %s does not appear to exist' % rawdir)
         raise IOError
     
-    xfiles='%s/*ooi*fits.fz' % (mefdir)
+    xfiles='%s/%s*fits.fz' % (rawdir,field)
     files=glob(xfiles)
-    # print('There are %d files in the mef directory' % (len(files)))
+    print('There are %d files in the raw directory' % (len(files)))
     if len(files)==0:
-        print('Could not locate any files in the mef directory')
         raise IOError
         
     # Now create diretories to receive the processed files if that is necessary
     
-    prepdir='%s/%s/%s' % (PREPDIR,field,tile)
+    workdir='../workspace/%s/%d/' % (field,tile)
     
-    if os.path.isdir(prepdir)==False:
-        print('Creating the Prep directory as %s' % prepdir)
-        os.makedirs(prepdir)
+    if os.path.isdir(workdir)==False:
+        print('Creating the Working directory as %s' % workdir)
+        os.makedirs(workdir)
     else:
-        print('The Prep directory %s already exists' % prepdir )
+        print('The working directory %s already exists' % workdir )
         
-    return  mefdir,prepdir
+    return  rawdir,workdir,files
 
 
-def prep_one_file(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.fits.fz',ext='S2',
-                     prepdir='DECam_PREP/LMC_c42/T07/',subtract_back=False, redo=True):
+def prep_one_file(filename='../rawdata/LMC_c42/7/LMC_c42.211111.1050216_ooi_N673_v1_S17.fits.fz',
+                     workdir='../workspace/LMC_c42/7/',redo=True):
     '''
     Prepare one file for combining with swarp.  This version scales by MAGZERO
     where 1DN will be a flux corresponding to mag 28
+
     History:
 
     230504 - Removed .fz from output file names.  Note that this does not mean that the
@@ -117,102 +83,84 @@ def prep_one_file(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.
     '''
 
  
-    # find the extension we want given thee file name
+    # find the extensiton we want given thee file name
     
     words=filename.split('/')
     new_file=words[-1]
-    outfile='%s/%s' %(prepdir,new_file)
-    outfile=outfile.replace('.fits.fz','_%s.fits' % (ext))
-    print(outfile)
+    outfile='%s/%s' %(workdir,new_file)
+    outfile=outfile.replace('.fz','')
     
     if redo==False and os.path.isfile(outfile):
         return outfile
     
     f=fits.open(filename)    
-
-    hdu0=f[0].copy()
-    hdu1=f[ext].copy()
-    fout=fits.HDUList([hdu0,hdu1])
-
+    xname=words[-1]
+    words=xname.split('.')
+    words=words[2].split('_')
+    ext=words[-1]
     
-    factor=10**(0.4*(28.0 - fout[0].header['MAGZERO']))
-    fout[1].data*=factor
+    names=[]
+    i=1
+    while i<len(f):
+        if f[i].name!=ext:
+            names.append(f[i].name)
+        i+=1
+    
+    for name in names:
+        f.pop(name)
+        
+    
+    factor=10**(0.4*(28.0 - f[0].header['MAGZERO']))
+    f[1].data*=factor
 
     mean,median,std=sigma_clipped_stats(f[1].data,sigma_lower=3,sigma_upper=2,grow=3)
 
-    if subtract_back:
-        fout[1].data-=median
+    f[1].data-=median
 
-    fout[0].header['XFACTOR']=factor
-
-    if subtract_back:
-        fout[0].header['SUB_BACK']='TRUE'
-    else:
-        fout[0].header['SUB_BACK']='FALSE'
-
-    fout[0].header['XMED']=median
+    f[0].header['XFACTOR']=factor
+    f[0].header['XMED']=median
 
     xgain=0.5*(f[1].header['GAINA']+f[1].header['GAINB'])
 
-    fout[0].header['GAIN']=xgain*factor
+    f[0].header['GAIN']=xgain*factor
 
     xsat=np.minimum(f[1].header['SATURATA'],f[1].header['SATURATB'])
+    f[0].header['SATURAT']=xsat*factor
 
-    fout[0].header['SATURAT']=xsat*factor
 
+    xread=0.5*(f[1].header['RDNOISEA']+f[1].header['RDNOISEB'])
 
-    xread=0.5*(fout[1].header['RDNOISEA']+fout[1].header['RDNOISEB'])
-
-    fout[0].header['RDNOISE']=xread*factor
+    f[0].header['RDNOISE']=xread*factor
 
     
-    fout.writeto(outfile,overwrite=True)
+    f.writeto(outfile,overwrite=True)
     return outfile
     
 
 
-def prep_one_tile(field='LMC_c42',tile='T07',sub_back=False,redo=False):
-    '''
-    Prep a tile with a single processor
-    '''
-
-    tab_name='Summary/%s_%s.txt' % (field,tile)
+def prep_one_tile(field='LMC_c42',tile=7,redo=False):
     try:
-        xtab=ascii.read(tab_name)
+        rawdir,workdir,files=setup_one_tile(field,tile)
     except:
-        print('Failed to read: %s' % tab_name)
+        print('Failed')
         return
-
-
-    try:
-        mefdir,prepdir=setup_one_tile(field,tile)
-    except:
-        print('Failed to set up tiles')
-        return
-
     
-    xfiles=[]
-    for one in xtab:
-        xfiles.append('%s/%s.fits.fz' % (mefdir,one['Root']))
-
-    xtab['Filename']=xfiles
-
-
+    print(rawdir,workdir,files[0])
     
     start_time = timeit.default_timer()
     
-    nn=len(xtab)
+    nn=len(files)
     n=50
     if nn>200:
         n=100
 
     i=0
-    for one in xtab:
+    for one in files:
         if i % n == 0:
             elapsed = timeit.default_timer() - start_time
             print('Completed %4d of %4d files in %f s' % (i,nn,elapsed))
 
-        xfile=prep_one_file(one['Filename'],one['EXTNAME'],prepdir,sub_back,redo)
+        xfile=prep_one_file(one,workdir,redo)
         i+=1
         
     elapsed = timeit.default_timer() - start_time
@@ -230,7 +178,7 @@ def get_no_jobs(jobs):
     return njobs
 
 
-def xprep_one_tile(field='LMC_c42',tile='T07',sub_back=False, redo=False,nproc=4):
+def xprep_one_tile(field='LMC_c42',tile=7,redo=False,nproc=4):
     '''
     Process tiles with using more than one core.
 
@@ -245,36 +193,16 @@ def xprep_one_tile(field='LMC_c42',tile='T07',sub_back=False, redo=False,nproc=4
 
     '''
 
-
-
-
-
-    tab_name='Summary/%s_%s.txt' % (field,tile)
     try:
-        xtab=ascii.read(tab_name)
+        rawdir,workdir,xfiles=setup_one_tile(field,tile)
     except:
-        print('Failed to read: %s' % tab_name)
+        print('Failed')
         return
-
-
-    try:
-        mefdir,prepdir=setup_one_tile(field,tile)
-    except:
-        print('Failed to set up tiles')
-        return
-
     
-    xfiles=[]
-    for one in xtab:
-        xfiles.append('%s/%s.fits.fz' % (mefdir,one['Root']))
-
-    xtab['Filename']=xfiles
-
-
     
     start_time = timeit.default_timer()
     
-    nn=len(xtab)
+    nn=len(xfiles)
     nncount=0
 
     n=200  # This is the maximum number of jobs that will be run in a Cycle
@@ -290,17 +218,14 @@ def xprep_one_tile(field='LMC_c42',tile='T07',sub_back=False, redo=False,nproc=4
 
     k=1
     while k<len(bounds):
-        files=xtab['Filename'][bounds[k-1]:bounds[k]]
-        exten=xtab['EXTNAME'][bounds[k-1]:bounds[k]]
+        files=xfiles[bounds[k-1]:bounds[k]]
 
         print(' Started processing of files %4d - %4d' % (bounds[k-1],bounds[k]))
 
         jobs=[]
-        i=0
         for one in files:
-            p=multiprocessing.Process(target=prep_one_file,args=(one,exten[i],prepdir,sub_back,redo))
+            p=multiprocessing.Process(target=prep_one_file,args=(one,workdir,redo))
             jobs.append(p)
-            i+=1
 
 
         i=0
@@ -333,7 +258,7 @@ def xprep_one_tile(field='LMC_c42',tile='T07',sub_back=False, redo=False,nproc=4
         print('Finished processing of files %4d - %4d of %4d total at elapsed time %8.1f' % (bounds[k-1],bounds[k],nn, elapsed))
         k+=1
 
-    print('Completed multiprocessing of field %s  tile %s ' % (field,tile))
+    print('Completed multiprocessing of field %s  tile %d ' % (field,tile))
 
 
 
@@ -349,7 +274,6 @@ def steer(argv):
     xall=False
     redo=True 
     nproc=1
-    xback=False
 
     i=1
     while i<len(argv):
@@ -360,8 +284,6 @@ def steer(argv):
             xall=True
         elif argv[i]=='-finish':
             redo=False
-        elif argv[i]=='sub_back':
-            xback=True
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
@@ -371,7 +293,7 @@ def steer(argv):
         elif field=='':
             field=argv[i]
         else:
-            tiles.append(argv[i])
+            tiles.append(int(argv[i]))
         i+=1
 
 
@@ -388,10 +310,10 @@ def steer(argv):
 
     for one in tiles:
         if nproc<2:
-             prep_one_tile(field,one,xback,redo)
+             prep_one_tile(field,one,redo)
         else:
             print('Processing in parallel with %d cores' % (nproc))
-            xprep_one_tile(field,one,xback,redo,nproc)
+            xprep_one_tile(field,one,redo,nproc)
     return
 
 
