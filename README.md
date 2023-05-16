@@ -28,9 +28,9 @@ presumes:
 
 The programs are all run from a toplevel directory:
 
-* a rawdata directory that is (or is symbolically linked) to the
-(some or all of) DECam\_MEF directory stucture.  The raw direcctor
-should be named DECam\_MEF
+* a directory that is (or is symbolically linked) to the
+(some or all of) DECam\_MEF directory stucture.  The top level
+direcory must named DECam\_MEF
 
 
 At present two programs exist that use the new directory
@@ -40,13 +40,23 @@ structure
 that is created called Summary.  
 
 * SetupTile.py - This is intended to identify CCD images
-that need to be processed.  It produces additional
-tables in the Summary directory.
+that need to be processed.  It produces 
+tables in the Summary directory that identify what 
+CCDs need to be processed to produce images of a single 
+field.
+
+* PrepFiles.py - This creates a location to put the files
+that contribute to a single tile and then  rescales the 
+individual CCD images that contritute to a tile and 
+stores them.   The top level directory for storing
+the results of PrepFiles.py is called DECam\_prep.
 
 -----
 
-Portion of the README file beyound this point has not
-yet been pudated.
+Portions of the README file beyound this point have not
+yet been updated.
+
+-----
 
 
 
