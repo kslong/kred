@@ -51,6 +51,10 @@ individual CCD images that contritute to a tile and
 stores them.   The top level directory for storing
 the results of PrepFiles.py is called DECam\_prep.
 
+* PrepSum.py - This summarizes the files that have been
+Prepped prior to combining all of the images in 
+the various filters with swarp
+
 -----
 
 Portions of the README file beyound this point have not
