@@ -55,6 +55,18 @@ the results of PrepFiles.py is called DECam\_prep.
 Prepped prior to combining all of the images in 
 the various filters with swarp
 
+* Swarp.py - This contains code to setup the swarp
+directiories in a standard way and to create .run
+.default files and input file lists with a routine
+create\_swarp\_command, that is currently best run
+from a Jupyter notebook.  One can run the Swarp
+commands from inside the notebook or from the command 
+line.  As is the case for the rest of the scripts
+in this sequence, the notebook and the command
+line execution should be run from whatevery one
+is using as the toplevel directory for the data
+reduction.
+
 -----
 
 Portions of the README file beyound this point have not
