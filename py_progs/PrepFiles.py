@@ -379,7 +379,7 @@ def steer(argv):
         tiles=[]
         i=1
         while i<17:
-            tiles.append(i)
+            tiles.append('T%02d' % i)
             i+=1
 
     if len(tiles)==0:
