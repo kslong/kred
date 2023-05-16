@@ -67,6 +67,12 @@ line execution should be run from whatevery one
 is using as the toplevel directory for the data
 reduction.
 
+
+The CheckInstall notebook in examples has been updated
+to reflect the changes to the various routines, and
+to show one how to run through the various scripts
+to produce a swapred Ha image for LMC\_c42 tile T08
+
 -----
 
 Portions of the README file beyound this point have not
