@@ -187,8 +187,8 @@ def steer(argv):
     kred=os.getenv('KRED')
     if os.path.isfile(table):
         xtab=ascii.read(table)
-    elif os.path(kred+'/config/'+table):
-        xtab=ascii.read(table)
+    elif os.path.isfile(kred+'/config/'+table):
+        xtab=ascii.read(kred+'/config/'+table)
     else:
         print('Error: Could not find %s in local director or in kred/config' % table)
         return
