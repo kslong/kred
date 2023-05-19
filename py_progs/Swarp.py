@@ -42,7 +42,11 @@ import subprocess
 exec_dir=os.getcwd()
 
 
-def get_sum_tab(field='LMC_c42',tile=7):
+SWARPDIR='DECam_SWARP'
+PREPDIR=os.path.abspath('DECam_PREP')
+
+
+def get_sum_tab(field='LMC_c42',tile='T07'):
     '''
     Read a table that summarizes information about
     the various files athat are used for a tile
@@ -50,13 +54,13 @@ def get_sum_tab(field='LMC_c42',tile=7):
     The location of the table files is currently hardocaded
     '''
     
-    xname='../workspace/Summary/%s_%d_imsum.txt' % (field,tile)
+    xname='Summary/%s_%s_imsum.txt' % (field,tile)
     xtab=ascii.read(xname)
     return xtab
 
 
 
-def summarize(field='LMC_c42',tile=7):
+def summarize(field='LMC_c42',tile='T07'):
     '''
     Summarize the various fits files that are relevant to
     a specific tile
@@ -116,7 +120,7 @@ def create_swarp_dir(field='LMC_c42',tile=7):
     '''
     Create a diretory for the swarp outputs if it does not exist
     '''
-    outdir='../workspace/%s_d/%d/' % (field,tile)
+    outdir='%s/%s/%s/' % (SWARPDIR,field,tile)
     if os.path.isdir(outdir)==False:
         os.makedirs(outdir)
     return outdir
@@ -225,12 +229,12 @@ NTHREADS               0               # Number of simultaneous threads for
 
 
 
-def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=xdefault):
+def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults=xdefault):
     '''
     Generate the inputs necessary to run swarp where exp corresponds to one
     or more exposure times for a particular filter and tile.  
     '''
-    print('\n### Creating swarp inputs for %s tile %d and filter %s' % (field,tile,filt))
+    print('\n### Creating swarp inputs for %s tile %s and filter %s' % (field,tile,filt))
     x=get_sum_tab(field,tile)
     xx=x[x['Filter']==filt]
     if len(xx)==0:
@@ -276,7 +280,7 @@ def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=
         exp_string+=xtime
         i+=1
     
-    root='%s_%d.%s' % (field,tile,filt)  
+    root='%s_%s.%s' % (field,tile,filt)  
     root+=exp_string
     # print('root ',root)    
     
@@ -287,7 +291,7 @@ def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=
     
     f=open(name,'w')
     for one in xxxx:
-        xname='../../%s/%d/%s'% (field,tile,one['Filename'])
+        xname='%s/%s/%s/%s'% (PREPDIR,field,tile,one['Filename'])
         f.write('%s\n' % xname)
     f.close()
     
@@ -305,14 +309,14 @@ def create_swarp_command(field='LMC_c42',tile=7,filt='Ha',exp=[30,800],defaults=
     f.close()
     
     os.chmod('%s/%s.run' % (xdir,root),stat.S_IRWXU)
-    print('### Finished swarp inputs for %s tile %d and filter %s\n' % (field,tile,filt))
+    print('### Finished swarp inputs for %s tile %s and filter %s\n' % (field,tile,filt))
     return   
     
     
 
 
 
-def run_swarp(field='LMC_c42',tile=7):
+def run_swarp(field='LMC_c42',tile='T07'):
     '''
     run_all of the swarp commands in a particular field and tile
 
@@ -320,7 +324,9 @@ def run_swarp(field='LMC_c42',tile=7):
     a few are written to the screen here so that one can see 
     that the routines have run correctly.  
     '''
-    run_dir='../workspace/%s_d/%d/' % (field,tile)
+    xstart=qstart=start_time=timeit.default_timer()
+    run_dir='%s/%s/%s/' % (SWARPDIR,field,tile)
+
     try:
         os.chdir(run_dir)
     except:
@@ -329,7 +335,6 @@ def run_swarp(field='LMC_c42',tile=7):
 
     run_files=glob('*.run')
     # print(run_files)
-    qstart=start_time=timeit.default_timer()
     nfiles=len(run_files)
     n=1
     for one in run_files:
@@ -364,7 +369,8 @@ def run_swarp(field='LMC_c42',tile=7):
         n+=1
 
 
-    print('\n***Completely done for tile %d in %d s\n' % (tile,current_time-qstart))
+    xcurrent_time=timeit.default_timer()
+    print('\n***Completely done for tile %s in %.1f s\n' % (tile,xcurrent_time-xstart))
 
 
     os.chdir(exec_dir)
@@ -398,14 +404,14 @@ def steer(argv):
         elif field=='':
             field=argv[i]
         else:
-            tiles.append(int(argv[i]))
+            tiles.append(argv[i])
         i+=1
 
     if xall:
         tiles=[]
         i=1
         while i<17:
-            tiles.append(i)
+            tiles.append('T%02d' % i)
             i+=1
 
     for one in tiles:
