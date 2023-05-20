@@ -88,8 +88,33 @@ def get_keyword(key,ext):
     
     Note that one does not include .header in
     the cal
+
+    History:
+
+    230520 - Fix to handle the fact that there
+    are some files for which the Band is not filled
+    in.
     
     '''
+    if key=='BAND':
+        try:
+            value=ext.header['FILTER']
+            if value.count('N662'):
+                answer='N662'
+            elif value.count('N673'):
+                answer='N673'
+            elif value.count('N708'):
+                answer='N708'
+            elif value.count('r DECam'):
+                answer='r'
+            else:
+                print('Could not identify filter from ',answer)
+                answer='Unknwon'
+            return answer
+        except:
+            answer='Unknown'
+        return answer
+
     try:
         answer=ext.header[key]
     except:
