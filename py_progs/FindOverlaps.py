@@ -13,15 +13,46 @@ with which others
 
 Command line usage (if any):
 
-    usage: FindOverlaps.py filename
+    usage: FindOverlaps.py [-all] Field Tile1  Tile2 .....
+
+    where -all implies that the ovelaps for all of the 
+    tiles in afiled will be dound
 
 Description:  
 
+    Find the images that ovelap that have the same
+    filter and the same exposure time in one or more tiles
+
+    The routine assumes (for now) that we will not try
+    to combine images with different exposure times,
+    though this condition could be dropped
+
+    The overlaps are found based on the RA, DEC corrners 
+    of the immages.
+    
+    The routine outputs a single file that indicates
+    which images overlap subject to thise conditions
+
+    The routine DOES NOT calculate fluxes in the
+    overlap regions, just that the ovelaps exist
+
+
 Primary routines:
 
-    doit
+    do_one_tile
 
 Notes:
+
+    It is important to recognize that care has
+    been taken to avoid double listing, that is
+    to say in separate lines of the output file
+    that 
+    
+    file_a matches file_b
+    file_b matches file_a
+
+    There is no significance to the order of
+    filer_a and file_b.  
                                        
 History:
 
@@ -38,7 +69,7 @@ from astropy.table import join, vstack
 
 
 
-def get_files(field,tile,band='N673'):
+def get_files(field,tile,xfilter='Ha'):
     '''
     Idenfify all of the files associated
     with a specific filter in a tile
@@ -47,23 +78,27 @@ def get_files(field,tile,band='N673'):
     det_file='Summary/%s_det.tab' % (field)
     try:
         det=ascii.read(det_file)
+        filenames=[]
+        for one in det:
+            filenames.append('%s_%s.fits' % (one['Root'],one['EXTNAME']))
+        det['Filename']=filenames
     except:
         print('Error could not locate %s ' % det_file)
         raise IOError 
 
-    mef_file='Summary/%s_mef.tab' % (field)  
+    imsum_file='Summary/%s_%s_imsum.txt' % (field,tile)  
     try:
-        mef=ascii.read(mef_file)
+        imsum=ascii.read(imsum_file)
     except:
-        print('Erorr: could not locate %s' % mef_file)
+        print('Erorr: could not locate %s' % imsum_file)
         raise IOError
 
-    xall=join(det,mef,join_type='left')
+    xall=join(imsum,det,join_type='left')
 
-    xtab=xall[xall['BAND']==band]
+    xtab=xall[xall['Filter']==xfilter]
 
     if len(xtab)==False:
-        print('No approapriate files were found for %s' % band)
+        print('No approapriate files were found for %s' % xfilter)
         return []
 
     return xtab
@@ -73,8 +108,15 @@ def get_files(field,tile,band='N673'):
 
 def get_overlap(row,xxtab):
     '''
-    Get all of the images which overlap
-    with a given rwo in the table
+    Get all of the images which have the
+    same exposure time as the given row
+    and also overlap with a given row 
+    in the table
+
+    Note eliminating images that have
+    different exposure times implies
+    that we do not intend to match backgrounds
+    from images that have differnt times
     '''
     
     one_row=xxtab[row]
@@ -90,18 +132,24 @@ def get_overlap(row,xxtab):
     
     xtab['Dec_max'] = np.max([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
     xtab['Dec_min'] = np.min([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
+
+    xtab=xtab[xtab['Exptime']==one_row['Exptime']]
+    if len(xtab)==0:
+        # print('Failed to find any images with the same exposre time ' % one_row['Exptime'])
+            return []
+    
     
     xtab=xtab[xtab['Dec_min']<dec_max]
     
     # print(len(xtab))
 
     if len(xtab)==0:
-            print('Failed to find any images with Dec less than %.5f ' % dec_max)
+            # print('Failed to find any images with Dec less than %.5f ' % dec_max)
             return []
     
     xtab=xtab[xtab['Dec_max']>dec_min]
     if len(xtab)==0:
-            print('Failed to find any images with Dec greater than %.5f ' % dec_min)
+            # print('Failed to find any images with Dec greater than %.5f ' % dec_min)
             return []
     # print(len(xtab))
     
@@ -110,14 +158,14 @@ def get_overlap(row,xxtab):
 
     xtab=xtab[xtab['RA_min']<ra_max]
     if len(xtab)==0:
-            print('Failed to find any images with RA  less than %.5f ' % ra_max)
+            # print('Failed to find any images with RA  less than %.5f ' % ra_max)
             return []
     # print(len(xtab))
 
     # print(len(x))
     xtab=xtab[xtab['RA_max']>ra_min]
     if len(xtab)==0:
-            print('Failed to find any images with RA  greater than %.5f ' % ra_min)
+            # print('Failed to find any images with RA  greater than %.5f ' % ra_min)
             return []
     
     xtab['delta_dec']=np.fabs(xtab['CENDEC1']-one_row['CENDEC1'])
@@ -134,29 +182,61 @@ def get_overlap(row,xxtab):
     return(xtab)
     
     
-def do_one_tile(field,tile,band):
-    xtab= get_files(field,tile,band)
+def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
+    '''
+    Find the overlaps for one filter in one tile
+    '''
+    xtab= get_files(field,tile,xfilter)
 
     i=0
     imax=len(xtab)-2
     while i<imax:
         z=get_overlap(i,xtab)
         if len(z)>0:
-            xout=z['Root','BAND','EXPTIME','delta','delta_ra','delta_dec']
-            xout['XRoot']=xtab['Root'][i]
+            xout=z['Filename','Filter','Exptime','delta','delta_ra','delta_dec']
+            xout['XFilename']=xtab['Filename'][i]
             if i==0:
                 xx=xout.copy()
             else:
                 xx=vstack([xx,xout])
         # print('Finished row',i)
         i+=1
-    xx.sort(['delta'])
+    xx.sort(['Exptime','delta'])
 
-    outfile='Summary/%s_%s_%s_overlap.txt' % (field,tile,band)
-    xx.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
+    # outfile='Summary/%s_%s_%s_overlap.txt' % (field,tile,xfilter)
+    # xx.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     return xx
 
-            
+def do_one_tile(field='LMC_c45',tile='T07'):
+    '''
+    Find the overlaps for all of the filters in one tile
+    '''
+
+    print('\nStarting Field %s Tile %s' % (field,tile))
+    
+    xfilters=['Ha','SII','R','N708']
+
+    z=[]
+    xlen=[]
+    for one in xfilters:
+        x=do_one_filter(field,tile,xfilter=one)
+        xlen.append(len(x))
+        if len(x)>0:
+            z.append(x)
+    all_overlaps=vstack(z)
+
+    i=0
+    while i<len(xfilters):
+        print('For %5s there are %5d overlaps' % (xfilters[i],xlen[i]))
+        i+=1
+
+
+    outfile='Summary/%s_%s_overlap.txt' % (field,tile)
+    all_overlaps.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
+    print('Wrote %s\n' % outfile)
+
+
+
                 
 def steer(argv):
     '''
@@ -176,8 +256,6 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
-        elif argv[i]=='-finish':
-            redo=False
         elif argv[i][0]=='-':
             print('Error: Unknwon switch' % argv[i])
             return
@@ -195,7 +273,7 @@ def steer(argv):
             i+=1
 
     for one in tiles:
-        do_one_tile(field,one,'N673')
+        do_one_tile(field,one)
 
 
     return
