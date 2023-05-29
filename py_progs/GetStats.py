@@ -58,20 +58,30 @@ import numpy as np
 from astropy.stats import sigma_clipped_stats
 from multiprocessing import Pool
 
+BACKDIR='DECam_BACK'
 
-def calculate_one(i,files,indir):
-    j=i+1
-    one=fits.open('%s/%s' % (indir,files[i]))
+def calculate_one(file,xmatch_files,indir):
+    '''
+    Get statistics in the overlap region of
+    one file to a number of files
+
+    The returns a list of records which 
+    give the mean,median and std of each file 
+    in the overlap region
+    '''
+
+    one=fits.open('%s/%s' % (indir,file))
     records=[]
         
-    while j<len(files):
+    j=0
+    while j<len(xmatch_files):
         one_record=[]
-        two=fits.open('%s/%s' % (indir,files[j]))
+        two=fits.open('%s/%s' % (indir,xmatch_files[j]))
         overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
         nonzero=np.count_nonzero(overlap)
 
         if nonzero>0:
-            one_record=[files[i],files[j],nonzero]
+            one_record=[file,xmatch_files[j],nonzero]
 
             # We now need a mask, but we now need the good values 0 and the masked
             # values to be something else, so we subtract 1
@@ -82,11 +92,9 @@ def calculate_one(i,files,indir):
             one_record=one_record+[mean,median,std]
             mean,median,std=sigma_clipped_stats(two_masked,sigma_lower=3,sigma_upper=2,grow=3)
             one_record=one_record+[mean,median,std]  
-            # print(i,j,one_record)
                 
             records.append(one_record)
-
-                
+            print(one_record)
 
         two.close()
         j+=1
@@ -95,14 +103,33 @@ def calculate_one(i,files,indir):
 
 
         
+        
+def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
-def calculate_stats(files,indir,out_name,nproc=1):
+    sumfile='Summary/%s_%s_overlap.txt' % (field,tile)
+    try:
+        x=ascii.read(sumfile)
+    except:
+        print('Could not find %s' % sumfile)
+        return
+
+
+
+    indir='%s/%s/%s' % (BACKDIR,field,tile)
+    if os.path.exists(indir)==False:
+        print('Could not find the directory %s with the data' % indir)
+        return
+
+    
+    qfiles=np.unique(x['Filename'])
+
     records=[]
 
     i=0
     all_inputs=[]
-    while i<len(files):
-        all_inputs.append([i,files,indir])
+    while i<len(qfiles):
+        files=x[x['Filename']==qfiles[i]]
+        all_inputs.append([qfiles[i],files['XFilename'],indir])
         i+=1
 
     if nproc<2:
@@ -147,40 +174,10 @@ def calculate_stats(files,indir,out_name,nproc=1):
     # ztab['med2'].format='.3f'
     # ztab['std1'].format='.3f'
     # ztab['std2'].format='.3f'
+    out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d lines' % (out_name,len(ztab)))
     return ztab
-        
-def prep_one_tile(field='LMC_c42',tile=7,nproc=1):
-    try:
-        sumfile='../workspace/Summary/%s_%d_imsum.txt' % (field,tile)
-        x=ascii.read(sumfile)
-    except:
-        print('Could not find %s' % sumfile)
-        return
-
-
-
-    indir='../workspace/%s_b/%d' % (field,tile)
-    if os.path.exists(indir)==False:
-        print('Could not find the directory %s with the data' % indir)
-        return
-
-
-
-    filters=np.unique(x['Filter'])
-
-    for one_filter in filters:
-        xx=x[x['Filter']==one_filter]
-        print('Starting %s with %d files' % (one_filter,len(xx)))
-        outname='../workspace/Summary/%s_%d_%s_stats.txt' % (field,tile,one_filter)
-        # outname='%s_%d_%s_stats.txt' % (field,tile,one_filter)
-        calculate_stats(xx['Filename'],indir,outname,nproc)
-
-
-
-    return
-
 
 def steer(argv):
     '''
@@ -207,20 +204,20 @@ def steer(argv):
         elif field=='':
             field=argv[i]
         else:
-            tiles.append(int(argv[i]))
+            tiles.append(argv[i])
         i+=1
 
     if xall:
         tiles=[]
         i=1
         while i<17:
-            tiles.append(i)
+            tiles.append('T%02d' % ii)
             i+=1
 
     if len(tiles)==0:
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
     for one in tiles:
-        prep_one_tile(field,one,nproc)
+        do_one_tile(field,one,nproc)
 
     return
 
