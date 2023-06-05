@@ -53,7 +53,7 @@ import sys
 import os
 from glob import glob
 from astropy.io import fits, ascii
-from astropy.table import Table
+from astropy.table import Table, join
 import numpy as np
 from astropy.stats import sigma_clipped_stats
 from multiprocessing import Pool
@@ -113,6 +113,15 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         print('Could not find %s' % sumfile)
         return
 
+
+    # Read the summary file so we can attached the exposure time 
+
+    imsumfile='Summary/%s_%s_imsum.txt' % (field,tile)
+    try:
+        imsum=ascii.read(imsumfile)
+    except:
+        print('Could not read imsum file: %s' % imsum)
+        return
 
 
     indir='%s/%s/%s' % (BACKDIR,field,tile)
@@ -174,6 +183,14 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     # ztab['med2'].format='.3f'
     # ztab['std1'].format='.3f'
     # ztab['std2'].format='.3f'
+
+    # Now attach the fileter and expsure time to this
+
+    imsum.rename_column('Filename','file1')
+
+    ztab=join(ztab,imsum['file1','Filter','Exptime'],join_type='left_join')
+
+
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d lines' % (out_name,len(ztab)))
