@@ -188,7 +188,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     imsum.rename_column('Filename','file1')
 
-    ztab=join(ztab,imsum['file1','Filter','Exptime'],join_type='left_join')
+    ztab=join(ztab,imsum['file1','Filter','Exptime'],join_type='left')
 
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
