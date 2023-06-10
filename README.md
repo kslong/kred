@@ -39,6 +39,10 @@ structure
 * MEFSum.py - This summarizes the mef files in a directory 
 that is created called Summary.  
 
+Note that MefSum.py -all wil attempt to create a summary of all of the files
+that one has in the DEC\_NEF directory.   Also note that this routine is parallelized and each  theread is intended to handle on  Field.  The program does 
+check to see if certain Fields have already been analyzued, and so if one adds a single Field one should not use the -all option.
+
 * SetupTile.py - This is intended to identify CCD images
 that need to be processed.  It produces 
 tables in the Summary directory that identify what 

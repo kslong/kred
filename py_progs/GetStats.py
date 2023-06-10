@@ -191,10 +191,33 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     ztab=join(ztab,imsum['file1','Filter','Exptime'],join_type='left')
 
 
+    # Now check for problems before we write out the file
+
+    ztab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
+
+    med1=np.isfinite(ztab['med1'])
+    med2=np.isfinite(ztab['med2'])
+    
+
+    nstart=len(ztab)
+
+    i=0
+    good=[]
+    while i < len(ztab):
+        if med1[i] and  med2[i]:
+                good.append(i)
+        i+=1
+
+    zztab=ztab[good]
+
+
+    print('We started with %d rows, %d were good and we end up with %d' % (nstart,len(good),len(ztab)))
+
+
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
-    ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
+    zztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d lines' % (out_name,len(ztab)))
-    return ztab
+    return zztab
 
 def steer(argv):
     '''

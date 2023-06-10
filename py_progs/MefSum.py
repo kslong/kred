@@ -109,7 +109,7 @@ def get_keyword(key,ext):
                 answer='r'
             else:
                 print('Could not identify filter from ',answer)
-                answer='Unknwon'
+                answer='Unknown'
             return answer
         except:
             answer='Unknown'
@@ -118,7 +118,7 @@ def get_keyword(key,ext):
     try:
         answer=ext.header[key]
     except:
-        answer='Unkown'
+        answer='Unknown'
     return answer
                           
 
@@ -163,6 +163,7 @@ def get_mef_overview(field='LMC_c45'):
     os.remove('goo_%s.txt' %field)
     
     ztab.sort(['BAND','EXPTIME'])
+
 
     ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
     
@@ -218,8 +219,26 @@ def get_det_overview(field='LMC_c45'):
     xtab.write('foo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
     ztab=ascii.read('foo_%s.txt' %field)
     os.remove('foo_%s.txt' %field)
+
+
+    bad=[]
+    i=0
+    while i<len(ztab):
+        if ztab['COR1DEC1'][i]=='Unknown':
+            bad.append(i)
+        i+=1
+
+
+    if len(bad)>0:
+        xbad=ztab[bad]
+        print('Warning: There were %d CCD images of %d total without RAs and DECs in header' % (len(bad),len(ztab)))
+        print('Writing the list of bad images to Summary/%s_det_bad.tab' % field )
+        xbad.write('Summary/%s_det_bad.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+
+        ztab.remove_rows(bad)
     
     
+    print('Writing Summary/%s_det.tab with %d rows' % (field,len(ztab))) 
     ztab.write('Summary/%s_det.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
 
     return 
@@ -270,7 +289,7 @@ def steer(argv):
             i+=1
             nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknown switch' % argv[i])
             return
         else:
             fields.append(argv[i])
