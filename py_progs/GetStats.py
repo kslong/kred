@@ -81,6 +81,7 @@ def calculate_one(file,xmatch_files,indir):
         nonzero=np.count_nonzero(overlap)
 
         if nonzero>0:
+            ok=True
             one_record=[file,xmatch_files[j],nonzero]
 
             # We now need a mask, but we now need the good values 0 and the masked
@@ -89,16 +90,22 @@ def calculate_one(file,xmatch_files,indir):
             one_masked=np.ma.array(one[0].data,mask=xmask)
             two_masked=np.ma.array(two[0].data,mask=xmask)
             mean,median,std=sigma_clipped_stats(one_masked,sigma_lower=3,sigma_upper=2,grow=3)
+            if np.isnan(median):
+                ok=False
             one_record=one_record+[mean,median,std]
             mean,median,std=sigma_clipped_stats(two_masked,sigma_lower=3,sigma_upper=2,grow=3)
+            if np.isnan(median):
+                ok=False
             one_record=one_record+[mean,median,std]  
                 
-            records.append(one_record)
-            print(one_record)
+            if ok==True:
+                records.append(one_record)
+            # print(one_record)
 
         two.close()
         j+=1
     one.close()
+    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file))
     return records
 
 
@@ -176,13 +183,12 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         
 
     ztab=xtab[colnames]
-    # ztab.info()
-    # ztab['mean1'].format='.3f'
-    # ztab['mean2'].format='.3f'
-    # ztab['med1'].format='.3f'
-    # ztab['med2'].format='.3f'
-    # ztab['std1'].format='.3f'
-    # ztab['std2'].format='.3f'
+    ztab['mean1'].format='.3f'
+    ztab['mean2'].format='.3f'
+    ztab['med1'].format='.3f'
+    ztab['med2'].format='.3f'
+    ztab['std1'].format='.3f'
+    ztab['std2'].format='.3f'
 
     # Now attach the fileter and expsure time to this
 
@@ -195,29 +201,14 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     ztab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
-    med1=np.isfinite(ztab['med1'])
-    med2=np.isfinite(ztab['med2'])
-    
 
-    nstart=len(ztab)
-
-    i=0
-    good=[]
-    while i < len(ztab):
-        if med1[i] and  med2[i]:
-                good.append(i)
-        i+=1
-
-    zztab=ztab[good]
-
-
-    print('We started with %d rows, %d were good and we end up with %d' % (nstart,len(good),len(ztab)))
+    # print('We started with %d rows, %d were good and we end up with %d' % (nstart,len(good),len(ztab)))
 
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
-    zztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
+    ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d lines' % (out_name,len(ztab)))
-    return zztab
+    return ztab
 
 def steer(argv):
     '''

@@ -47,6 +47,7 @@ import os
 
 from astropy.io import fits, ascii
 from glob import glob
+from astropy.stats import sigma_clipped_stats
 from astropy.table import Table,vstack
 from astropy.wcs import WCS
 import numpy as np
@@ -190,6 +191,7 @@ def get_det_overview(field='LMC_c45'):
     keys=['EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1']
     
     for one_file in files:
+        print('Starting %s ' % one_file)
         x=fits.open(one_file)
 
         name=one_file.split('/')
@@ -201,15 +203,21 @@ def get_det_overview(field='LMC_c45'):
             record=[name] 
             for one_key in keys:
                 record.append(get_keyword(one_key,x[i]))
+
+            mean,median,std=sigma_clipped_stats(x[i].data,sigma_lower=3,sigma_upper=2,grow=3)
+            record.append(mean)
+            record.append(median)
+            record.append(std)
         
             records.append(record)
             i+=1
+        print('finished %s' % one_file)
         
     records=np.array(records)   
     
     
         
-    tab_names=['Root']+keys
+    tab_names=['Root']+keys+['Mean','Med','STD']
     
     xtab=Table(records,names=tab_names)
     xtab['Field']=field
