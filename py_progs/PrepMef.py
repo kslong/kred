@@ -334,7 +334,7 @@ def xprep_one_field(field='LMC_c42',back_type='none', redo=False,outdir='',nproc
     p.close()
         
     elapsed = timeit.default_timer() - start_time
-    print('Completed multiprocessing of field %s  tile %s ' % (field,tile))
+    print('Completed multiprocessing of field %s  ' % (field))
 
     return
 
