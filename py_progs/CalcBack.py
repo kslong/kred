@@ -322,14 +322,16 @@ def do_one_tile(field,tile):
             btab['b']=btab['b_init']
             simple=diff_eval(y_all,btab)
 
-            best_offsets=btab.copy()
+            best_offset=btab.copy()
             best_val=simple
+            # print('simple')
 
             xbest=monte(y_all,btab)
             xmonte=diff_eval(y_all,xbest)
 
             if xmonte<best_val:
-                best_offsets=xbest.copy()
+                # print('monte')
+                best_offset=xbest.copy()
                 best_val=xmonte
 
 
@@ -337,15 +339,18 @@ def do_one_tile(field,tile):
             xsvd=diff_eval(y_all,svd)
 
             if xsvd<best_val:
-                best_offset=xsvd.copy()
+                # print('svd')
+                best_offset=svd.copy()
                 best_val=xsvd
 
 
             svd=do_svd(y_all,btab,0.01)
             xsvd1=diff_eval(y_all,svd)
             if xsvd1<best_val:
+                # print('svd1')
                 best_offset=svd.copy()
                 best_val=xsvd1
+
 
 
             print('Original b=0:     %.2f' % orig)
@@ -359,6 +364,7 @@ def do_one_tile(field,tile):
             one_record.append('%.2f' % xmonte)
             one_record.append('%.2f' % xsvd)
             one_record.append('%.2f' % xsvd1)
+            best_offset.write('b_test_%s_%d.txt' % (one_filter,one_exp),format='ascii.fixed_width_two_line',overwrite=True)
 
 
             records.append(one_record)
@@ -367,7 +373,6 @@ def do_one_tile(field,tile):
     xout=Table(records,names=['Filter','Exptime','None','Simple','Path','SVD','SVD1'])
     xout.write('test.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
-    best_offset.write('b_test.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
 
     return
