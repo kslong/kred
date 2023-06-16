@@ -21,27 +21,44 @@ The tools require a set of relatively commmon modules, such
 as astropy, and normally are run from within an appropriate 
 conda enviromnment.
 
-The routines assume a specfic directory structure THAT IS
-CURRENTLY UNDER DEVELOPMENT as we switch from a PHOTPIPE
-model to one of our own.  At present the new structure
+The routines assume a specfic directory structure 
+to one of our own.  At present the new structure
 presumes:
 
-The programs are all run from a toplevel directory:
+The programs are all run from a toplevel directory.  Underneath
+this directory there must be:
 
 * a directory that is (or is symbolically linked) to the
 (some or all of) DECam\_MEF directory stucture.  The top level
 direcory must named DECam\_MEF
 
+Additional directories will be created as various
+programs are run
 
-At present two programs exist that use the new directory
-structure
 
-* MEFSum.py - This summarizes the mef files in a directory 
-that is created called Summary.  
+In this version of the S/W (which is new as of mid June 2023)
+the set of programs should be run in the following order
+
+* MEFSum.py - This summarizes the mef files in a field.
+If it does not already exist this program creates a directory 
+that is created called Summary and writes two astropy
+tables that contain the summary informatioon
+
 
 Note that MefSum.py -all wil attempt to create a summary of all of the files
-that one has in the DEC\_NEF directory.   Also note that this routine is parallelized and each  theread is intended to handle on  Field.  The program does 
-check to see if certain Fields have already been analyzued, and so if one adds a single Field one should not use the -all option.
+that one has in the DEC\_NEF directory.   Also note that this routine is parallelized.
+Each thread is handles one Field.  The program does 
+check to see if certain Fields have already been analyzed, 
+and so if one adds a single Field one should not use the -all option.
+
+
+* PrepMef.py - This routine rescales all of the images in 
+a field or fields, subtracts background if desired, and
+stores the results in "data" directories located with the
+DECam\_PREP directoris.   For example,
+if one processes field LMC\_c45, the data will be in
+DECam\_PREP/LMC\_c45/data.
+
 
 * SetupTile.py - This is intended to identify CCD images
 that need to be processed.  It produces 
@@ -49,19 +66,6 @@ tables in the Summary directory that identify what
 CCDs need to be processed to produce images of a single 
 field.
 
-* PrepFiles.py - This creates a location to put the files
-that contribute to a single tile and then  writes the 
-individual CCD images that contritute to a tile and 
-stores them.   The top level directory for storing
-the results of PrepFiles.py is called DECam\_prep.
-The images are scaled to the same magnitude scale. 
-There is also a switch which allows one to attempt
-to subtract a background from the images, but in the absence
-of this there is no background subtraction
-
-* PrepSum.py - This summarizes the files that have been
-Prepped prior to combining all of the images in 
-the various filters with swarp
 
 * SetupSwarp.py - This creates inputs (the.run and .default files)
 for running swarp
@@ -95,7 +99,7 @@ line execution should be run from whatevery one
 is using as the toplevel directory for the data
 reduction.
 
-The various scripts abave allows on to produce swarped imaged
+The various scripts abave allow one to produce swarped imaged
 for each tile, but they do not include any attempt to
 match backgrounds between images.
 
@@ -128,9 +132,7 @@ to produce composite images that are smooth across image boundaries.  That is, i
 jargon, 'in work'
 
 
-
-
-The CheckInstall notebook in examples has been updated
+The CheckInstall notebook in examples has NOT been updated
 to reflect the changes to the various routines, and
 to show one how to run through the various scripts
 to produce a swapred Ha image for LMC\_c42 tile T08

@@ -52,16 +52,40 @@ import sys
 from astropy.io import ascii
 import numpy as np
 import os
-from astropy.table import vstack
+from astropy.table import vstack, join
+from glob import glob
 
 from astropy.io import ascii
 
+CWD=os.getcwd()
+PREPDIR='%s/DECam_PREP/' % (CWD)
 
-def find_files_to_prep(tab='Summary/LMC_c42_det.tab',ra_center=81.1,dec_center=-66.17,size_deg=.1):
 
-    print('Looking in %s for CCD images with RA and DEC of %.5f %.5f and size of %.2f deg' % (tab,ra_center,dec_center,size_deg))
+def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.17,size_deg=.1):
+    
+    tab_file='Summary/%s_det.tab' % (field)
+    if os.path.isfile(tab_file):
+        det=ascii.read(tab_file)
+    else:
+        print('Cannot find %s' % tab_file)
+        return
 
-    x=ascii.read(tab)
+    mef_file='Summary/%s_mef.tab' % (field)
+
+
+    if os.path.isfile(mef_file):
+        mef=ascii.read(mef_file)
+    else:
+        print('Cannot find %s' % mef_file)
+        return
+
+
+    x=join(det,mef,join_type='left')
+
+    
+
+    print('Looking for CCD images with RA and DEC of %.5f %.5f and size of %.2f deg' % (ra_center,dec_center,size_deg))
+
 
     dec_min=dec_center-0.5*size_deg
     dec_max=dec_center+0.5*size_deg
@@ -110,30 +134,72 @@ def find_files_to_prep(tab='Summary/LMC_c42_det.tab',ra_center=81.1,dec_center=-
     x['Delta_RA'].format='.2f'
 
     print('Found %d CCD extensions that satisfy the input criteria ' % len(x))
+
+    xfiles=[]
+    for one in x:
+        one_name='%s_%s.fits' % (one['Root'],one['EXTNAME'])
+        xfiles.append(one_name)
+
+    x['Filename']=xfiles
         
     
-    return x['Root','EXTNAME','CENRA1','CENDEC1','Delta_Dec','Delta_RA']
+    return x['Filename','Root','EXTNAME','CENRA1','CENDEC1','Delta_Dec','Delta_RA','FILTER','EXPTIME']
 
 
 
-def setup_one_tile(field='LMC_c42',tile_name='T07',ra=81.108313,dec=-66.177280,size_deg=0.67):
+def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67):
     
-    tab_file='Summary/%s_det.tab' % (field)
-    if os.path.isfile(tab_file):
-        x=ascii.read(tab_file)
-    else:
-        print('Cannot find %s' % tab_file)
-        return
-                      
+
     
         
-    x=find_files_to_prep(tab_file,ra,dec,size_deg)
+    x=find_files_to_prep(field,tile,ra,dec,size_deg)
 
     if len(x)>0:
-        outfile='Summary/%s_%s.txt' % (field,tile_name)
+        outfile='Summary/%s_%s.txt' % (field,tile)
         x.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
         print('Failed to set up %s %s' % (field,tile))
+
+    data_dir='%s/%s/data' % (PREPDIR,field)
+
+    if os.path.isdir(data_dir) == False:
+        print('Error: %s does not appear to exist' % data_dir)
+        print('Run PrepMef on this field first')
+        raise IOError
+
+    tile_dir='%s/%s/%s/' % (PREPDIR,field,tile)
+
+    if os.path.isdir(tile_dir)==False:
+        print('Creating the Prep directory as %s' % tile_dir)
+        os.makedirs(tile_dir)
+    else:
+        print('The Prep directory %s already exists' % tile_dir )
+        xfiles=glob('%s/*fits*' % tile_dir)
+        if len(xfiles):
+            print('Removing existing fits files or links and reinitializing')
+            for one in xfiles:
+                os.remove(one)
+
+    nerrors=0
+    for one in x:
+        one_file=one['Filename']
+        data_file='%s/%s' % (data_dir,one_file)
+        tile_file='%s/%s' % (tile_dir,one_file)
+        if os.path.isfile(data_file)==False:
+            print('Failed to find %s in %s ' % (one_file,data_dir))
+            nerrors+=1
+        else:
+            os.symlink(data_file,tile_file)
+    if nerrors:
+        print('Failed to find %d of %d files in %s' % (nerrors,len(x),data_dir))
+        raise IOError
+    else:
+        print('Successfully linked files from %s to %s' % (data_dir,tile_dir))
+            
+
+
+
+
 
         
     return

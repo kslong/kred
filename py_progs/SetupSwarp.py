@@ -55,7 +55,7 @@ def get_sum_tab(field='LMC_c42',tile='T07'):
     The location of the table files is currently hardocaded
     '''
     
-    xname='Summary/%s_%s_imsum.txt' % (field,tile)
+    xname='Summary/%s_%s.txt' % (field,tile)
     try:
         xtab=ascii.read(xname)
     except:
@@ -83,20 +83,20 @@ def summarize(field='LMC_c42',tile='T07'):
     print('The center of this tile is %.5f  %.5f' % (ra,dec))
 
 
-    ha=x[x['Filter']=='Ha']
-    s2=x[x['Filter']=='SII']
-    r=x[x['Filter']=='R']
-    n708=x[x['Filter']=='N708']    
+    ha=x[x['FILTER']=='Ha']
+    s2=x[x['FILTER']=='SII']
+    r=x[x['FILTER']=='R']
+    n708=x[x['FILTER']=='N708']    
     print('Ha  images  : %3d' % len(ha))
     print('SII images  : %3d' % len(s2))
     print('R   images  : %3d' % len(r))
     print('N708 images : %3d' % len(n708))
     
     print('\nHa')
-    times,counts=np.unique(ha['Exptime'],return_counts=True)
+    times,counts=np.unique(ha['EXPTIME'],return_counts=True)
 
     records=[times,counts]
-    xtab=Table(records,names=['Exptime','Number'])
+    xtab=Table(records,names=['EXPTIME','Number'])
     xtab['Filter']='Ha'
     ztab=xtab.copy()
 
@@ -106,10 +106,10 @@ def summarize(field='LMC_c42',tile='T07'):
         i+=1
 
     print('\nSII')
-    times,counts=np.unique(s2['Exptime'],return_counts=True)
+    times,counts=np.unique(s2['EXPTIME'],return_counts=True)
 
     records=[times,counts]
-    xtab=Table(records,names=['Exptime','Number'])
+    xtab=Table(records,names=['EXPTIME','Number'])
     xtab['Filter']='SII'
     ztab=vstack([ztab,xtab])
 
@@ -119,10 +119,10 @@ def summarize(field='LMC_c42',tile='T07'):
         i+=1
         
     print('\nR')
-    times,counts=np.unique(r['Exptime'],return_counts=True)
+    times,counts=np.unique(r['EXPTIME'],return_counts=True)
 
     records=[times,counts]
-    xtab=Table(records,names=['Exptime','Number'])
+    xtab=Table(records,names=['EXPTIME','Number'])
     xtab['Filter']='R'
     ztab=vstack([ztab,xtab])
 
@@ -132,10 +132,10 @@ def summarize(field='LMC_c42',tile='T07'):
         i+=1    
         
     print('\nN708')
-    times,counts=np.unique(n708['Exptime'],return_counts=True)
+    times,counts=np.unique(n708['EXPTIME'],return_counts=True)
 
     records=[times,counts]
-    xtab=Table(records,names=['Exptime','Number'])
+    xtab=Table(records,names=['EXPTIME','Number'])
     xtab['Filter']='N708'
     ztab=vstack([ztab,xtab])
 
@@ -270,7 +270,7 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     '''
     print('\n### Creating swarp inputs for %s tile %s and filter %s' % (field,tile,filt))
     x=get_sum_tab(field,tile)
-    xx=x[x['Filter']==filt]
+    xx=x[x['FILTER']==filt]
     if len(xx)==0:
         print('There are no observations with filter %s')
         return
@@ -278,12 +278,12 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     if type (exp)== int:
         exp=[exp]
     
-    ra=np.average(x['RA'])
-    dec=np.average(x['Dec'])
+    ra=np.average(x['CENRA1'])
+    dec=np.average(x['CENDEC1'])
 
     i=0
     while i<len(exp):
-        xxx=xx[xx['Exptime']==exp[i]]
+        xxx=xx[xx['EXPTIME']==exp[i]]
         if len(xxx)==0:
             print('There are no observations with exposure %s' % exp[i])
         else:
@@ -353,7 +353,7 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault):
     exposure times that exist for the cell
     '''
 
-    tabfile='Summary/%s_%s_expsum.txt' % (field,tile)
+    tabfile='Summary/%s_%s.txt' % (field,tile)
     try:
         xtab=ascii.read(tabfile)
     except:
@@ -361,7 +361,7 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault):
         raise IOError
 
     for one in xtab:
-        create_swarp_command(field=field,tile=tile,filt=one['Filter'] ,exp=[one['Exptime']],defaults=defaults)
+        create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults)
     return
 
 

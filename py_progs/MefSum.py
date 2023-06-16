@@ -97,7 +97,7 @@ def get_keyword(key,ext):
     in.
     
     '''
-    if key=='BAND':
+    if key=='FILTER':
         try:
             value=ext.header['FILTER']
             if value.count('N662'):
@@ -133,7 +133,7 @@ def get_mef_overview(field='LMC_c45'):
 
     records=[]
     
-    keys=['OBJECT','BAND','EXPTIME','MAGZERO','SEEING','OBSID']
+    keys=['OBJECT','FILTER','EXPTIME','MAGZERO','SEEING','OBSID']
     
     for one_file in files:
         x=fits.open(one_file)
@@ -163,7 +163,7 @@ def get_mef_overview(field='LMC_c45'):
     ztab=ascii.read('goo_%s.txt' %field)
     os.remove('goo_%s.txt' %field)
     
-    ztab.sort(['BAND','EXPTIME'])
+    ztab.sort(['FILTER','EXPTIME'])
 
 
     ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
