@@ -156,6 +156,15 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     
     This version stores all of the actual output files in a single directory for each field. Setup_Tiles (will be modified
     for the new file structure
+
+
+    Note that background subtraction here, if is carriout out, subtractis the same value from all of 
+    the CCDs in a single image.  
+
+    What is done is slightly confusing.  MEFSum.py has estimated a different background in each of
+    the CCDs in the exposure and stored this in the det file.  Here we take all of those measurements
+    for the mef image and either take the median of those values or the minimum.
+
     
     '''
 
@@ -363,7 +372,7 @@ def steer(argv):
             xall=True
         elif argv[i]=='-finish':
             redo=False
-        elif argv[i]=='sub_back':
+        elif argv[i]=='-sub_back':
             xback='med'
         elif argv[i]=='-np':
             i+=1

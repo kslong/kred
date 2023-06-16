@@ -51,11 +51,15 @@ Each thread is handles one Field.  The program does
 check to see if certain Fields have already been analyzed, 
 and so if one adds a single Field one should not use the -all option.
 
+Somewhat surprisingly this is the routine that will take the
+longest time of the programs that constitute the standard
+processing.
+
 
 * PrepMef.py - This routine rescales all of the images in 
 a field or fields, subtracts background if desired, and
 stores the results in "data" directories located with the
-DECam\_PREP directoris.   For example,
+DECam\_PREP directories.   For example,
 if one processes field LMC\_c45, the data will be in
 DECam\_PREP/LMC\_c45/data.
 
