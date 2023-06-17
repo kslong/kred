@@ -386,6 +386,7 @@ def steer(argv):
 
 
 
+    xtime_start=timeit.default_timer()
 
     for one_field in fields:
         if nproc<2:
@@ -393,6 +394,10 @@ def steer(argv):
         else:
             print('Processing in parallel with %d cores' % (nproc))
             xprep_one_field(one_field,xback,redo,outdir,nproc)
+
+    elapsed = timeit.default_timer() - xtime_start
+    print('This entire job ran to completion in %d s' % elapsed)
+
     return
 
 

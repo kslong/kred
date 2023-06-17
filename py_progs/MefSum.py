@@ -204,7 +204,12 @@ def get_det_overview(field='LMC_c45'):
             for one_key in keys:
                 record.append(get_keyword(one_key,x[i]))
 
-            mean,median,std=sigma_clipped_stats(x[i].data,sigma_lower=3,sigma_upper=2,grow=3)
+            try:
+                mean,median,std=sigma_clipped_stats(x[i].data,sigma_lower=3,sigma_upper=2,grow=3)
+            except:
+                print('Error: to get mean etc for %s extension %d'% (one_file,i))
+                mean=median=std=-999.
+
             record.append(mean)
             record.append(median)
             record.append(std)
