@@ -32,7 +32,7 @@ Primary routines:
 Notes:
 
     This routine can take a while to run since individual tiles
-    involve a large number of files and one must seach for
+    involve a large number of files and one must search for
     essentially  all x-matches.  If there are 100 files
     one needs to look at potentially 100 x 99 choices, and 
     in some cases we have close to 1000 files
@@ -123,7 +123,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     # Read the summary file so we can attached the exposure time 
 
-    imsumfile='Summary/%s_%s_imsum.txt' % (field,tile)
+    imsumfile='Summary/%s_%s.txt' % (field,tile)
     try:
         imsum=ascii.read(imsumfile)
     except:
