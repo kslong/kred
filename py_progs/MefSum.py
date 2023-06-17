@@ -55,6 +55,7 @@ import timeit
 import time
 import multiprocessing
 from multiprocessing import Pool
+from log import *
 multiprocessing.set_start_method("spawn",force=True)
 
 
@@ -191,7 +192,7 @@ def get_det_overview(field='LMC_c45'):
     keys=['EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1']
     
     for one_file in files:
-        print('Starting %s ' % one_file)
+        log_message('Starting %s ' % one_file)
         x=fits.open(one_file)
 
         name=one_file.split('/')
@@ -201,13 +202,19 @@ def get_det_overview(field='LMC_c45'):
         i=1
         while i<len(x):
             record=[name] 
+
             for one_key in keys:
-                record.append(get_keyword(one_key,x[i]))
+                try:
+                    record.append(get_keyword(one_key,x[i]))
+                except:
+                    log_message('Error: Problem with keyword %s for %s extension %d'% (one_key,one_file,i))
+                    record.append(-99-9999)
+
 
             try:
                 mean,median,std=sigma_clipped_stats(x[i].data,sigma_lower=3,sigma_upper=2,grow=3)
             except:
-                print('Error: to get mean etc for %s extension %d'% (one_file,i))
+                log_message('Error: unable to get mean etc for %s extension %d'% (one_file,i))
                 mean=median=std=-999.
 
             record.append(mean)
@@ -264,9 +271,11 @@ def do_one(field='LMC_c45'):
         Simply get all the information one wants about the imaages associated
         with a single field
         '''
-        print('Starting ',field)
+        open_log('%s.log' % field,reinitialize=True)
+        log_message('Starting MefSum on %s'% field)
         get_mef_overview(field)
         get_det_overview(field)
+        close_log()
         return
 
 
