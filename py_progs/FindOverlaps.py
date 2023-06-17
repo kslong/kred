@@ -86,19 +86,19 @@ def get_files(field,tile,xfilter='Ha'):
         print('Error could not locate %s ' % det_file)
         raise IOError 
 
-    imsum_file='Summary/%s_%s_imsum.txt' % (field,tile)  
+    imsum_file='Summary/%s_%s.txt' % (field,tile)  
     try:
         imsum=ascii.read(imsum_file)
     except:
-        print('Erorr: could not locate %s' % imsum_file)
+        print('Error: could not locate %s' % imsum_file)
         raise IOError
 
     xall=join(imsum,det,join_type='left')
 
-    xtab=xall[xall['Filter']==xfilter]
+    xtab=xall[xall['FILTER']==xfilter]
 
     if len(xtab)==False:
-        print('No approapriate files were found for %s' % xfilter)
+        print('No appropriate files were found for %s' % xfilter)
         return []
 
     return xtab
@@ -133,9 +133,9 @@ def get_overlap(row,xxtab):
     xtab['Dec_max'] = np.max([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
     xtab['Dec_min'] = np.min([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
 
-    xtab=xtab[xtab['Exptime']==one_row['Exptime']]
+    xtab=xtab[xtab['EXPTIME']==one_row['EXPTIME']]
     if len(xtab)==0:
-        # print('Failed to find any images with the same exposre time ' % one_row['Exptime'])
+        # print('Failed to find any images with the same exposre time ' % one_row['EXPTIME'])
             return []
     
     
@@ -188,12 +188,15 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
     '''
     xtab= get_files(field,tile,xfilter)
 
+    if len(xtab)==0:
+        return []
+
     i=0
     imax=len(xtab)-2
     while i<imax:
         z=get_overlap(i,xtab)
         if len(z)>0:
-            xout=z['Filename','Filter','Exptime','delta','delta_ra','delta_dec']
+            xout=z['Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
             xout['XFilename']=xtab['Filename'][i]
             if i==0:
                 xx=xout.copy()
@@ -201,7 +204,7 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
                 xx=vstack([xx,xout])
         # print('Finished row',i)
         i+=1
-    xx.sort(['Exptime','delta'])
+    xx.sort(['EXPTIME','delta'])
 
     # outfile='Summary/%s_%s_%s_overlap.txt' % (field,tile,xfilter)
     # xx.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
@@ -214,7 +217,7 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
     print('\nStarting Field %s Tile %s' % (field,tile))
     
-    xfilters=['Ha','SII','R','N708']
+    xfilters=['N662','N673','r','N708']
 
     z=[]
     xlen=[]

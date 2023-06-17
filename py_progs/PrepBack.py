@@ -12,7 +12,7 @@ background
 
 Command line usage (if any):
 
-    usage: GenSwarpInputs.py [-all ] tile field
+    usage: PrepBack.py [-all ] field tile
 
 Description:  
 
@@ -36,6 +36,12 @@ from astropy.stats import sigma_clipped_stats
 
 SWARPDIR='DECam_BACK'
 PREPDIR=os.path.abspath('DECam_PREP')
+
+from glob import glob
+import timeit
+import subprocess
+
+exec_dir=os.getcwd()
 
 def create_swarp_dir(field='LMC_c42',tile='T07'):
     '''
@@ -154,7 +160,7 @@ NTHREADS               0               # Number of simultaneous threads for
 
 def prep_one_tile(field='LMC_c42',tile='T07'):
     try:
-        sumfile='Summary/%s_%s_imsum.txt' % (field,tile)
+        sumfile='Summary/%s_%s.txt' % (field,tile)
         x=ascii.read(sumfile)
     except:
         print('Could not find %s' % sumfile)
@@ -179,8 +185,8 @@ def prep_one_tile(field='LMC_c42',tile='T07'):
         print('The output directory exists')
 
     
-    ra=np.average(x['RA'])
-    dec=np.average(x['Dec'])
+    ra=np.average(x['CENRA1'])
+    dec=np.average(x['CENDEC1'])
 
     # This needs to be relative to the outdir
 
@@ -204,6 +210,51 @@ def prep_one_tile(field='LMC_c42',tile='T07'):
     return 
 
 
+def run_back(field='LMC_c42',tile='T07'):
+    '''
+    run swarp in the for the background fields
+    '''
+
+    xstart=qstart=start_time=timeit.default_timer()
+    run_dir='%s/%s/%s/' % (SWARPDIR,field,tile)
+
+    try:
+        os.chdir(run_dir)
+    except:
+        print('Error: Could not cd to %s' % run_dir)
+        os.chdir(exec_dir)
+
+    command='RunSwarp'
+    outfile='Swarp.out.txt'
+    xout=subprocess.run(command,shell=True,capture_output=True)
+
+    z=open(outfile,'w')
+    zz=xout.stderr.decode()
+    lines=zz.split('\n')
+    xlines=[]
+    for line in lines:
+        if line.count('\x1b[1M>')==0:
+            xlines.append(line)
+            z.write('%s\n' % line)
+    z.close()
+
+
+    for xline in xlines[-10:]:
+        print(xline)
+
+    print('***Finished writing end of outputs')
+
+    print('***Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
+    start_time=current_time
+    xcurrent_time=timeit.default_timer()
+    print('\n***Completely done for tile %s in %.1f s\n' % (tile,xcurrent_time-xstart))
+
+
+    os.chdir(exec_dir)
+    return
+
+
+
                               
                               
 def steer(argv):
@@ -213,6 +264,7 @@ def steer(argv):
     field=''
     tiles=[]
     xall=False
+    xrun=False
 
     i=1
     while i<len(argv):
@@ -221,6 +273,8 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-run':
+            xrun=True
         elif argv[i][0]=='-':
             print('Error: Unknwon switch' % argv[i])
             return
@@ -241,6 +295,12 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
     for one in tiles:
         prep_one_tile(field,one)
+
+    if xrun:
+        for one in tiles:
+            print('Starting to run %s %s' % (field,one))
+            run_back(field,one)
+
 
     return
 
