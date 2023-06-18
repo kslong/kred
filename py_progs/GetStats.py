@@ -46,6 +46,7 @@ Notes:
 History:
 
 230505 ksl Coding begun and routine parallelized
+230617 ksl Adapted to new version of routines
 
 '''
 
@@ -194,7 +195,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     imsum.rename_column('Filename','file1')
 
-    ztab=join(ztab,imsum['file1','Filter','Exptime'],join_type='left')
+    ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
 
 
     # Now check for problems before we write out the file
