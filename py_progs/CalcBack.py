@@ -211,10 +211,10 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
         raise IOError
     # print(x.info)
     
-    y=x[x['Filter']==xfilter]
+    y=x[x['FILTER']==xfilter]
     print('Found %d xmatches with %s' % (len(y),xfilter))
     
-    y=y[y['Exptime']==exptime]
+    y=y[y['EXPTIME']==exptime]
     
     # print(y.info)
     
@@ -300,18 +300,18 @@ def do_one_tile(field,tile):
         return 
 
 
-    xfilt=np.unique(x['Filter'])
+    xfilt=np.unique(x['FILTER'])
 
     records=[]
 
     for one_filter in xfilt:
-        xx=x[x['Filter']==one_filter]
-        xexp=np.unique(xx['Exptime'])
+        xx=x[x['FILTER']==one_filter]
+        xexp=np.unique(xx['EXPTIME'])
         for one_exp in xexp:
             one_record=[one_filter,one_exp]
             btab,y_all=create_inputs(infile,one_filter,one_exp)
             bfile=infile.replace('xxx.txt','bbb_%s_%d.txt' % (one_filter,one_exp))
-            btab.write(bfile,format='ascii.fixed_width_two_line',overwrite=True)
+            # btab.write(bfile,format='ascii.fixed_width_two_line',overwrite=True)
             xfile=infile.replace('xxx.txt','xxx_%s_%d.txt' % (one_filter,one_exp))
             y_all.write(xfile,format='ascii.fixed_width_two_line',overwrite=True)
 
@@ -364,13 +364,16 @@ def do_one_tile(field,tile):
             one_record.append('%.2f' % xmonte)
             one_record.append('%.2f' % xsvd)
             one_record.append('%.2f' % xsvd1)
-            best_offset.write('b_test_%s_%d.txt' % (one_filter,one_exp),format='ascii.fixed_width_two_line',overwrite=True)
+
+            best_offset['b'].format='.3f'
+            best_file='Summary/%s_%s_bbb_%s_%d.txt' % (field,tile,one_filter,one_exp)
+            best_offset.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
 
             records.append(one_record)
 
     records=np.array(records)
-    xout=Table(records,names=['Filter','Exptime','None','Simple','Path','SVD','SVD1'])
+    xout=Table(records,names=['FILTER','EXPTIME','None','Simple','Path','SVD','SVD1'])
     xout.write('test.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
 

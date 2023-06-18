@@ -97,18 +97,22 @@ from a Jupyter notebook.  One can also run the Swarp
 commands from inside the notebook or from the command 
 line.   
 
-As is the case for the rest of the scripts
-in this sequence, the notebook and the command
-line execution should be run from whatevery one
-is using as the toplevel directory for the data
-reduction.
+* SwarpEval.py - This routine creates a set of evaluation
+figures for the Swarped images.  The scaling is intended
+to highlight flaws.  The images for a field 
+are stored in the directory DECam\_SWARP/field/eval
+where field is the field name, e.g. LMC\_c42
+
+**All of the scripts in this sequence should
+be run from the toplevel directory for the data
+reduction.**
 
 The various scripts abave allow one to produce swarped imaged
 for each tile, but they do not include any attempt to
 match backgrounds between images.
 
 Work on this is still underway, but some preperatory scripts
-exist (as of 230529).
+exist (as of 230618).
 
 * FindOverlaps.py uses information, namely the RAs and DECs of the corners of
 the indiviual CCDs, contained in the headers of the images to
@@ -123,13 +127,14 @@ commands for projecting all of the images (which have gone through the PrepFiles
 stage) onto the same WCS.  This WCS has larger pixels than the original WCS
 in order to keep the files sizes plausible.
 
-At present, one must actually run the swarp commands from inside the directories,
-somehtin that needs to be modificed.
 
 * GetStats.py determines the background in the overlap regions of images as
 identified in FindOverlaps, using the impages created by PrepBack.  The
 routine produces a single file for each tile that contains estimates of the
 background.
+
+* CalcBack.py tries to determine an optimal set of offsets to add or 
+subtract from the images to produce better image matching.
 
 At present there is no completed routine to estimate the best offsets
 to produce composite images that are smooth across image boundaries.  That is, in NASA
