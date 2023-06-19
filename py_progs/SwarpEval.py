@@ -12,7 +12,7 @@ use the files ending in _sw.tab to set up run files
 
 If one wants to run only 1 or a few tiles then the command will be something like
 
-Swarp.py LMC_c42  1 3 5
+SwarpEval.py LMC_c42  T01 T03 
 
 
 '''
@@ -189,7 +189,7 @@ def steer(argv):
         elif argv[i]=='-all':
             xall=True
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]

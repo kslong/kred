@@ -25,14 +25,14 @@ Usage:  MefPref.py [-h] [-finish] [-sub_back] [-np 4] Field_name or names
 
 where -h   --- to print this documentation and exit
        -finish --> do not redo files that have already been processed
-      -sub_back --> causes background to be estimated from individula images
+      -sub_back --> causes background to be estimated from individual images
       -np 4   --. To run with multiple threads
 
 
 
 Description:
 
-    If the preliminaries indicated above have taken place, PrepMef   will create directories if 
+    If the preliminaries indicated above have taken place, MefPrep will create directories if 
     necessary to store the results.  The program then reads tables files in the Summary directory
     where there is a table that identify the Mef files and extenstions associated with them.
     it then processes the each Mefile individual.
@@ -378,7 +378,7 @@ def steer(argv):
             i+=1
             nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknown switch  %s' % argv[i])
             return
         else:
             fields.append(argv[i])

@@ -27,9 +27,8 @@ background sutbracted and those that are not can be compared.
 
 If one wants to run only 1 or a few tiles then the command will be something like
 
-Swarp.py LMC_c42  1 3 5
+Swarp.py LMC_c42  T01 T02 T03
 
-Note that the filed name doos NOT include _d 
 
 
 
@@ -413,7 +412,7 @@ def steer(argv):
         elif argv[i]=='-bsub':
             bsub=True
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknwon switch  %s' % argv[i])
             return
         elif field=='':
             field=argv[i]

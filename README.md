@@ -33,11 +33,16 @@ this directory there must be:
 direcory must named DECam\_MEF
 
 Additional directories will be created as various
-programs are run
+programs are run.  
 
+To get help on the options of the various routines, one should
+type the program name, with a -h option
 
-In this version of the S/W (which is new as of mid June 2023)
-the set of programs should be run in the following order
+## Standard Processing
+
+To process the data without attempting to improve over
+the background options in MefPrep, the programs should
+be run in the following order:
 
 * MEFSum.py - This summarizes the mef files in a field.
 If it does not already exist this program creates a directory 
@@ -63,39 +68,39 @@ DECam\_PREP directories.   For example,
 if one processes field LMC\_c45, the data will be in
 DECam\_PREP/LMC\_c45/data.
 
+Note that this routine has swithes that allow one 
+to subtract background or not from the original
+images.  The default currently is not to subtract any
+background.
+
 
 * SetupTile.py - This is intended to identify CCD images
 that need to be processed.  It produces 
 tables in the Summary directory that identify what 
 CCDs need to be processed to produce images of a single 
-field.
+field. It also cretes directories DECam\_PREP/LMC\_c45/Tile01 etc
+that contain links to the appropriate files in the data directories.
+
+(This routine uses the config file.  If one wanted to create 
+data that was for a different region, then one would need to point 
+this to a different configuration file.  Note though, that at
+present each field is separate)
 
 
-* SwarpSetup.py - This creates inputs (the.run and .default files)
-for running swarp
-to create the tile images.  It assumes we
+* SwarpSetup.py - This creates directoires inputs (the.run and .default files)
+for running swarp to create the tile images on the tile images.  It assumes we
 want to make tile images for each filter and for each 
-exposure time.  It largely replaces the portion of Swarp.py
-below that requires one to create Jupyter notebooks
+exposure time.  
+
 
 (Note that at present this routine does not use the field
 centers defined in the .config file, but takes the center
 of all of the images in a tile to be the center of the
 swarp field.  This is something that still needs updating)
 
-* Swarp.py -  The primary purpose of Swarp.py when
-run from the command line is to run all of the commands that
-have been crated with SetupSwarp.  
-
-The script also contains
-code to create special 
-This contains code to setup the swarp
-directories in a standard way and to create .run
-.default files and input file lists with a routine
-create\_swarp\_command, that is currently best run
-from a Jupyter notebook.  One can also run the Swarp
-commands from inside the notebook or from the command 
-line.   
+* Swarp.py -  The purpose of Swarp.py 
+is to run all of the commands that
+have been created with SetupSwarp.  
 
 * SwarpEval.py - This routine creates a set of evaluation
 figures for the Swarped images.  The scaling is intended
@@ -103,16 +108,28 @@ to highlight flaws.  The images for a field
 are stored in the directory DECam\_SWARP/field/eval
 where field is the field name, e.g. LMC\_c42
 
+
+At this point the standard processing is complete
+
 **All of the scripts in this sequence should
 be run from the toplevel directory for the data
 reduction.**
+
+
+## Using overlaps regions to improve the background matching
 
 The various scripts abave allow one to produce swarped imaged
 for each tile, but they do not include any attempt to
 match backgrounds between images.
 
-Work on this is still underway, but some preperatory scripts
-exist (as of 230618).
+
+In order to improve backrouund matching one
+should run the scripts below, after at least MefProp has
+been run on a field.
+
+
+The routines should be run in the following order.
+
 
 * FindOverlaps.py uses information, namely the RAs and DECs of the corners of
 the indiviual CCDs, contained in the headers of the images to
@@ -121,28 +138,36 @@ only overlaps we are concerned with are those between images with the
 same filter and exposure time.  
 
 * BackPrep.py creates a directory structure DECam\_BACK parallel to the other
-directory structures for storing images created for the purpose estimaging
-background in the overlap regions of images.  PrepBack also creates Swarp
+directory structures for storing images created for the purpose estmating
+background in the overlap regions of images.  BackPrep also creates Swarp
 commands for projecting all of the images (which have gone through the PrepFiles
 stage) onto the same WCS.  This WCS has larger pixels than the original WCS
-in order to keep the files sizes plausible.
+in order to keep the files sizes plausible. When run with the -r option 
+BackPrep then Backprep will run Swarp to create these images.
 
+Note that the files created by BackPrep are large.  If one runs BackPrep on
+all of LMC\_c42, for example, about 420 GB of images will be created. 
 
 * BackStats.py determines the background in the overlap regions of images as
-identified in FindOverlaps, using the impages created by PrepBack.  The
+identified in FindOverlaps, using the impages created by BackPrep.  The
 routine produces a single file for each tile that contains estimates of the
 background.
 
 * BackCalc.py tries to determine an optimal set of offsets to add or 
 subtract from the images to produce better image matching.
 
-At present there is no completed routine to estimate the best offsets
-to produce composite images that are smooth across image boundaries.  That is, in NASA
-jargon, 'in work'
+* BackSub.py uses the results of BackCalc to create new images with 
+the backgounds values produced by BalCalc.py subtracted.  The outputs
+appear in a directories, with names of  DECam\_Prep/field/tile\_b.  
 
+* SwarpSetup.py is run (again) but with the -bsub flag in order to 
+create directories of the form  DECam\_Swarp/field/tile\_b and commands
+in these directories that point to the files cerated by BackSub.py
 
-The CheckInstall notebook in examples has NOT been updated
-to reflect the changes to the various routines, and
-to show one how to run through the various scripts
-to produce a swapred Ha image for LMC\_c42 tile T08
+* Swarp.py  is run again, but with the -bsub flag to run the comamnds
+from SetupSwarp.py
+
+* SwarpEval.py  is not run to make images of all of both sets of
+processing.
+
 

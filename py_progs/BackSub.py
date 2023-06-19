@@ -1,6 +1,45 @@
 #!/usr/bin/env python
 # coding: utf-8
 
+'''
+                    Space Telescope Science Institute
+
+Synopsis:
+
+Use calculated backgrounds and subtract these
+from the existing images
+
+
+Command line usage (if any):
+
+    usage: BackSub.py [-h] [-all] -np 8  field T01 T02 ...
+
+
+    where
+
+    * -h gives this documentation
+    - all causes all tiles in the field to be processed
+    - np 8  causes 8 procesors to be used
+
+Description:
+
+    The routine reads the files in the DECam_Prep/field/tile 
+    directory and writes the subtacted in imaages to
+    DECam_Prep/field/tile_b
+
+
+Primary routines:
+
+
+Notes:
+
+History:
+
+230619 ksl Coding begun
+
+'''
+
+
 
 
 import sys
@@ -101,7 +140,7 @@ def steer(argv):
             i+=1
             nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]

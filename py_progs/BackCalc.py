@@ -11,13 +11,20 @@ the statistics have been gathered
 
 Command line usage (if any):
 
-    usage: BackCalc.py filename
+    usage: BackCalc.py [-all]   Field T01 ...
 
 Description:  
 
+    Uset a variety of techingiques to try to find 
+    the best backgrounds to subtract from the
+    fileds to match backgrounds
+
+    The main output is a file field_tile_bbb.txt
+    that contains the calculated values for 
+    the offsets.
+
 Primary routines:
 
-    doit
 
 Notes:
                                        
@@ -422,7 +429,7 @@ def steer(argv):
         #     i+=1
         #     nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]

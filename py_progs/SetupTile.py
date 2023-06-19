@@ -234,7 +234,7 @@ def steer(argv):
             i+=1
             table=argv[i]
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch' % argv[i])
+            print('Error: Unknown switch %s ' % argv[i])
             return
         elif field=='':
             field=argv[i]

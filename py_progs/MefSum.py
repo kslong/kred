@@ -311,7 +311,7 @@ def steer(argv):
             i+=1
             nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknown switch' % argv[i])
+            print('Error: Unknown switch  %s' % argv[i])
             return
         else:
             fields.append(argv[i])
