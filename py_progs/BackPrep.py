@@ -12,9 +12,13 @@ background
 
 Command line usage (if any):
 
-    usage: BackPrep.py [-all ] field tile
+    usage: BackPrep.py [-all ] [-run] field tile
 
 Description:  
+
+    BackPrep.py without the -run simply sets up the Swarps
+
+    With -run it will actaul run all the swarps
 
                                        
 History:
@@ -242,12 +246,9 @@ def run_back(field='LMC_c42',tile='T07'):
     for xline in xlines[-10:]:
         print(xline)
 
-    print('***Finished writing end of outputs')
 
-    print('***Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
-    start_time=current_time
-    xcurrent_time=timeit.default_timer()
-    print('\n***Completely done for tile %s in %.1f s\n' % (tile,xcurrent_time-xstart))
+    current_time=timeit.default_timer()
+    print('\n***Completely done for tile %s in %.1f s\n' % (tile,current_time-xstart))
 
 
     os.chdir(exec_dir)

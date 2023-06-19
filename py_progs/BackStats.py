@@ -12,7 +12,7 @@ how overlap regions of various images compare
 
 Command line usage (if any):
 
-    usage: GetStats.py  [-np 8] [-all] field 1 2 3
+    usage: BackStats.py  [-np 8] [-all] field T01 T02 ...
 
     where field is a field name, and the following numbers are one 
     or more tiles
@@ -165,6 +165,19 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     xrecords=np.array(records)
     
     xtab=Table(xrecords,names=['file1','file2','npix','mean1','med1','std1','mean2','med2','std2'])
+    # Next lines are a cheat to get the formats to be sensible
+    xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
+    xtab=ascii.read('foo.txt')
+
+    # Now rescale to account for pixel size
+    scale_factor=(0.27*0.27)/(2.*2.)
+
+    xtab['mean1']*=scale_factor
+    xtab['med1']*=scale_factor
+    xtab['std1']*=scale_factor
+    xtab['mean2']*=scale_factor
+    xtab['med2']*=scale_factor
+    xtab['std2']*=scale_factor
 
     colnames=xtab.colnames
     i=0
@@ -191,19 +204,16 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     ztab['std1'].format='.3f'
     ztab['std2'].format='.3f'
 
-    # Now attach the fileter and expsure time to this
+
+
+
+    # Now attach the filter and exposure time to this
 
     imsum.rename_column('Filename','file1')
 
     ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
 
 
-    # Now check for problems before we write out the file
-
-    ztab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
-
-
-    # print('We started with %d rows, %d were good and we end up with %d' % (nstart,len(good),len(ztab)))
 
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
@@ -243,7 +253,7 @@ def steer(argv):
         tiles=[]
         i=1
         while i<17:
-            tiles.append('T%02d' % ii)
+            tiles.append('T%02d' % i)
             i+=1
 
     if len(tiles)==0:
