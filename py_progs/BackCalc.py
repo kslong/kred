@@ -11,7 +11,7 @@ the statistics have been gathered
 
 Command line usage (if any):
 
-    usage: CalcBack.py filename
+    usage: BackCalc.py filename
 
 Description:  
 

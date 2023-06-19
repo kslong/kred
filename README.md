@@ -56,7 +56,7 @@ longest time of the programs that constitute the standard
 processing.
 
 
-* PrepMef.py - This routine rescales all of the images in 
+* MefPrep.py - This routine rescales all of the images in 
 a field or fields, subtracts background if desired, and
 stores the results in "data" directories located with the
 DECam\_PREP directories.   For example,
@@ -71,7 +71,7 @@ CCDs need to be processed to produce images of a single
 field.
 
 
-* SetupSwarp.py - This creates inputs (the.run and .default files)
+* SwarpSetup.py - This creates inputs (the.run and .default files)
 for running swarp
 to create the tile images.  It assumes we
 want to make tile images for each filter and for each 
@@ -120,7 +120,7 @@ identify what images overlap with others.  The routine assumes that the
 only overlaps we are concerned with are those between images with the
 same filter and exposure time.  
 
-* PrepBack.py creates a directory structure DECam\_BACK parallel to the other
+* BackPrep.py creates a directory structure DECam\_BACK parallel to the other
 directory structures for storing images created for the purpose estimaging
 background in the overlap regions of images.  PrepBack also creates Swarp
 commands for projecting all of the images (which have gone through the PrepFiles
@@ -128,12 +128,12 @@ stage) onto the same WCS.  This WCS has larger pixels than the original WCS
 in order to keep the files sizes plausible.
 
 
-* GetStats.py determines the background in the overlap regions of images as
+* BackStats.py determines the background in the overlap regions of images as
 identified in FindOverlaps, using the impages created by PrepBack.  The
 routine produces a single file for each tile that contains estimates of the
 background.
 
-* CalcBack.py tries to determine an optimal set of offsets to add or 
+* BackCalc.py tries to determine an optimal set of offsets to add or 
 subtract from the images to produce better image matching.
 
 At present there is no completed routine to estimate the best offsets

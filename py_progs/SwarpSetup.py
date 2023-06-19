@@ -15,7 +15,7 @@ either in a Jupyter script or from the command line.
 To run swarp from the command line (one must be in the normal run directory) since
 a particular directory structure is assumed here)
 
-Usage:   SetupSwarp.py [-all] [-bsub] field [tiles]
+Usage:   SwarpSetup.py [-all] [-bsub] field [tiles]
 
 where -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
 use the files ending in _sw.tab to set up run files

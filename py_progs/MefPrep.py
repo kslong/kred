@@ -21,7 +21,7 @@ background
 
  
 
-Usage:  PrepMef.py [-h] [-finish] [-sub_back] [-np 4] Field_name or names
+Usage:  MefPref.py [-h] [-finish] [-sub_back] [-np 4] Field_name or names
 
 where -h   --- to print this documentation and exit
        -finish --> do not redo files that have already been processed

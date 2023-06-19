@@ -12,7 +12,7 @@ background
 
 Command line usage (if any):
 
-    usage: PrepBack.py [-all ] field tile
+    usage: BackPrep.py [-all ] field tile
 
 Description:  
 
