@@ -15,10 +15,15 @@ either in a Jupyter script or from the command line.
 To run swarp from the command line (one must be in the normal run directory) since
 a particular directory structure is assumed here)
 
-Usage:   SetupSwarp.py [-all] field [tiles]
+Usage:   SetupSwarp.py [-all] [-bsub] field [tiles]
 
 where -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
 use the files ending in _sw.tab to set up run files
+
+and -bsub directs the routine to use data for which an addtioal backgound subtraction
+algorithm has been used.  In theis case the Swarp commmands are written and to
+the DECAam_SWARP/field/tile_b directory, so that data results which are
+background sutbracted and those that are not can be compared.
 
 If one wants to run only 1 or a few tiles then the command will be something like
 
@@ -153,6 +158,10 @@ def summarize(field='LMC_c42',tile='T07'):
 def create_swarp_dir(field='LMC_c42',tile='T07'):
     '''
     Create a diretory for the swarp outputs if it does not exist
+
+    Note that this routine does not require the field name or
+    tile to be anything specific.  It just creates a subdirecroy
+    of SWARPDIR
     '''
     outdir='%s/%s/%s/' % (SWARPDIR,field,tile)
     if os.path.isdir(outdir)==False:
@@ -263,10 +272,12 @@ NTHREADS               0               # Number of simultaneous threads for
 
 
 
-def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults=xdefault):
+def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults=xdefault,bsub=False):
     '''
     Generate the inputs necessary to run swarp where exp corresponds to one
     or more exposure times for a particular filter and tile.  
+
+    230619 - Added code to allow commands to be created in the _b directory if bsub=True
     '''
     print('\n### Creating swarp inputs for %s tile %s and filter %s' % (field,tile,filt))
     x=get_sum_tab(field,tile)
@@ -302,9 +313,13 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     else:
         print('There will be %d files summed' % len(xxxx))
         
-    xdir=create_swarp_dir(field,tile)
+
+    xtile=tile
+    if bsub==True:
+        xtile='%s_b' % tile
+
+    xdir=create_swarp_dir(field,xtile)
     
-    # print('xdir ',xdir)
     
 
     i=0
@@ -325,7 +340,7 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     
     f=open(name,'w')
     for one in xxxx:
-        xname='%s/%s/%s/%s'% (PREPDIR,field,tile,one['Filename'])
+        xname='%s/%s/%s/%s'% (PREPDIR,field,xtile,one['Filename'])
         f.write('%s\n' % xname)
     f.close()
     
@@ -347,11 +362,20 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     return   
     
     
-def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault):
+def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,bsub=False):
     '''
-    Genterate the standard set of commands for on tile, based on all of the separate
+    Generate the standard set of commands for on tile, based on all of the separate
     exposure times that exist for the cell
+
+    230619 - Added code to try to handle the situation where inputs are 
+    somewhat inconsistent, assuming that if the tile is given as _b, one 
+    actually wants to use the background subtracted data
     '''
+
+    # Homoogenize the inputs in a situation where _b has been added to the file name
+    if tile.count('_b'):
+        tile=tile.replace('_b','')
+        bsub=True
 
     tabfile='Summary/%s_%s.txt' % (field,tile)
     try:
@@ -361,7 +385,7 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault):
         raise IOError
 
     for one in xtab:
-        create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults)
+        create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults,bsub=bsub)
     return
 
 
@@ -377,6 +401,7 @@ def steer(argv):
     tiles=[]
     xall=False
     redo=True
+    bsub=False
 
     i=1
     while i<len(argv):
@@ -385,6 +410,8 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-bsub':
+            bsub=True
         elif argv[i][0]=='-':
             print('Error: Unknwon switch' % argv[i])
             return
@@ -402,7 +429,7 @@ def steer(argv):
             i+=1
 
     for one in tiles:
-        create_commmands_for_one_tile(field,one)
+        create_commmands_for_one_tile(field,one,bsub=bsub)
 
 
     return

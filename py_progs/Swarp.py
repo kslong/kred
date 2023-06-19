@@ -15,16 +15,15 @@ either in a Jupyter script or from the command line.
 To run swarp from the command line (one must be in the normal run directory) since
 a particular directory structure is assumed here)
 
-Usage:   Swarp.py [-all] field [tiles]
+Usage:   Swarp.py [-all] [-bsub] field [tiles]
 
 where -all will cause swarp to be run on all 16 tiles.
+
+and   -bsub will cause swarp to be run on the files in background subtracted _b directories
 
 If one wants to run only 1 or a few tiles then the command will be something like
 
 Swarp.py LMC_c42  1 3 5
-
-Note that the filed name doos NOT include _d 
-
 
 
 '''
@@ -421,6 +420,7 @@ def steer(argv):
     tiles=[]
     xall=False
     redo=True
+    bsub=False
 
     i=1
     while i<len(argv):
@@ -429,6 +429,8 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-bsub':
+            bsub=True
         elif argv[i]=='-finish':
             redo=False
         elif argv[i][0]=='-':
@@ -448,6 +450,8 @@ def steer(argv):
             i+=1
 
     for one in tiles:
+        if bsub and one.count('_b')==0:
+            one='%s_b' % one
         run_swarp(field,one)
 
 

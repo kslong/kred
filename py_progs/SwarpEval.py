@@ -165,7 +165,7 @@ def make_plots(field='LMC_c01',tile='T01'):
     for one in xtab:
         xmin=one['Median']-0.1*one['STD']
         xmax=one['Median']+0.1*one['STD']
-        xout='%s/%s.png' % (xdir,one['Root'])
+        xout='%s/%s_%s.png' % (xdir,one['Root'],tile)
         display_fits_image(one['Filename'], scale='linear', invert=False, vmin=xmin, vmax=xmax,outfile=xout)
     print('Finished %s %s' % (field,tile))
         

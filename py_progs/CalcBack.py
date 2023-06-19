@@ -304,6 +304,8 @@ def do_one_tile(field,tile):
 
     records=[]
 
+    all_back=[]
+
     for one_filter in xfilt:
         xx=x[x['FILTER']==one_filter]
         xexp=np.unique(xx['EXPTIME'])
@@ -366,15 +368,25 @@ def do_one_tile(field,tile):
             one_record.append('%.2f' % xsvd1)
 
             best_offset['b'].format='.3f'
+            best_offset['Field']=field
+            best_offset['Tile']=tile
+            best_offset['FILTER']=one_filter
+            best_offset['EXPTIME']=one_exp
             best_file='Summary/%s_%s_bbb_%s_%d.txt' % (field,tile,one_filter,one_exp)
             best_offset.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
 
+            all_back.append(best_offset)
             records.append(one_record)
 
     records=np.array(records)
     xout=Table(records,names=['FILTER','EXPTIME','None','Simple','Path','SVD','SVD1'])
     xout.write('test.txt',format='ascii.fixed_width_two_line',overwrite=True)
+
+    all_back=vstack(all_back)
+
+    best_file='Summary/%s_%s_bbb.txt' % (field,tile)
+    all_back.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
 
 
