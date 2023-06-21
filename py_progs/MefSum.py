@@ -19,16 +19,22 @@ Command line usage (if any):
 
     where 
         -h prints the documentation
-        -all causes all files in the MEF directories to be processed
         -np 3  causes the processing to be carred out with a a given no of threads
+        -all causes all files in the MEF directories to be processed. This should
+        only be sued with cauthion since it will take considerable time, and so
+        the user is asked to confirm this option.
 
     and fields comprise one or more fields e.g LMC_c42  to be processed
 
 Description:  
 
+    The routine reads the MEF files and summarizes information from
+    the headers in two tables, a mef.tab file and a det.tab file
+    The routine also calculates some statstics associated with the
+    counts in each detector
+
 Primary routines:
 
-    do_one - carries out the processing of one field   
 
 Notes:
 
@@ -319,6 +325,18 @@ def steer(argv):
 
     if xall==True:
         xfields=glob('%s/*' % MEFDIR)
+
+        response = input("Did you really want to run MefSum on all (%d) fields (yes/no): " % (len(xfields)))
+
+        # Convert the response to lowercase for case-insensitive comparison
+        response = response.lower()
+
+        if response.count('y'): 
+            print("OK, beginning MefSum for all of the fields ")
+        else:
+            print("OK, it is easy to get confused on the inputs")
+            return
+
         for one in xfields:
             words=one.split('/')
             fields.append(words[-1])

@@ -23,7 +23,7 @@ and   -bsub will cause swarp to be run on the files in background subtracted _b 
 
 If one wants to run only 1 or a few tiles then the command will be something like
 
-Swarp.py LMC_c42  1 3 5
+Swarp.py LMC_c42  T01 T03 T05
 
 
 '''
@@ -449,10 +449,20 @@ def steer(argv):
             tiles.append('T%02d' % i)
             i+=1
 
+    open_log('%s.log' % field,reinitialize=False)
+
     for one in tiles:
         if bsub and one.count('_b')==0:
+            log_message('Swarp: Start run on %s %s with modified background' % (field,one))
             one='%s_b' % one
+        else:
+            log_message('Swarp: Start run on %s %s ' % (field,one))
+
         run_swarp(field,one)
+
+        log_message('Swarp: Finished run n %s %s ' % (field,one))
+
+    close_log()
 
 
     return

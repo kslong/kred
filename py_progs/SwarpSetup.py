@@ -43,6 +43,7 @@ from astropy.table import Table, vstack
 from glob import glob
 import timeit
 import subprocess
+from log import *
 
 exec_dir=os.getcwd()
 
@@ -427,8 +428,15 @@ def steer(argv):
             tiles.append('T%02d' % i)
             i+=1
 
+    open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
         create_commmands_for_one_tile(field,one,bsub=bsub)
+        if bsub:
+            log_message('SwarpSetup for %s %s for modified background images' % (field,one))
+        else:
+            log_message('SwarpSetup for %s %s for original images' % (field,one))
+    close_log()
+
 
 
     return

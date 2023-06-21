@@ -7,7 +7,7 @@
 
 Synopsis:
 
-Prepare files for Combining with Swpart
+Prepare files for Combining with Swarp  
  
 This is where any processing of the individal files is done that cannot be done by swarp.
 
@@ -27,6 +27,9 @@ where -h   --- to print this documentation and exit
        -finish --> do not redo files that have already been processed
       -sub_back --> causes background to be estimated from individual images
       -np 4   --. To run with multiple threads
+      -all  -- To carry out processing on all fields that are in DECam_MEF.  This should
+        only be used with caution since it will take a long time, and so the user
+        will be asked to confrirm this option.
 
 
 
@@ -34,15 +37,16 @@ Description:
 
     If the preliminaries indicated above have taken place, MefPrep will create directories if 
     necessary to store the results.  The program then reads tables files in the Summary directory
-    where there is a table that identify the Mef files and extenstions associated with them.
+    where there is a table that identify the Mef files and extensions associated with them.
     it then processes the each Mefile individual.
 
-    The outputfiles are stored in directories named data, that have specific place in the
-    file structure. 
+    The output files are stored in directories named data, that have specific place in the
+    file structure.  The output images are all scaled to so that one dn represents mag27,
+    based on estimates obtanted from the NOIRLAB community pipeline.
 
     So all of the processed files for LMC_c42 will be stored in DECam_PREP/LMC_c42/data
 
-    With this approach, one must create links to the apprtate files next
+    With this approach, one must create links to the appropriate files using TileSetup
 
 Primary routines:
 
@@ -71,6 +75,7 @@ import timeit
 import time
 import multiprocessing
 multiprocessing.set_start_method("spawn",force=True)
+from log import *
 
 
 MEFDIR='DECam_MEF/'
@@ -384,16 +389,38 @@ def steer(argv):
             fields.append(argv[i])
         i+=1
 
+    if xall==True:
+        xfields=glob('%s/*' % MEFDIR)
+
+        response = input("Did you really want to run MefSum on all (%d) fields (yes/no): " % (len(xfields)))
+
+        # Convert the response to lowercase for case-insensitive comparison
+        response = response.lower()
+
+        if response.count('y'): 
+            print("OK, beginning MefSum for all of the fields ")
+        else:
+            print("OK, it is easy to get confused on the inputs")
+            return
+
+        for one in xfields:
+            words=one.split('/')
+            fields.append(words[-1])
 
 
     xtime_start=timeit.default_timer()
 
     for one_field in fields:
+        open_log('%s.log' % one_field,reinitialize=False)
+        log_message('Starting MefPrep on %s with back set to %s' %(one_field,xback))
+
         if nproc<2:
              prep_one_field(one_field,xback,redo)
         else:
             print('Processing in parallel with %d cores' % (nproc))
             xprep_one_field(one_field,xback,redo,outdir,nproc)
+        log_message('Finished MefPrep on %s with back set to %s' %(one_field,xback))
+        close_log()
 
     elapsed = timeit.default_timer() - xtime_start
     print('This entire job ran to completion in %d s' % elapsed)

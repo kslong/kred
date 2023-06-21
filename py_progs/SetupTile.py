@@ -56,6 +56,7 @@ from astropy.table import vstack, join
 from glob import glob
 
 from astropy.io import ascii
+from log import *
 
 CWD=os.getcwd()
 PREPDIR='%s/DECam_PREP/' % (CWD)
@@ -284,6 +285,14 @@ def steer(argv):
         return
 
     setup_tiles(xtiles)
+
+    fields=np.unique(xtiles['Field'])
+    for one in fields:
+        open_log('%s.log' % one)
+        foo=xtiles[xtiles['Field']==one]
+        for one_tile in foo:
+            log_message('SetupTile %s %s' % (one_tile['Field'],one_tile['Tile']))
+        close_log()
 
 
     return
