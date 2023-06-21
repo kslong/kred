@@ -204,7 +204,7 @@ def prep_one_tile(field='LMC_c42',tile='T07'):
     f=open(runfile,'w')
     for one in x:
         root=one['Filename'].replace('.fits','')
-        f.write('swarp %s/%s.fits -IMAGEOUT_NAME %s.fits  -WEIGHTOUT_NAME  %s.weight.fits -c swarp.default\n' % (indir,root,root,root))
+        f.write('swarp %s/%s.fits -IMAGEOUT_NAME %s.fits  -WEIGHTOUT_NAME  /dev/null -c swarp.default\n' % (indir,root,root))
         # gen_one_swarp_command(one['Filename'],ra,dec,indir,outdir)
     f.close()
     os.chmod(runfile,stat.S_IRWXU)
