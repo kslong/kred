@@ -58,6 +58,7 @@ from astropy.table import Table, join
 import numpy as np
 from astropy.stats import sigma_clipped_stats
 from multiprocessing import Pool
+from log import *
 
 BACKDIR='DECam_BACK'
 
@@ -258,8 +259,12 @@ def steer(argv):
 
     if len(tiles)==0:
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
+    open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
+        log_message('BackStats: Starting %s %s' % (field,one)
         do_one_tile(field,one,nproc)
+        log_message('BackStats: Finished %s %s' % (field,one)
+    close_log()
 
     return
 

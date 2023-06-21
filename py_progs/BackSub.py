@@ -50,6 +50,7 @@ from astropy.table import vstack, join
 from glob import glob
 import timeit
 from multiprocessing import Pool
+from log import *
 
 
 
@@ -160,8 +161,12 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
         return
 
+    open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
+        log_message('BackSub: Start   %s %s with %d processors' % field,one,nproc)
         subtract_one_tile(field,one,nproc)
+        log_message('BackSub: Finished %s %s with %d processors' % field,one,nproc)
+    close_log()
 
     return
 

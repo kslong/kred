@@ -82,15 +82,15 @@ def summarize(field='LMC_c42',tile='T07'):
     except:
         return -1, -1
 
-    ra=np.average(x['RA'])
-    dec=np.average(x['Dec'])
+    ra=np.average(x['CENRA1'])
+    dec=np.average(x['CENDEC1'])
 
     print('The center of this tile is %.5f  %.5f' % (ra,dec))
 
 
-    ha=x[x['FILTER']=='Ha']
-    s2=x[x['FILTER']=='SII']
-    r=x[x['FILTER']=='R']
+    ha=x[x['FILTER']=='N662']
+    s2=x[x['FILTER']=='N673']
+    r=x[x['FILTER']=='r']
     n708=x[x['FILTER']=='N708']    
     print('Ha  images  : %3d' % len(ha))
     print('SII images  : %3d' % len(s2))
@@ -102,7 +102,7 @@ def summarize(field='LMC_c42',tile='T07'):
 
     records=[times,counts]
     xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['Filter']='Ha'
+    xtab['FILTER']='N662'
     ztab=xtab.copy()
 
     i=0
@@ -115,7 +115,7 @@ def summarize(field='LMC_c42',tile='T07'):
 
     records=[times,counts]
     xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['Filter']='SII'
+    xtab['FILTER']='N673'
     ztab=vstack([ztab,xtab])
 
     i=0
@@ -128,7 +128,7 @@ def summarize(field='LMC_c42',tile='T07'):
 
     records=[times,counts]
     xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['Filter']='R'
+    xtab['FILTER']='r'
     ztab=vstack([ztab,xtab])
 
     i=0
@@ -141,7 +141,7 @@ def summarize(field='LMC_c42',tile='T07'):
 
     records=[times,counts]
     xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['Filter']='N708'
+    xtab['FILTER']='N708'
     ztab=vstack([ztab,xtab])
 
 
@@ -150,8 +150,7 @@ def summarize(field='LMC_c42',tile='T07'):
         print('   exp %8s  no %4d' % (times[i],counts[i]))
         i+=1
 
-    print(ztab)
-    return ra,dec
+    return ztab  
 
 
 
@@ -370,19 +369,22 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
     230619 - Added code to try to handle the situation where inputs are 
     somewhat inconsistent, assuming that if the tile is given as _b, one 
     actually wants to use the background subtracted data
+
     '''
+
+    xtab=summarize(field,tile)
 
     # Homoogenize the inputs in a situation where _b has been added to the file name
     if tile.count('_b'):
         tile=tile.replace('_b','')
         bsub=True
 
-    tabfile='Summary/%s_%s.txt' % (field,tile)
-    try:
-        xtab=ascii.read(tabfile)
-    except:
-        print('Error: Could not read %s' % tabfile)
-        raise IOError
+    # tabfile='Summary/%s_%s.txt' % (field,tile)
+    # try:
+    #     xtab=ascii.read(tabfile)
+    # except:
+    #     print('Error: Could not read %s' % tabfile)
+    #     raise IOError
 
     for one in xtab:
         create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults,bsub=bsub)

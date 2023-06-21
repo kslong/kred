@@ -37,14 +37,14 @@ from astropy.io import fits, ascii
 from astropy.table import Table
 import numpy as np
 from astropy.stats import sigma_clipped_stats
-
-SWARPDIR='DECam_BACK'
-PREPDIR=os.path.abspath('DECam_PREP')
+from log import *
 
 from glob import glob
 import timeit
 import subprocess
 
+SWARPDIR='DECam_BACK'
+PREPDIR=os.path.abspath('DECam_PREP')
 exec_dir=os.getcwd()
 
 def create_swarp_dir(field='LMC_c42',tile='T07'):
@@ -294,14 +294,19 @@ def steer(argv):
 
     if len(tiles)==0:
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
+
+    open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
         prep_one_tile(field,one)
+        log_message('BackPrep: Setup %s %s ' % (field,one))
 
     if xrun:
         for one in tiles:
-            print('Starting to run %s %s' % (field,one))
+            log_message('BackPrep: Starting to run %s %s' % (field,one))
             run_back(field,one)
+            log_message('BackPrep: Finshed %s %s' % (field,one))
 
+    close_log()
 
     return
 

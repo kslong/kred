@@ -43,6 +43,8 @@ from astropy.io import ascii
 import numpy as np
 import matplotlib.pyplot as plt
 
+from log import *
+
 
 
 def xeval(xall):
@@ -449,8 +451,12 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
         return
 
+    open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
+        log_message('BackCalc: Starting %s %s' % (field,one))
         do_one_tile(field,one)
+        log_message('BackCalc: Finished %s %s' % (field,one))
+    close_log()
 
     return
 
