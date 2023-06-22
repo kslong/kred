@@ -141,8 +141,9 @@ def summarize(field='LMC_c42',tile='T07'):
 
     records=[times,counts]
     xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['FILTER']='N708'
-    ztab=vstack([ztab,xtab])
+    if len(xtab)>0:
+        xtab['FILTER']='N708'
+        ztab=vstack([ztab,xtab])
 
 
     i=0
