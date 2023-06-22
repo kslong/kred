@@ -38,7 +38,11 @@ exec_dir=os.getcwd()
 
 def display_fits_image(image_file, scale='linear', invert=False, vmin=None, vmax=None,outfile=''):
     # Open the FITS file
-    hdul = fits.open(image_file)
+    try:
+        hdul = fits.open(image_file)
+    except:
+        print('Could not open: ' % image_file)
+
 
     # Access the image data
     data = hdul[0].data
@@ -80,9 +84,14 @@ def display_fits_image(image_file, scale='linear', invert=False, vmin=None, vmax
     # Add RA and Dec axis labels
     ax.set_xlabel('RA')
     ax.set_ylabel('Dec')
+
+    if image_file.count('_b'): 
+        xword = 'Match'
+    else:
+        xword= 'Orig'
     words=image_file.split('/')
     root=words[-1].replace('.fits','')
-    ax.set_title(root)
+    ax.set_title('%s - Bkg = %s' % (root,xword))
 
     # Create a separate axis for the colorbar
     cax = fig.add_axes([0.92, 0.1, 0.02, 0.8])  # Adjust the position and size of the colorbar
@@ -127,8 +136,11 @@ def get_stats(xfiles=files):
     for one in xfiles:
         words=one.split('/')
         root.append(words[-1].replace('.fits',''))
-        f=fits.open(one)
-        
+        try:
+            f=fits.open(one)
+        except:
+            print('Error: get stats could not open: ',one)
+            continue
         zmask=np.select([f[0].data!=0],[0],1)
         
         z=np.ma.masked_array(f[0].data,mask=zmask)
@@ -202,6 +214,7 @@ def steer(argv):
         i=1
         while i<17:
             tiles.append('T%02d' % i)
+            tiles.append('T%02d_b' % i)
             i+=1
 
     for one in tiles:

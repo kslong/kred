@@ -37,6 +37,7 @@ from astropy.table import Table, vstack
 from glob import glob
 import timeit
 import subprocess
+from log import *
 
 exec_dir=os.getcwd()
 

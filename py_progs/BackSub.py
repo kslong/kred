@@ -163,9 +163,9 @@ def steer(argv):
 
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
-        log_message('BackSub: Start   %s %s with %d processors' % field,one,nproc)
+        log_message('BackSub: Start   %s %s with %d processors' % (field,one,nproc))
         subtract_one_tile(field,one,nproc)
-        log_message('BackSub: Finished %s %s with %d processors' % field,one,nproc)
+        log_message('BackSub: Finished %s %s with %d processors' % (field,one,nproc))
     close_log()
 
     return

@@ -314,8 +314,10 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
         
 
     xtile=tile
+
     if bsub==True:
         xtile='%s_b' % tile
+
 
     xdir=create_swarp_dir(field,xtile)
     
