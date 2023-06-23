@@ -68,10 +68,11 @@ DECam\_PREP directories.   For example,
 if one processes field LMC\_c45, the data will be in
 DECam\_PREP/LMC\_c45/data.
 
-Note that this routine has swithes that allow one 
+Note that this routine has switches that allow one 
 to subtract background or not from the original
-images.  The default currently is not to subtract any
-background.
+images.  The default currently is to subtract a single
+background from all of the CCDS associated with a given
+exposure.
 
 
 * SetupTile.py - This is intended to identify CCD images
@@ -138,7 +139,7 @@ only overlaps we are concerned with are those between images with the
 same filter and exposure time.  
 
 * BackPrep.py creates a directory structure DECam\_BACK parallel to the other
-directory structures for storing images created for the purpose estmating
+directory structures for storing images created for the purpose estimating
 background in the overlap regions of images.  BackPrep also creates Swarp
 commands for projecting all of the images (which have gone through the PrepFiles
 stage) onto the same WCS.  This WCS has larger pixels than the original WCS
@@ -151,7 +152,9 @@ all of LMC\_c42, for example, about 420 GB of images will be created.
 * BackStats.py determines the background in the overlap regions of images as
 identified in FindOverlaps, using the impages created by BackPrep.  The
 routine produces a single file for each tile that contains estimates of the
-background.
+background. Optionally, BackStats removes the files created by BackPrep,
+to retain diskspace, since BackPrep can generate up to a half a TB of
+data.
 
 * BackCalc.py tries to determine an optimal set of offsets to add or 
 subtract from the images to produce better image matching.
@@ -167,7 +170,43 @@ in these directories that point to the files cerated by BackSub.py
 * Swarp.py  is run again, but with the -bsub flag to run the comamnds
 from SetupSwarp.py
 
-* SwarpEval.py  is not run to make images of all of both sets of
-processing.
+* SwarpEval.py  is run to make images (pngs) of for both types of 
+processing. 
+
+The progams generally write information to a log file, one log file
+for each field. The file is initialised by running MefSum, and then
+each program has the ability to write to it.  
+
+When trying to process a significant amount of data, it is useful 
+to carry out the first two steps together, e.g.
+
+````
+MEFSum.py  LMC_c42
+MefPrep.py LMC_c42
+````
+
+on the field or fields one wants to analyze.
+
+At that point one can create a file to process
+either a single tile, or a field completely.  As an example
+one could then process all of LMC\_c42, with the following 
+set of commands:
+
+````
+SetupTile.py -all LMC_c42
+SwarpSetup.py -all  LMC_c42
+Swarp.py -all LMC_c42
+FindOverlaps.py -all LMC_c42
+BackPrep.py -all -run LMC_c42
+BackStats.py -all -np 8 -rm LMC_c42 
+BackCalc.py -all LMC_c42
+BackSub.py -all -np 8 LMC_c42
+SwarpSetup.py -all -bsub LMC_c42 
+Swarp.py -all -bsub LMC_c42 T02
+SwarpEval.py -all LMC_c42
+````
+
+Creating a command file and commenting out the sections 
+that one has completed would be sensible approch.
 
 
