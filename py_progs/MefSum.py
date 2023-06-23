@@ -110,7 +110,9 @@ def get_keyword(key,ext):
                 answer='r'
             else:
                 print('Could not identify filter from ',answer)
+
                 answer='Unknown'
+
             return answer
         except:
             answer='Unknown'
