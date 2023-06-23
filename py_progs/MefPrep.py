@@ -7,26 +7,30 @@
 
 Synopsis:
 
-Prepare files for Combining with Swarp  
+Prepare files for combining with Swarp  
  
 This is where any processing of the individal files is done that cannot be done by swarp.
 
 Prior to running PrepFiles one must have 
 
-* Downladed the MEF an put them in the standard directory structure
+* Downloaded the MEF and put them in the standard directory structure
 * Run MefSum on the apprate fields to create tables that contain the RA's and DECs of the corrners of CCDs
 
-Run this routine to rescale the images to the same maagnitude scale and optionally subtract
-background
+Run this routine to rescale the images to the same maagnitude scale and to subtract
+and initial estimate background.  The default background is estimated from a 
+biased median (calculated with in the MefSum stage)  The default is to use the medain
+value of the medina backgrounds calculated in each of the CCDs for an individual 
+exposure.  One can modify this with the optsions indicated below
 
  
 
-Usage:  MefPref.py [-h] [-finish] [-sub_back] [-np 4] Field_name or names
+Usage:  MefPref.py [-h] [-finish] [-back_min] [-back_none] [-np 4] Field_name or names
 
 where -h   --- to print this documentation and exit
        -finish --> do not redo files that have already been processed
-      -sub_back --> causes background to be estimated from individual images
-      -np 4   --. To run with multiple threads
+      -back_min --> causes background to be the miniumum background in the individeal CCDs of an exposure
+      -back_none --> causes no background to be subtracted.                   
+      -np 4   --. To run in parallel with a set number of thereads.  
       -all  -- To carry out processing on all fields that are in DECam_MEF.  This should
         only be used with caution since it will take a long time, and so the user
         will be asked to confrirm this option.
@@ -42,7 +46,7 @@ Description:
 
     The output files are stored in directories named data, that have specific place in the
     file structure.  The output images are all scaled to so that one dn represents mag27,
-    based on estimates obtanted from the NOIRLAB community pipeline.
+    based on estimates obtained from the NOIRLAB community pipeline.
 
     So all of the processed files for LMC_c42 will be stored in DECam_PREP/LMC_c42/data
 
@@ -59,6 +63,7 @@ Notes:
 History:
 
 230513 ksl Coding begun
+230621 ksl Revised so that the default is to subtract background
 
 '''
 
@@ -365,7 +370,7 @@ def steer(argv):
     xall=False
     redo=True 
     nproc=1
-    xback='none' 
+    xback='med' 
     outdir=''
 
     i=1
@@ -377,8 +382,10 @@ def steer(argv):
             xall=True
         elif argv[i]=='-finish':
             redo=False
-        elif argv[i]=='-sub_back':
-            xback='med'
+        elif argv[i]=='-back_none':
+            xback='none'
+        elif argv[i]=='-back_min':
+            xback='min'
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
