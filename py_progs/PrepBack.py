@@ -34,6 +34,17 @@ from astropy.table import Table
 import numpy as np
 from astropy.stats import sigma_clipped_stats
 
+SWARPDIR='DECam_BACK'
+PREPDIR=os.path.abspath('DECam_PREP')
+
+def create_swarp_dir(field='LMC_c42',tile='T07'):
+    '''
+    Create a diretory for the swarp outputs if it does not exist
+    '''
+    outdir='%s/%s/%s/' % (SWARPDIR,field,tile)
+    if os.path.isdir(outdir)==False:
+        os.makedirs(outdir)
+    return outdir
 
 
 
@@ -141,26 +152,26 @@ NTHREADS               0               # Number of simultaneous threads for
 
 
 
-def prep_one_tile(field='LMC_c42',tile=7):
+def prep_one_tile(field='LMC_c42',tile='T07'):
     try:
-        sumfile='../workspace/Summary/%s_%d_imsum.txt' % (field,tile)
+        sumfile='Summary/%s_%s_imsum.txt' % (field,tile)
         x=ascii.read(sumfile)
     except:
         print('Could not find %s' % sumfile)
-        return 
+        raise IOERROR
 
 
     
-    indir='../workspace/%s/%d' % (field,tile)
+    indir='%s/%s/%s' % (PREPDIR,field,tile)
     if os.path.exists(indir)==False:
         print('Could not find the directory' % indir)
-        return
+        raise IOERROR
 
 
 
     # Now create a directory if it does not exist
 
-    outdir='../workspace/%s_b/%d' % (field,tile)
+    outdir='%s/%s/%s' % (SWARPDIR,field,tile)
     if os.path.exists(outdir)==False:
         os.makedirs(outdir)
         print('The output directory did not exist, so it is being created')
@@ -173,7 +184,7 @@ def prep_one_tile(field='LMC_c42',tile=7):
 
     # This needs to be relative to the outdir
 
-    indir='../../%s/%d/' % (field,tile)
+    indir='%s/%s/%s/' % (PREPDIR,field,tile)
 
     f=open('%s/swarp.default' % outdir,'w')
     f.write(default % (ra,dec))
@@ -216,14 +227,14 @@ def steer(argv):
         elif field=='':
             field=argv[i]
         else:
-            tiles.append(int(argv[i]))
+            tiles.append(argv[i])
         i+=1
 
     if xall:
         tiles=[]
         i=1
         while i<17:
-            tiles.append(i)
+            tiles.append('T%02d' % i)
             i+=1
 
     if len(tiles)==0:

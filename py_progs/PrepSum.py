@@ -15,7 +15,7 @@ Command line usage (if any):
 where
       -all    --> do all tiles for a fields
 
-If -all is not provide then there must be one or more tile numbes, e. g. 1 5 7, listed
+If -all is not providde then there must be one or more tile numbes, e. g. 1 5 7, listed
 
 
 Description:  
@@ -37,6 +37,7 @@ Notes:
 History:
     230504 - Modified so files gets fits files with and without .fz extension
     230516 - Replaced SumFile.py with this routine that follows new directory structure
+    230520 - Added writing a summary table to Summary, intended for use with Swarp
 
 
 '''
@@ -46,7 +47,7 @@ from astropy.io import ascii
 import timeit
 import os
 from astropy.io import fits
-from astropy.table import Table
+from astropy.table import vstack, Table
 from glob import glob
 import numpy as np
 
@@ -107,6 +108,14 @@ def get_one_keyword(keyword='object',ext=0,filenames='',work_dir=''):
 
 
 def make_summary(filenames='',work_dir='',outroot=''):
+    '''
+    Make a summary of the files that have been created.
+
+    Notes:
+    This uses a very slow version of the routines to get
+    keywords and should be ubgraded using the approach
+    in MefSum
+    '''
 
     start_time = timeit.default_timer()
     objects=get_one_keyword('object',0,filenames,work_dir)
@@ -167,7 +176,7 @@ def do_one_tile(field='LMC_c42',tile='T07'):
         return
     make_summary(filenames=files,work_dir=tile_dir,outroot='')
 
-    summarize(field,tile)
+    overview(field,tile)
     return
 
 
@@ -190,108 +199,98 @@ def get_sum_tab(field='LMC_c42',tile='T07'):
     '''
 
     xname='Summary/%s_%s_imsum.txt' % (field,tile)
-    xtab=ascii.read(xname)
+    try:
+        xtab=ascii.read(xname)
+    except:
+        print('Error: Could not find %s' % xname)
+        raise IOError
     return xtab
 
-def summarize(field='LMC_c42',tile='T07'):
+
+def overview(field='LMC_c42',tile='T07'):
     '''
-    Summarize the various fits files that are relevant to
-    a specific tile
-
-    History
-
-    230504 - Moved this functionality from Swarp.py to SumFiles.py, and 
-    created an summary in the Summary directory)
+    For each filter and exposure time, find the number
+    of exposures in a specific tile
     '''
 
-    f=open('Summary/%s_%s.exsum.txt' % (field,tile),'w')
 
-    string=('Summary for field %s tile %s' % (field,tile))
-
-    print(string)
-    f.write('%s/n' % string)
-
-    x=get_sum_tab(field,tile)
+    try:
+        x=get_sum_tab(field,tile)
+    except:
+        return -1, -1
 
     ra=np.average(x['RA'])
     dec=np.average(x['Dec'])
 
-    string='The center of this tile is %.5f  %.5f' % (ra,dec)
-
-    print(string)
-    f.write('%s\n' % string)
+    print('The center of this tile is %.5f  %.5f' % (ra,dec))
 
 
     ha=x[x['Filter']=='Ha']
     s2=x[x['Filter']=='SII']
     r=x[x['Filter']=='R']
     n708=x[x['Filter']=='N708']
+    print('Ha  images  : %3d' % len(ha))
+    print('SII images  : %3d' % len(s2))
+    print('R   images  : %3d' % len(r))
+    print('N708 images : %3d' % len(n708))
 
-    string=('Ha  images  : %3d' % len(ha))
-    print(string)
-    f.write('%s\n' % string)
-
-    string=('SII images  : %3d' % len(s2))
-    print(string)
-    f.write('%s\n' % string)
-
-    string=('R   images  : %3d' % len(r))
-    print(string)
-    f.write('%s\n' % string)
-
-    string=('N708 images : %3d' % len(n708))
-    print(string)
-    f.write('%s\n' % string)
-
-    string=('\nHa')
-    print(string)
-    f.write('%s\n' % string)
-
+    print('\nHa')
     times,counts=np.unique(ha['Exptime'],return_counts=True)
+
+    records=[times,counts]
+    xtab=Table(records,names=['Exptime','Number'])
+    xtab['Filter']='Ha'
+    ztab=xtab.copy()
+
     i=0
     while i<len(times):
-        string=('   exp %8s  no %4d' % (times[i],counts[i]))
-        print(string)
-        f.write('%s\n' % string)
+        print('   exp %8s  no %4d' % (times[i],counts[i]))
         i+=1
 
-    string=('\nSII')
-    print(string)
-    f.write('%s\n' % string)
+    print('\nSII')
     times,counts=np.unique(s2['Exptime'],return_counts=True)
+
+    records=[times,counts]
+    xtab=Table(records,names=['Exptime','Number'])
+    xtab['Filter']='SII'
+    ztab=vstack([ztab,xtab])
+
     i=0
     while i<len(times):
-        string=('   exp %8s  no %4d' % (times[i],counts[i]))
-        print(string)
-        f.write('%s\n' % string)
+        print('   exp %8s  no %4d' % (times[i],counts[i]))
         i+=1
 
-    string=('\nR')
-    print(string)
-    f.write('%s\n' % string)
-
+    print('\nR')
     times,counts=np.unique(r['Exptime'],return_counts=True)
+
+    records=[times,counts]
+    xtab=Table(records,names=['Exptime','Number'])
+    xtab['Filter']='R'
+    ztab=vstack([ztab,xtab])
+
     i=0
     while i<len(times):
-        string=('   exp %8s  no %4d' % (times[i],counts[i]))
-        print(string)
-        f.write('%s\n' % string)
+        print('   exp %8s  no %4d' % (times[i],counts[i]))
         i+=1
 
-    string=('\nN708')
-    print(string)
-    f.write('%s\n' % string)
-
+    print('\nN708')
     times,counts=np.unique(n708['Exptime'],return_counts=True)
+
+
+    records=[times,counts]
+    xtab=Table(records,names=['Exptime','Number'])
+    xtab['Filter']='N708'
+    ztab=vstack([ztab,xtab])
+
+
     i=0
     while i<len(times):
-        string=('   exp %8s  no %4d' % (times[i],counts[i]))
-        print(string)
-        f.write('%s\n' % string)
+        print('   exp %8s  no %4d' % (times[i],counts[i]))
         i+=1
 
-    print('\n')
-    f.close()
+    zztab=ztab['Filter','Exptime','Number']
+
+    zztab.write('Summary/%s_%s_expsum.txt'  % (field,tile),format='ascii.fixed_width_two_line',overwrite=True)
     return ra,dec
 
 

@@ -15,9 +15,10 @@ either in a Jupyter script or from the command line.
 To run swarp from the command line (one must be in the normal run directory) since
 a particular directory structure is assumed here)
 
-Usage:   Swarp.py [-all] field [tiles]
+Usage:   SetupSwarp.py [-all] field [tiles]
 
-where -all will cause swarp to be run on all 16 tiles.
+where -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
+use the files ending in _sw.tab to set up run files
 
 If one wants to run only 1 or a few tiles then the command will be something like
 
@@ -149,7 +150,7 @@ def summarize(field='LMC_c42',tile='T07'):
 
 
 
-def create_swarp_dir(field='LMC_c42',tile=7):
+def create_swarp_dir(field='LMC_c42',tile='T07'):
     '''
     Create a diretory for the swarp outputs if it does not exist
     '''
@@ -346,68 +347,23 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     return   
     
     
-
-
-
-def run_swarp(field='LMC_c42',tile='T07'):
+def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault):
     '''
-    run_all of the swarp commands in a particular field and tile
-
-    The normal outputs from swarp are writeen to a .txt file,
-    a few are written to the screen here so that one can see 
-    that the routines have run correctly.  
+    Genterate the standard set of commands for on tile, based on all of the separate
+    exposure times that exist for the cell
     '''
-    xstart=qstart=start_time=timeit.default_timer()
-    run_dir='%s/%s/%s/' % (SWARPDIR,field,tile)
 
+    tabfile='Summary/%s_%s_expsum.txt' % (field,tile)
     try:
-        os.chdir(run_dir)
+        xtab=ascii.read(tabfile)
     except:
-        print('Error: Could not cd to %s' % run_dir)
-        os.chdir(exec_dir)
+        print('Error: Could not read %s' % tabfile)
+        raise IOError
 
-    run_files=glob('*.run')
-    # print(run_files)
-    nfiles=len(run_files)
-    n=1
-    for one in run_files:
-        print('\n***Beginning %s (%d of %d)' % (one,n,nfiles))
-        outfile=one.replace('.run','.txt')
-        command=one
-        xout=subprocess.run(command,shell=True,capture_output=True)
-        current_time=timeit.default_timer()
+    for one in xtab:
+        create_swarp_command(field=field,tile=tile,filt=one['Filter'] ,exp=[one['Exptime']],defaults=defaults)
+    return
 
-        print('***Writing last portion of swarp outputs\n')
-
-        z=open(outfile,'w')
-        zz=xout.stderr.decode()
-        lines=zz.split('\n')
-        xlines=[]
-        for line in lines:
-            if line.count('\x1b[1M>')==0:
-                xlines.append(line)
-                z.write('%s\n' % line)
-        z.close()
-
-
-        for xline in xlines[-10:]:
-            print(xline)
-
-        print('***Finished writing end of outputs')
-
-        print('***Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
-        start_time=current_time
-
-
-        n+=1
-
-
-    xcurrent_time=timeit.default_timer()
-    print('\n***Completely done for tile %s in %.1f s\n' % (tile,xcurrent_time-xstart))
-
-
-    os.chdir(exec_dir)
-    return 
 
 
 
@@ -429,8 +385,6 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
-        elif argv[i]=='-finish':
-            redo=False
         elif argv[i][0]=='-':
             print('Error: Unknwon switch' % argv[i])
             return
@@ -448,7 +402,7 @@ def steer(argv):
             i+=1
 
     for one in tiles:
-        run_swarp(field,one)
+        create_commmands_for_one_tile(field,one)
 
 
     return
