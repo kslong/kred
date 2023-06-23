@@ -162,20 +162,20 @@ NTHREADS               0               # Number of simultaneous threads for
 
 
 
-def prep_one_tile(field='LMC_c42',tile='T07'):
+def prep_one_tile(field='LMC_c42',tile='T07',redo=False):
     try:
         sumfile='Summary/%s_%s.txt' % (field,tile)
         x=ascii.read(sumfile)
     except:
         print('Could not find %s' % sumfile)
-        raise IOERROR
+        raise IOError
 
 
     
     indir='%s/%s/%s' % (PREPDIR,field,tile)
     if os.path.exists(indir)==False:
         print('Could not find the directory' % indir)
-        raise IOERROR
+        raise IOError
 
 
 
@@ -202,16 +202,25 @@ def prep_one_tile(field='LMC_c42',tile='T07'):
 
     runfile='%s/RunSwarp' %outdir
     f=open(runfile,'w')
+    n=0
     for one in x:
         root=one['Filename'].replace('.fits','')
+        if redo==False:
+            xfile='%s/%s.fits' % (outdir,root)
+            if os.path.isfile(xfile):
+                # print('Found %s already, so skipping' % xfile)
+                continue
         f.write('swarp %s/%s.fits -IMAGEOUT_NAME %s.fits  -WEIGHTOUT_NAME  /dev/null -c swarp.default\n' % (indir,root,root))
+        n+=1
         # gen_one_swarp_command(one['Filename'],ra,dec,indir,outdir)
     f.close()
     os.chmod(runfile,stat.S_IRWXU)
 
+    print('There are %d background files of %d for field %s and tile %s that need creating' % (n,len(x), field,tile))
 
 
-    return 
+
+    return n
 
 
 def run_back(field='LMC_c42',tile='T07'):
@@ -266,6 +275,7 @@ def steer(argv):
     tiles=[]
     xall=False
     xrun=False
+    xredo=False
 
     i=1
     while i<len(argv):
@@ -276,6 +286,8 @@ def steer(argv):
             xall=True
         elif argv[i]=='-run':
             xrun=True
+        elif argv[i]=='-redo':
+            xredo=True
         elif argv[i][0]=='-':
             print('Error: Unknown switch %s' % argv[i])
             return
@@ -296,9 +308,11 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
 
     open_log('%s.log' % field,reinitialize=False)
+    number=[]
     for one in tiles:
-        prep_one_tile(field,one)
+        n=prep_one_tile(field,one,xredo)
         log_message('BackPrep: Setup %s %s ' % (field,one))
+        number.append(n)
 
     if xrun:
         for one in tiles:

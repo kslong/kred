@@ -12,12 +12,16 @@ how overlap regions of various images compare
 
 Command line usage (if any):
 
-    usage: BackStats.py  [-np 8] [-all] field T01 T02 ...
+    usage: BackStats.py  [-np 8] [-all] [-rm] field T01 T02 ...
 
     where field is a field name, and the following numbers are one 
     or more tiles
 
     -all implies to do all tiles
+    -rm causes the files that were created by BackPrep to be deleted
+    if the stats were carried out successfully.  This only occurs
+    at the end of the program so that if something fails along
+    the way, none of the backround files will have been deleted
 
     -np 8  implies to perform calculations in parallel, with in
     this case 8 threads
@@ -39,9 +43,6 @@ Notes:
 
     Running it with as many threads as possile is helpful.
 
-    This routine could likely be sped up using an input
-    table that identified the corners of a tile in RA and
-    Dec.
                                        
 History:
 
@@ -59,6 +60,7 @@ import numpy as np
 from astropy.stats import sigma_clipped_stats
 from multiprocessing import Pool
 from log import *
+import shutil
 
 BACKDIR='DECam_BACK'
 
@@ -119,8 +121,8 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     try:
         x=ascii.read(sumfile)
     except:
-        print('Could not find %s' % sumfile)
-        return
+        print('Could not find overlap file %s ' % sumfile)
+        raise IOError
 
 
     # Read the summary file so we can attached the exposure time 
@@ -130,13 +132,13 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         imsum=ascii.read(imsumfile)
     except:
         print('Could not read imsum file: %s' % imsum)
-        return
+        raise IOError
 
 
     indir='%s/%s/%s' % (BACKDIR,field,tile)
     if os.path.exists(indir)==False:
         print('Could not find the directory %s with the data' % indir)
-        return
+        raise IOError
 
     
     qfiles=np.unique(x['Filename'])
@@ -230,6 +232,7 @@ def steer(argv):
     tiles=[]
     xall=False
     nproc=0
+    xremove=False
 
     i=1
     while i<len(argv):
@@ -238,6 +241,8 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-rm':
+            xremove=True
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
@@ -262,9 +267,21 @@ def steer(argv):
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
         log_message('BackStats: Starting %s %s' % (field,one))
-        do_one_tile(field,one,nproc)
+        try:
+            do_one_tile(field,one,nproc)
+        except IOError:
+            log_message('BackStats: Failed on %s %s' % (field,one))
+            return
+
         log_message('BackStats: Finished %s %s' % (field,one))
     close_log()
+
+    if xremove:
+        for one in tiles:
+            xdir='%s/%s/%s' % (BACKDIR,field,one)
+            print('Removing %s' % (xdir))
+            shutil.rmtree(xdir)
+
 
     return
 
