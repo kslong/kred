@@ -44,7 +44,7 @@ To process the data without attempting to improve over
 the background options in MefPrep, the programs should
 be run in the following order:
 
-* MEFSum.py - This summarizes the mef files in a field.
+* MefSum.py - This summarizes the mef files in a field.
 If it does not already exist this program creates a directory 
 that is created called Summary and writes two astropy
 tables that contain the summary informatioon
