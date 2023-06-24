@@ -51,7 +51,7 @@ tables that contain the summary informatioon
 
 
 Note that MefSum.py -all wil attempt to create a summary of all of the files
-that one has in the DEC\_MEF directory.   Also note that this routine is parallelized.
+that one has in the DECam\_MEF directory.   Also note that this routine is parallelized.
 Each thread is handles one Field.  The program does 
 check to see if certain Fields have already been analyzed, 
 and so if one adds a single Field one should not use the -all option.
