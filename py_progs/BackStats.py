@@ -131,10 +131,24 @@ BACKDIR='DECam_BACK'
 
 def calculate_one(file,xmatch_files,indir,npix_min=100):
     '''
-    Get statistics in the overlap region of
-    one file to a number of files
+    Get statistics and make an estimate in
+    the difference backgroound from the overlap region of
+    images all of which must have the same 
+    WCS (or actually image size)  
 
-    The returns a list of records which 
+    one file to a number of file
+
+    where:
+    file is the name of a fits files files for
+        which serves as a base file
+    xmatch_files is a list of fits 
+        for which offsets will be calculated
+    imdir is the directory where the fits
+        files are locatd
+    npix_min is the minimum numver of pixels
+        that must overlap the image
+
+    The routimee returns a list of records which 
     give the mean,median and std of each file 
     in the overlap region
     '''
@@ -239,7 +253,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         all_inputs.append([qfiles[i],files['XFilename'],indir])
         i+=1
     
-    log_message('BackStats:  %s %s has %d files to process' % (field,one,len(all_inputs)))
+    log_message('BackStats:  %s %s has %d files to process' % (field,tile,len(all_inputs)))
 
     if nproc<2:
         i=0
@@ -356,7 +370,7 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
-        log_message('BackStats: Starting %s %s with %d processors' % (field,one,np))
+        log_message('BackStats: Starting %s %s with %d processors' % (field,one,nproc))
         start_time=timeit.default_timer()
         try:
             do_one_tile(field,one,nproc)
