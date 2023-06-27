@@ -61,10 +61,75 @@ from astropy.stats import sigma_clipped_stats
 from multiprocessing import Pool
 from log import *
 import shutil
+from medianrange import *
+import timeit
+
+
+
+def halfsamplemode(inputData, axis=None):
+
+    """Compute mode of an array using the half-sample algorithm"""
+
+    if axis is not None:
+        return np.apply_along_axis(halfsamplemode, axis, inputData)
+
+    vals = np.sort(inputData.ravel())
+    n = len(vals)
+    while n > 2:
+        nhalf = (n+1)//2
+        isub = (vals[n-nhalf:]-vals[:nhalf]).argmin()
+        vals = vals[isub:isub+nhalf]
+        n = nhalf
+    if n == 2:
+        return 0.5*(vals[0]+vals[1])
+    else:
+        return vals[0]
+
+def quartile_stats(xdata):
+    '''
+    Compute skew, etc, of a distribution with outlier 
+    rejection
+
+    See: https://towardsdatascience.com/skewness-and-kurtosis-with-outliers-f43167532c69
+    '''
+
+    vals=np.sort(xdata.ravel())
+
+    # eliminate outliers
+    n=len(vals)
+    q3=vals[int(0.75*n)]
+    q1=vals[int(0.25*n)]
+    iqr=q3-q1
+    xmin=q1-1.5*iqr
+    xmax=q3+1.5*iqr
+
+    xvals=vals[vals>xmin]
+    xxvals=xvals[xvals<xmax]
+
+
+    std=np.std(xxvals)
+    mean=np.average(xxvals)
+    med=np.median(xxvals)
+
+    skew=(xxvals-mean)**3/std**3
+    skew=np.average(skew)
+
+    kurt=(xxvals-mean)**4/std**4
+    kurt=np.average(kurt)
+
+    # print('%10.3f %10.3f %10.3f %10.3f %10.3f' % (med,mean,std,skew,kurt))
+
+    return skew,kurt
+
+
+
+
+
+
 
 BACKDIR='DECam_BACK'
 
-def calculate_one(file,xmatch_files,indir):
+def calculate_one(file,xmatch_files,indir,npix_min=100):
     '''
     Get statistics in the overlap region of
     one file to a number of files
@@ -73,6 +138,7 @@ def calculate_one(file,xmatch_files,indir):
     give the mean,median and std of each file 
     in the overlap region
     '''
+    # print('Starting %s  with %d matches' % (file,len(xmatch_files)))
 
     one=fits.open('%s/%s' % (indir,file))
     records=[]
@@ -84,7 +150,7 @@ def calculate_one(file,xmatch_files,indir):
         overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
         nonzero=np.count_nonzero(overlap)
 
-        if nonzero>0:
+        if nonzero>npix_min:
             ok=True
             one_record=[file,xmatch_files[j],nonzero]
 
@@ -93,18 +159,39 @@ def calculate_one(file,xmatch_files,indir):
             xmask=overlap-1
             one_masked=np.ma.array(one[0].data,mask=xmask)
             two_masked=np.ma.array(two[0].data,mask=xmask)
-            mean,median,std=sigma_clipped_stats(one_masked,sigma_lower=3,sigma_upper=2,grow=3)
-            if np.isnan(median):
+            xxdelta=two_masked-one_masked
+            xdelta=xxdelta.compressed()
+            med_true,med_low,med_hi=medianrange(xdelta)
+            mean=np.ma.average(xdelta)
+            med=np.ma.median(xdelta)
+            std=np.ma.std(xdelta)
+            if np.isnan(med):
                 ok=False
-            one_record=one_record+[mean,median,std]
-            mean,median,std=sigma_clipped_stats(two_masked,sigma_lower=3,sigma_upper=2,grow=3)
-            if np.isnan(median):
+                continue
+
+            # add the unbiased values
+            one_record=one_record+[mean,med,std]
+
+            # add the clipped values
+            mean1,median1,std1=sigma_clipped_stats(xxdelta,sigma_lower=2,sigma_upper=2,grow=3)
+            if np.isnan(median1):
                 ok=False
-            one_record=one_record+[mean,median,std]  
-                
+                continue
+
+            # Add the skew and kurtosis
+            one_record=one_record+[mean1,median1,std1]
+            skew,kurt=quartile_stats(xdelta)
+            if np.isnan(skew):
+                ok=False
+                continue
+            one_record=one_record+[skew,kurt]
+
+            # add the mode
+            xmode=halfsamplemode(xdelta)
+            one_record=one_record+[med]
+
             if ok==True:
                 records.append(one_record)
-            # print(one_record)
 
         two.close()
         j+=1
@@ -151,10 +238,12 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         files=x[x['Filename']==qfiles[i]]
         all_inputs.append([qfiles[i],files['XFilename'],indir])
         i+=1
+    
+    log_message('BackStats:  %s %s has %d files to process' % (field,one,len(all_inputs)))
 
     if nproc<2:
         i=0
-        while i<len(files):
+        while i<len(all_inputs):
             xrecords=calculate_one(all_inputs[i][0],all_inputs[i][1],all_inputs[i][2])
             records=records+xrecords
             i+=1
@@ -167,7 +256,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     xrecords=np.array(records)
     
-    xtab=Table(xrecords,names=['file1','file2','npix','mean1','med1','std1','mean2','med2','std2'])
+    xtab=Table(xrecords,names=['file1','file2','npix','mean1','med1','std1','mean2','med2','std2','skew','kurt','Delta'])
     # Next lines are a cheat to get the formats to be sensible
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
     xtab=ascii.read('foo.txt')
@@ -181,6 +270,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     xtab['mean2']*=scale_factor
     xtab['med2']*=scale_factor
     xtab['std2']*=scale_factor
+    xtab['Delta']*=scale_factor
 
     colnames=xtab.colnames
     i=0
@@ -206,6 +296,9 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     ztab['med2'].format='.3f'
     ztab['std1'].format='.3f'
     ztab['std2'].format='.3f'
+    ztab['skew'].format='.3f'
+    ztab['kurt'].format='.3f'
+    ztab['Delta'].format='.3f'
 
 
 
@@ -215,9 +308,6 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     imsum.rename_column('Filename','file1')
 
     ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
-
-
-
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
@@ -266,14 +356,16 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
-        log_message('BackStats: Starting %s %s' % (field,one))
+        log_message('BackStats: Starting %s %s with %d processors' % (field,one,np))
+        start_time=timeit.default_timer()
         try:
             do_one_tile(field,one,nproc)
         except IOError:
             log_message('BackStats: Failed on %s %s' % (field,one))
             return
 
-        log_message('BackStats: Finished %s %s' % (field,one))
+        current_time=timeit.default_timer()
+        log_message('BackStats: Finished %s %s in %.1f s' % (field,one,current_time-start_time))
     close_log()
 
     if xremove:

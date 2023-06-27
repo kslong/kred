@@ -270,8 +270,9 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
     
     # Now prepare the difference array, which is just a symmetric version
     # of y
-    y['Delta']=y['med2']-y['med1']
-    y['Delta'].format='.3f'
+    # y['Delta']=y['med2']-y['med1']
+    # y['Delta']=y['delta']
+    # y['Delta'].format='.3f'
     
     y1=y['file1','file2','npix','Delta']
     y2=Table([y['file2'],y['file1'],y['npix'],-y['Delta']],
@@ -340,10 +341,10 @@ def do_one_tile(field,tile):
             xbest=monte(y_all,btab)
             xmonte=diff_eval(y_all,xbest)
 
-            if xmonte<best_val:
-                # print('monte')
-                best_offset=xbest.copy()
-                best_val=xmonte
+            # if xmonte<best_val:
+            #     # print('monte')
+            #     best_offset=xbest.copy()
+            #     best_val=xmonte
 
 
             svd=do_svd(y_all,btab)
@@ -366,7 +367,7 @@ def do_one_tile(field,tile):
 
             print('Original b=0:     %.2f' % orig)
             print('Simple  b=b_init:  %.2f' % simple)
-            print('Monte           :  %.2f' % xmonte)
+            # print('Monte           :  %.2f' % xmonte)
             print('SVD             :  %.2f' % xsvd)
             print('SVD1            :  %.2f' % xsvd1)
 
