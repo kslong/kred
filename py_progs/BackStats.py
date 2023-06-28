@@ -160,6 +160,7 @@ def calculate_one(file,xmatch_files,indir,npix_min=100):
     j=0
     while j<len(xmatch_files):
         one_record=[]
+        # print('starting %d %s' % (j,xmatch_files[j]))
         two=fits.open('%s/%s' % (indir,xmatch_files[j]))
         overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
         nonzero=np.count_nonzero(overlap)
@@ -181,36 +182,40 @@ def calculate_one(file,xmatch_files,indir,npix_min=100):
             std=np.ma.std(xdelta)
             if np.isnan(med):
                 ok=False
-                continue
 
-            # add the unbiased values
-            one_record=one_record+[mean,med,std]
-
-            # add the clipped values
-            mean1,median1,std1=sigma_clipped_stats(xxdelta,sigma_lower=2,sigma_upper=2,grow=3)
-            if np.isnan(median1):
-                ok=False
-                continue
+            if ok:
+                # add the unbiased values
+                one_record=one_record+[mean,med,std]
+                # add the clipped values
+                mean1,median1,std1=sigma_clipped_stats(xxdelta,sigma_lower=2,sigma_upper=2,grow=3)
+                if np.isnan(median1):
+                    ok=False
 
             # Add the skew and kurtosis
-            one_record=one_record+[mean1,median1,std1]
-            skew,kurt=quartile_stats(xdelta)
-            if np.isnan(skew):
-                ok=False
-                continue
-            one_record=one_record+[skew,kurt]
+            if ok:
+                one_record=one_record+[mean1,median1,std1]
+                skew,kurt=quartile_stats(xdelta)
+                if np.isnan(skew):
+                    ok=False
 
-            # add the mode
-            xmode=halfsamplemode(xdelta)
-            one_record=one_record+[med]
+            if ok:
+                one_record=one_record+[skew,kurt]
+                # add the mode
+                xmode=halfsamplemode(xdelta)
+                if np.isnan(xmode):
+                    ok=False
 
-            if ok==True:
+            if ok:
+                one_record=one_record+[med]
+                # print('succeeded')
                 records.append(one_record)
+            else:
+                print('Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
 
         two.close()
         j+=1
     one.close()
-    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file))
+    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
     return records
 
 

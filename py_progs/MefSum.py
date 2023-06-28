@@ -40,6 +40,12 @@ Notes:
 
     At present this does not check that a field has been processed
 
+    Here multiple processors are used only to handle multiple fields,
+    and so if one as for 4 threads, but only provides 3 fields
+    only 3 threads will be used.  (This is something that should
+    be changed, but requires a slightly different set of 
+    multiprocessing commands)
+
 
                                        
 History:

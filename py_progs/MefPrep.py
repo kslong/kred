@@ -59,6 +59,9 @@ Notes:
 
     As written one can only PrepFiles from a specific MEF directory
 
+    Here unlike MefSum.py, individual filess are processed with  individual
+    threads, so generally speaking all requested threads are utilized    
+
 
 History:
 
