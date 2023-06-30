@@ -42,6 +42,7 @@ from astropy.table import Table,join,vstack
 from astropy.io import ascii
 import numpy as np
 import matplotlib.pyplot as plt
+import timeit
 
 from log import *
 
@@ -153,48 +154,53 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
 
     global svd_u, svd_w, svd_vt, svd_b
 
-    i=xcross['i']
-    j=xcross['j']
-    npix=xcross['npix']
-    delta=xcross['Delta']
+    if new==False:
+        print('Using an earlier SVD inversion, just changing threshold')
+
+    else:
+
+        i=xcross['i']
+        j=xcross['j']
+        npix=xcross['npix']
+        delta=xcross['Delta']
 
 
 
-    """Solve for sky values using singular value decomposition"""
+        """Solve for sky values using singular value decomposition"""
 
-    i = np.asarray(i)
-    j = np.asarray(j)
-    npix = np.asarray(npix)
-    delta = np.asarray(delta)
-    assert len(i)==len(j) and len(npix)==len(j) and len(delta)==len(j)
-    assert j.max() == i.max() and j.min() == 0 and i.min() == 0
-    n = i.max() + 1
+        i = np.asarray(i)
+        j = np.asarray(j)
+        npix = np.asarray(npix)
+        delta = np.asarray(delta)
+        assert len(i)==len(j) and len(npix)==len(j) and len(delta)==len(j)
+        assert j.max() == i.max() and j.min() == 0 and i.min() == 0
+        n = i.max() + 1
 
-    # compute weights
-    # divide weight by mean sum of columns
+        # compute weights
+        # divide weight by mean sum of columns
 
-    wt = np.zeros((n,n),dtype=float)
-    wt[i,j] = npix
-    wt = wt/(wt.sum(axis=1).mean())
+        wt = np.zeros((n,n),dtype=float)
+        wt[i,j] = npix
+        wt = wt/(wt.sum(axis=1).mean())
 
-    # stick data from the table into the array
+        # stick data from the table into the array
 
-    delta = np.zeros((n,n),dtype=float)
-    delta[xcross['i'],xcross['j']] = xcross['Delta']
+        delta = np.zeros((n,n),dtype=float)
+        delta[xcross['i'],xcross['j']] = xcross['Delta']
 
-    a = wt - np.diag(wt.sum(axis=1))
-    svd_b = (wt*delta).sum(axis=1)
+        a = wt - np.diag(wt.sum(axis=1))
+        svd_b = (wt*delta).sum(axis=1)
 
-    if verbose:
-        print(f"determinant of A {np.linalg.det(a):.4}")
-        print(f"product of diagonal {np.prod(np.diag(a)):.4}")
-    assert (a == np.transpose(a)).all()
+        if verbose:
+            print(f"determinant of A {np.linalg.det(a):.4}")
+            print(f"product of diagonal {np.prod(np.diag(a)):.4}")
+        assert (a == np.transpose(a)).all()
 
-    # Compute the SVD
-    svd_u, svd_w, svd_vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
-    if verbose:
-        print(f"Largest SV {svd_w[0]}")
-        print("10 smallest SVs:", svd_w[-10:])
+        # Compute the SVD
+        svd_u, svd_w, svd_vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
+        if verbose:
+            print(f"Largest SV {svd_w[0]}")
+            print("10 smallest SVs:", svd_w[-10:])
 
     # Edit the singular values and solve for sky offsets
     winvert = (svd_w>=threshold)/(svd_w + (svd_w < threshold))
@@ -204,11 +210,11 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
     return bkgd
 
 
-def do_svd(xcross,bfile,threshold=0.1):
+def do_svd(xcross,bfile,threshold=0.1,new=True,verbose=False):
 
     xbfile=bfile.copy()
 
-    background=svdskyfit(xcross,threshold=threshold,verbose=True)
+    background=svdskyfit(xcross,threshold=threshold,new=new,verbose=verbose)
 
     xbfile['b']=background
 
@@ -247,7 +253,7 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
     x2=np.array(y['file2'])
     both=np.append(x1,x2)
     files=np.unique(both)
-    print(len(files))
+    # print(len(files))
     
     # Get initial estimate of the background to use
     
@@ -295,7 +301,7 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
     y_all.sort(['i','j'])
     y_all.sort('npix',reverse=True)
     
-    print(np.max(y_all['j']),np.max(y_all['i']))
+    # print(np.max(y_all['j']),np.max(y_all['i']))
             
     return btab,y_all
 
@@ -305,6 +311,8 @@ def do_one_tile(field,tile):
     Geneerate a set of backgrounds to be used for maaching images
     in a tile.
     '''
+
+    time_start=timeit.default_timer()
 
     infile='Summary/%s_%s_xxx.txt' % (field,tile)
     try:
@@ -342,8 +350,8 @@ def do_one_tile(field,tile):
             best_val=simple
             # print('simple')
 
-            xbest=monte(y_all,btab)
-            xmonte=diff_eval(y_all,xbest)
+            # xbest=monte(y_all,btab)
+            # xmonte=diff_eval(y_all,xbest)
 
             # if xmonte<best_val:
             #     # print('monte')
@@ -360,7 +368,8 @@ def do_one_tile(field,tile):
                 best_val=xsvd
 
 
-            svd=do_svd(y_all,btab,0.01)
+            # This uses the earlier SVD inversion, so be careful.)
+            svd=do_svd(y_all,btab,0.01,new=False)
             xsvd1=diff_eval(y_all,svd)
             if xsvd1<best_val:
                 # print('svd1')
@@ -377,7 +386,7 @@ def do_one_tile(field,tile):
 
             one_record.append('%.2f' % orig)
             one_record.append('%.2f' % simple)
-            one_record.append('%.2f' % xmonte)
+            # one_record.append('%.2f' % xmonte)
             one_record.append('%.2f' % xsvd)
             one_record.append('%.2f' % xsvd1)
 
@@ -394,13 +403,16 @@ def do_one_tile(field,tile):
             records.append(one_record)
 
     records=np.array(records)
-    xout=Table(records,names=['FILTER','EXPTIME','None','Simple','Path','SVD','SVD1'])
+    # xout=Table(records,names=['FILTER','EXPTIME','None','Simple','Path','SVD','SVD1'])
+    xout=Table(records,names=['FILTER','EXPTIME','None','Simple','SVD','SVD1'])
     xout.write('test.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
     all_back=vstack(all_back)
 
     best_file='Summary/%s_%s_bbb.txt' % (field,tile)
     all_back.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
+
+    print('Finished %s %s in %.1f s'  % (field,tile, timeit.default_timer()-time_start))
 
 
 
