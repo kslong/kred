@@ -193,8 +193,8 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
     # Compute the SVD
     svd_u, svd_w, svd_vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
     if verbose:
-        print(f"Largest SV {w[0]}")
-        print("10 smallest SVs:", w[-10:])
+        print(f"Largest SV {svd_w[0]}")
+        print("10 smallest SVs:", svd_w[-10:])
 
     # Edit the singular values and solve for sky offsets
     winvert = (svd_w>=threshold)/(svd_w + (svd_w < threshold))
