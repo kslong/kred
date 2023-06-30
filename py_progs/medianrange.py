@@ -24,6 +24,11 @@ def medianrange(data, **kw):
     med         Median of array
     medlo       Lower bound of given confidence interval
     medhi       Upper bound of given confidence interval
+
+
+    Note: 
+
+    np.percentile requires a recent version of np (1.23.5 is known to work)
     """
 
     data = np.asarray(data)
