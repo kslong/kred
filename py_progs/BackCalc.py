@@ -147,7 +147,11 @@ def monte(xdelta,files):
           (np.min(xchi),np.max(xchi),np.average(xchi),np.std(xchi)))
     return xbest
         
-def svdskyfit(xcross,threshold=0.1, verbose=True):
+svd_u=svd_w=svd_vt=svd_b=0
+
+def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
+
+    global svd_u, svd_w, svd_vt, svd_b
 
     i=xcross['i']
     j=xcross['j']
@@ -179,7 +183,7 @@ def svdskyfit(xcross,threshold=0.1, verbose=True):
     delta[xcross['i'],xcross['j']] = xcross['Delta']
 
     a = wt - np.diag(wt.sum(axis=1))
-    b = (wt*delta).sum(axis=1)
+    svd_b = (wt*delta).sum(axis=1)
 
     if verbose:
         print(f"determinant of A {np.linalg.det(a):.4}")
@@ -187,16 +191,16 @@ def svdskyfit(xcross,threshold=0.1, verbose=True):
     assert (a == np.transpose(a)).all()
 
     # Compute the SVD
-    u, w, vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
+    svd_u, svd_w, svd_vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
     if verbose:
         print(f"Largest SV {w[0]}")
         print("10 smallest SVs:", w[-10:])
 
     # Edit the singular values and solve for sky offsets
-    winvert = (w>=threshold)/(w + (w < threshold))
+    winvert = (svd_w>=threshold)/(svd_w + (svd_w < threshold))
     if verbose:
-        print(f"{(w<threshold).sum()} SVs removed by threshold {threshold}")
-    bkgd = (vt.T @ np.diag(winvert) @ u.T) @ b
+        print(f"{(svd_w<threshold).sum()} SVs removed by threshold {threshold}")
+    bkgd = (svd_vt.T @ np.diag(winvert) @ svd_u.T) @ svd_b
     return bkgd
 
 
