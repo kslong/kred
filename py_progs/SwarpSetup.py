@@ -356,7 +356,7 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     f.close()
     
     f=open('%s/%s.run' % (xdir,root),'w')
-    f.write('swarp @%s -c %s\n' % (filelist,default_name))
+    f.write('swarp @%s -WEIGHTOUT_NAME  /dev/null -c %s \n' % (filelist,default_name))
     f.close()
     
     os.chmod('%s/%s.run' % (xdir,root),stat.S_IRWXU)

@@ -21,6 +21,27 @@ The tools require a set of relatively commmon modules, such
 as astropy, and normally are run from within an appropriate 
 conda enviromnment.
 
+
+**The version of astropy that is used is relatively recent**
+
+If you encounter problems, one should create a specific conda
+enviromment with something like the following commands:
+
+````
+conda create --name kred  scipy
+conda install astropy
+conda install matplotlib
+````
+
+and run in this enviroment which should have versions of these
+three packages greater than or equal to:
+
+````
+scipy 1.10.1
+astropy 5.1
+numpy 1.25.0
+````
+
 The routines assume a specfic directory structure 
 to one of our own.  At present the new structure
 presumes:
