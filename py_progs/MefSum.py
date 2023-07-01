@@ -220,7 +220,7 @@ def get_det_overview(field='LMC_c45'):
                     record.append(get_keyword(one_key,x[i]))
                 except:
                     log_message('Error: Problem with keyword %s for %s extension %d'% (one_key,one_file,i))
-                    record.append(-99-9999)
+                    record.append(-99.9999)
 
 
             try:
