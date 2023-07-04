@@ -129,7 +129,7 @@ def quartile_stats(xdata):
 
 BACKDIR='DECam_BACK'
 
-def calculate_one(file,xmatch_files,indir,npix_min=100):
+def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100):
     '''
     Get statistics and make an estimate in
     the difference backgroound from the overlap region of
@@ -145,11 +145,18 @@ def calculate_one(file,xmatch_files,indir,npix_min=100):
         for which offsets will be calculated
     imdir is the directory where the fits
         files are locatd
+    calc_sigma_clipped means that in addtition to
+        calculationg the standard set of statistics, sigma
+        cliped values of the mean,median, and std are
+        calculated. This increases the program run
+        time significantly and so is used here as
+        an option.
     npix_min is the minimum numver of pixels
         that must overlap the image
 
-    The routimee returns a list of records which 
-    give the mean,median and std of each file 
+    The routine returns a list of records which 
+    gives various statistics of the overlap regions,
+    including the mode, mean,median and std 
     in the overlap region
     '''
     # print('Starting %s  with %d matches' % (file,len(xmatch_files)))
@@ -187,9 +194,14 @@ def calculate_one(file,xmatch_files,indir,npix_min=100):
                 # add the unbiased values
                 one_record=one_record+[mean,med,std]
                 # add the clipped values
-                mean1,median1,std1=sigma_clipped_stats(xxdelta,sigma_lower=2,sigma_upper=2,grow=3)
-                if np.isnan(median1):
-                    ok=False
+                if calc_sigma_clipped: 
+                    mean1,median1,std1=sigma_clipped_stats(xxdelta,sigma_lower=2,sigma_upper=2,grow=3)
+                    if np.isnan(median1):
+                        ok=False
+                else:
+                    mean1=-99.
+                    median1=-99.
+                    std1=-99.
 
             # Add the skew and kurtosis
             if ok:
@@ -206,7 +218,7 @@ def calculate_one(file,xmatch_files,indir,npix_min=100):
                     ok=False
 
             if ok:
-                one_record=one_record+[med]
+                one_record=one_record+[xmode]
                 # print('succeeded')
                 records.append(one_record)
             else:
@@ -221,7 +233,7 @@ def calculate_one(file,xmatch_files,indir,npix_min=100):
 
         
         
-def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
+def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
 
     sumfile='Summary/%s_%s_overlap.txt' % (field,tile)
     try:
@@ -255,7 +267,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     all_inputs=[]
     while i<len(qfiles):
         files=x[x['Filename']==qfiles[i]]
-        all_inputs.append([qfiles[i],files['XFilename'],indir])
+        all_inputs.append([qfiles[i],files['XFilename'],indir,calc_sigma_clipped])
         i+=1
     
     log_message('BackStats:  %s %s has %d files to process' % (field,tile,len(all_inputs)))
@@ -263,7 +275,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     if nproc<2:
         i=0
         while i<len(all_inputs):
-            xrecords=calculate_one(all_inputs[i][0],all_inputs[i][1],all_inputs[i][2])
+            xrecords=calculate_one(all_inputs[i][0],all_inputs[i][1],all_inputs[i][2],all_inputs[i][3])
             records=records+xrecords
             i+=1
     else:
@@ -275,7 +287,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     xrecords=np.array(records)
     
-    xtab=Table(xrecords,names=['file1','file2','npix','mean1','med1','std1','mean2','med2','std2','skew','kurt','Delta'])
+    xtab=Table(xrecords,names=['file1','file2','npix','mean','med','std','mean_clipped','med_clipped','std_clipped','skew','kurt','Delta'])
     # Next lines are a cheat to get the formats to be sensible
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
     xtab=ascii.read('foo.txt')
@@ -283,12 +295,13 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     # Now rescale to account for pixel size
     scale_factor=(0.27*0.27)/(2.*2.)
 
-    xtab['mean1']*=scale_factor
-    xtab['med1']*=scale_factor
-    xtab['std1']*=scale_factor
-    xtab['mean2']*=scale_factor
-    xtab['med2']*=scale_factor
-    xtab['std2']*=scale_factor
+    xtab['mean']*=scale_factor
+    xtab['med']*=scale_factor
+    xtab['std']*=scale_factor
+    if calc_sigma_clipped:
+        xtab['mean_clipped']*=scale_factor
+        xtab['med_clipped']*=scale_factor
+        xtab['std_clipped']*=scale_factor
     xtab['Delta']*=scale_factor
 
     colnames=xtab.colnames
@@ -309,12 +322,13 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         
 
     ztab=xtab[colnames]
-    ztab['mean1'].format='.3f'
-    ztab['mean2'].format='.3f'
-    ztab['med1'].format='.3f'
-    ztab['med2'].format='.3f'
-    ztab['std1'].format='.3f'
-    ztab['std2'].format='.3f'
+    ztab['mean'].format='.3f'
+    ztab['mean'].format='.3f'
+    ztab['med'].format='.3f'
+    ztab['std'].format='.3f'
+    ztab['med_clipped'].format='.3f'
+    ztab['mean_clipped'].format='.3f'
+    ztab['std_clipped'].format='.3f'
     ztab['skew'].format='.3f'
     ztab['kurt'].format='.3f'
     ztab['Delta'].format='.3f'
@@ -342,6 +356,7 @@ def steer(argv):
     xall=False
     nproc=0
     xremove=False
+    calc_sigma_clipped=False
 
     i=1
     while i<len(argv):
@@ -352,6 +367,8 @@ def steer(argv):
             xall=True
         elif argv[i]=='-rm':
             xremove=True
+        elif argv[i]=='-sigma_clipped':
+            calc_sigma_clipped=True
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
@@ -375,10 +392,15 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
-        log_message('BackStats: Starting %s %s with %d processors' % (field,one,nproc))
+        if calc_sigma_clipped:
+            log_message('BackStats: Starting %s %s with %d processors (w/ sigma_clipped stats)' % (field,one,nproc))
+        else:
+            log_message('BackStats: Starting %s %s with %d processors (w/o sigma_clipped_stats)' % (field,one,nproc))
+
+
         start_time=timeit.default_timer()
         try:
-            do_one_tile(field,one,nproc)
+            do_one_tile(field,one,nproc,calc_sigma_clipped)
         except IOError:
             log_message('BackStats: Failed on %s %s' % (field,one))
             return

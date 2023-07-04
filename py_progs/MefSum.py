@@ -235,7 +235,7 @@ def get_det_overview(field='LMC_c45'):
         
             records.append(record)
             i+=1
-        print('finished %s' % one_file)
+        log_message('finished %s' % one_file)
         
     records=np.array(records)   
     
@@ -352,6 +352,10 @@ def steer(argv):
     if len(fields)<nproc:
         nproc=len(fields)
         print('Reducing the number of proocess threads to %d, which is the number of fields' % nproc)
+
+    print('These are the fields that will be processed')
+    for one in fields:
+        print(one)
 
     if nproc==1:
         for one in fields:
