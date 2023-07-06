@@ -213,10 +213,66 @@ def get_mef_overview(field='LMC_c45'):
     
     
     return 
+
+
+def do_one_det_overview(filename,keys,calc_sigma_clipped=False):
+    '''
+    Process a the detectors in a single file
+    '''
+    start_time = timeit.default_timer()
+    # log_message('Starting %s ' % filename)
+    print('Starting %s ' % filename)
+    x=fits.open(filename)
+
+    name=filename.split('/')
+    name=name[-1]
+    name=name.replace('.fits.fz','')  
+
+    records=[]
+ 
+    i=1
+    while i<len(x):
+        record=[name] 
+
+        for one_key in keys:
+            try:
+                record.append(get_keyword(one_key,x[i]))
+            except:
+                #log_message('Error: Problem with keyword %s for %s extension %d'% (one_key,filename,i))
+                print('Error: Problem with keyword %s for %s extension %d'% (one_key,filename,i))
+                record.append(-99.9999)
+
+        try:
+            mode=halfsamplemode(x[i].data)
+            if calc_sigma_clipped:
+            # print('sigma clipping',i)
+                mean,median,std=sigma_clipped_stats(x[i].data,sigma_lower=3,sigma_upper=2,grow=3)
+            else:
+                # print('normal sigma ',i)
+                mean=np.average(x[i].data)
+                median=np.median(x[i].data)
+                std=np.std(x[i].data)
+            # mean=median=std=-99.
+        except:
+            # log_message('Error: unable to get mean etc for %s extension %d'% (filename,i))
+            print('Error: unable to get mean etc for %s extension %d'% (filename,i))
+            mode=mean=median=std=-999.
+
+        record.append(mean)
+        record.append(median)
+        record.append(std)
+        record.append(mode)
+        
+        records.append(record)
+        i+=1
+    # log_message('finished %s in %.1f s' % (filename,timeit.default_timer()-start_time))
+    print('finished %s in %.1f s' % (filename,timeit.default_timer()-start_time))
+    x.close()
+    return records
     
                           
 
-def get_det_overview(field='LMC_c45',calc_sigma_clipped=False):
+def get_det_overview(field='LMC_c45',nproc=1,calc_sigma_clipped=False):
     '''
     Get information about the individual CCDs, including 
     some statistics associated with the data that is 
@@ -234,52 +290,23 @@ def get_det_overview(field='LMC_c45',calc_sigma_clipped=False):
     
     keys=['EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1']
     
-    for one_file in files:
-        start_time = timeit.default_timer()
-        log_message('Starting %s ' % one_file)
-        x=fits.open(one_file)
+    if nproc<2:
+        for one_file in files:
+            xrecord=do_one_det_overview(one_file,keys,calc_sigma_clipped=False)
+            records=records+xrecord
+    else:
+        all_inputs=[]
+        for one_file in files:
+            all_inputs.append([one_file,keys,calc_sigma_clipped])
+            
+        with Pool(nproc) as p:
+            zrecords=p.starmap(do_one_det_overview,all_inputs)
+            for one in zrecords:
+                records=records+one
 
-        name=one_file.split('/')
-        name=name[-1]
-        name=name.replace('.fits.fz','')  
- 
-        i=1
-        while i<len(x):
-            record=[name] 
-
-            for one_key in keys:
-                try:
-                    record.append(get_keyword(one_key,x[i]))
-                except:
-                    log_message('Error: Problem with keyword %s for %s extension %d'% (one_key,one_file,i))
-                    record.append(-99.9999)
-            try:
-                mode=halfsamplemode(x[i].data)
-                if calc_sigma_clipped:
-                    # print('sigma clipping',i)
-                    mean,median,std=sigma_clipped_stats(x[i].data,sigma_lower=3,sigma_upper=2,grow=3)
-                else:
-                    # print('normal sigma ',i)
-                    mean=np.average(x[i].data)
-                    median=np.median(x[i].data)
-                    std=np.std(x[i].data)
-                    # mean=median=std=-99.
-            except:
-                log_message('Error: unable to get mean etc for %s extension %d'% (one_file,i))
-                mode=mean=median=std=-999.
-
-            record.append(mean)
-            record.append(median)
-            record.append(std)
-            record.append(mode)
         
-            records.append(record)
-            i+=1
-        log_message('finished %s in %.1f s' % (one_file,timeit.default_timer()-start_time))
-        x.close()
-        
+
     records=np.array(records)   
-    
     
         
     tab_names=['Root']+keys+['Mean','Med','STD','Mode']
@@ -319,7 +346,7 @@ def get_det_overview(field='LMC_c45',calc_sigma_clipped=False):
 
 
 
-def do_one(field='LMC_c45',do_mef=True,do_det=True,calc_sigma_clipped=False):
+def do_one(field='LMC_c45',nproc=1,do_mef=True,do_det=True,calc_sigma_clipped=False):
         '''
         Simply get all the information one wants about the imaages associated
         with a single field
@@ -329,7 +356,7 @@ def do_one(field='LMC_c45',do_mef=True,do_det=True,calc_sigma_clipped=False):
         if do_mef:
             get_mef_overview(field)
         if do_det:
-            get_det_overview(field,calc_sigma_clipped)
+            get_det_overview(field,nproc,calc_sigma_clipped)
         close_log()
         return
 
@@ -404,23 +431,14 @@ def steer(argv):
 
     start_time = timeit.default_timer()
 
-    if len(fields)<nproc:
-        nproc=len(fields)
-        print('Reducing the number of proocess threads to %d, which is the number of fields' % nproc)
 
     print('These are the fields that will be processed')
     for one in fields:
         print(one)
 
-    if nproc==1:
-        for one in fields:
-            do_one(one,xmef,xdet,calc_sigma_clipped)
-    else:
-        xinputs=[]
-        for one in fields:
-            xinputs.append([one,xmef,xdet,calc_sigma_clipped])
-        with Pool(nproc) as p:
-            zrecords=p.starmap(do_one,xinputs)
+
+    for one in fields:
+        do_one(one,nproc,xmef,xdet,calc_sigma_clipped)
 
     elapsed = timeit.default_timer() - start_time
 
