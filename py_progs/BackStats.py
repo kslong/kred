@@ -12,12 +12,13 @@ how overlap regions of various images compare
 
 Command line usage (if any):
 
-    usage: BackStats.py  [-np 8] [-all] [-rm] field T01 T02 ...
+    usage: BackStats.py  [-np 8] [-all] [-rm] [-sigma_clipped] field T01 T02 ...
 
     where field is a field name, and the following numbers are one 
     or more tiles
 
     -all implies to do all tiles
+
     -rm causes the files that were created by BackPrep to be deleted
     if the stats were carried out successfully.  This only occurs
     at the end of the program so that if something fails along
@@ -25,6 +26,11 @@ Command line usage (if any):
 
     -np 8  implies to perform calculations in parallel, with in
     this case 8 threads
+
+    -sigma_clipped is a diagnostic mode (which greatly increases
+    the run time (but which calculates the mean, median, and std
+    of the differences with sigma_clipped versions of these
+    routines.)
 
 Description:  
 
@@ -48,6 +54,10 @@ History:
 
 230505 ksl Coding begun and routine parallelized
 230617 ksl Adapted to new version of routines
+230704 ksl The mode and various additional stats have
+            been added. The mode is now used for
+            the purpose of setting the background 
+            levels
 
 '''
 
@@ -183,7 +193,7 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
             two_masked=np.ma.array(two[0].data,mask=xmask)
             xxdelta=two_masked-one_masked
             xdelta=xxdelta.compressed()
-            med_true,med_low,med_hi=medianrange(xdelta)
+            # med_true,med_low,med_hi=medianrange(xdelta)
             mean=np.ma.average(xdelta)
             med=np.ma.median(xdelta)
             std=np.ma.std(xdelta)
