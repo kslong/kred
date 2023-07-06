@@ -262,10 +262,10 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
     for one_file in files:
         for one_line in y:
             if one_file==one_line['file1']:
-                b.append(-one_line['med1'])
+                b.append(-one_line['Delta'])
                 break
             elif one_file==one_line['file2']:
-                b.append(-one_line['med2'])
+                b.append(-one_line['Delta'])
                 break
     # print(len(b))
     
