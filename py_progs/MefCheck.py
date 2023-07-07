@@ -186,6 +186,10 @@ def steer(argv):
             fields.append(argv[i])
         i+=1
 
+    if os.path.isdir('./Summary')==False:
+        os.mkdir('./Summary')
+        print('Created a new Summary directory')
+
     if xall==True:
         xfields=glob('%s/*' % MEFDIR)
 

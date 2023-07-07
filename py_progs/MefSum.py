@@ -130,7 +130,7 @@ def get_keyword(key,ext):
     of an already opened fits file, e.g x[0]
     
     Note that one does not include .header in
-    the cal
+    the call
 
     History:
 
@@ -166,7 +166,10 @@ def get_keyword(key,ext):
                           
 
 def get_mef_overview(field='LMC_c45'):
-    
+    '''
+    Get keyword  information from the 0th exetnsion of the mef files
+    in a single field
+    '''
 
     files=glob('%s/%s/mef/*ooi*fz' % (MEFDIR,field))
     if len(files)==0:
@@ -217,7 +220,7 @@ def get_mef_overview(field='LMC_c45'):
 
 def do_one_det_overview(filename,keys,calc_sigma_clipped=False):
     '''
-    Process a the detectors in a single file
+    Get stastictics and keyword values for the various ccd images in a single mef image    
     '''
     start_time = timeit.default_timer()
     # log_message('Starting %s ' % filename)
@@ -277,6 +280,11 @@ def get_det_overview(field='LMC_c45',nproc=1,calc_sigma_clipped=False):
     Get information about the individual CCDs, including 
     some statistics associated with the data that is 
     useful for estimating background
+
+    Normally this produces the standard median, mean and standard deviation
+    for the image, but asa diagnosic mode one can produced sigma clipped
+    statistics.   The mode is also produced, and usually this is what
+    is used for initial sky subtraction.
     '''
     
     files=glob('%s/%s/mef/*ooi*fz' % (MEFDIR,field))
@@ -348,8 +356,7 @@ def get_det_overview(field='LMC_c45',nproc=1,calc_sigma_clipped=False):
 
 def do_one(field='LMC_c45',nproc=1,do_mef=True,do_det=True,calc_sigma_clipped=False):
         '''
-        Simply get all the information one wants about the imaages associated
-        with a single field
+        Proecess a single field.                                              
         '''
         open_log('%s.log' % field,reinitialize=True)
         log_message('Starting MefSum on %s'% field)
@@ -363,8 +370,7 @@ def do_one(field='LMC_c45',nproc=1,do_mef=True,do_det=True,calc_sigma_clipped=Fa
 
 def steer(argv):
     '''
-    This is just a sterring routine, 
-    and at present is not very useful,
+    This is just a steering routine, 
     '''
 
     if os.path.isdir(MEFDIR)==False:
