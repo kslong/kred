@@ -12,12 +12,13 @@ how overlap regions of various images compare
 
 Command line usage (if any):
 
-    usage: BackStats.py  [-np 8] [-all] [-rm] field T01 T02 ...
+    usage: BackStats.py  [-np 8] [-all] [-rm] [-sigma_clipped] field T01 T02 ...
 
     where field is a field name, and the following numbers are one 
     or more tiles
 
     -all implies to do all tiles
+
     -rm causes the files that were created by BackPrep to be deleted
     if the stats were carried out successfully.  This only occurs
     at the end of the program so that if something fails along
@@ -25,6 +26,11 @@ Command line usage (if any):
 
     -np 8  implies to perform calculations in parallel, with in
     this case 8 threads
+
+    -sigma_clipped is a diagnostic mode (which greatly increases
+    the run time (but which calculates the mean, median, and std
+    of the differences with sigma_clipped versions of these
+    routines.)
 
 Description:  
 
@@ -48,6 +54,10 @@ History:
 
 230505 ksl Coding begun and routine parallelized
 230617 ksl Adapted to new version of routines
+230704 ksl The mode and various additional stats have
+            been added. The mode is now used for
+            the purpose of setting the background 
+            levels
 
 '''
 
@@ -61,18 +71,105 @@ from astropy.stats import sigma_clipped_stats
 from multiprocessing import Pool
 from log import *
 import shutil
+from medianrange import *
+import timeit
+
+
+
+def halfsamplemode(inputData, axis=None):
+
+    """Compute mode of an array using the half-sample algorithm"""
+
+    if axis is not None:
+        return np.apply_along_axis(halfsamplemode, axis, inputData)
+
+    vals = np.sort(inputData.ravel())
+    n = len(vals)
+    while n > 2:
+        nhalf = (n+1)//2
+        isub = (vals[n-nhalf:]-vals[:nhalf]).argmin()
+        vals = vals[isub:isub+nhalf]
+        n = nhalf
+    if n == 2:
+        return 0.5*(vals[0]+vals[1])
+    else:
+        return vals[0]
+
+def quartile_stats(xdata):
+    '''
+    Compute skew, etc, of a distribution with outlier 
+    rejection
+
+    See: https://towardsdatascience.com/skewness-and-kurtosis-with-outliers-f43167532c69
+    '''
+
+    vals=np.sort(xdata.ravel())
+
+    # eliminate outliers
+    n=len(vals)
+    q3=vals[int(0.75*n)]
+    q1=vals[int(0.25*n)]
+    iqr=q3-q1
+    xmin=q1-1.5*iqr
+    xmax=q3+1.5*iqr
+
+    xvals=vals[vals>xmin]
+    xxvals=xvals[xvals<xmax]
+
+
+    std=np.std(xxvals)
+    mean=np.average(xxvals)
+    med=np.median(xxvals)
+
+    skew=(xxvals-mean)**3/std**3
+    skew=np.average(skew)
+
+    kurt=(xxvals-mean)**4/std**4
+    kurt=np.average(kurt)
+
+    # print('%10.3f %10.3f %10.3f %10.3f %10.3f' % (med,mean,std,skew,kurt))
+
+    return skew,kurt
+
+
+
+
+
+
 
 BACKDIR='DECam_BACK'
 
-def calculate_one(file,xmatch_files,indir):
+def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100):
     '''
-    Get statistics in the overlap region of
-    one file to a number of files
+    Get statistics and make an estimate in
+    the difference backgroound from the overlap region of
+    images all of which must have the same 
+    WCS (or actually image size)  
 
-    The returns a list of records which 
-    give the mean,median and std of each file 
+    one file to a number of file
+
+    where:
+    file is the name of a fits files files for
+        which serves as a base file
+    xmatch_files is a list of fits 
+        for which offsets will be calculated
+    imdir is the directory where the fits
+        files are locatd
+    calc_sigma_clipped means that in addtition to
+        calculationg the standard set of statistics, sigma
+        cliped values of the mean,median, and std are
+        calculated. This increases the program run
+        time significantly and so is used here as
+        an option.
+    npix_min is the minimum numver of pixels
+        that must overlap the image
+
+    The routine returns a list of records which 
+    gives various statistics of the overlap regions,
+    including the mode, mean,median and std 
     in the overlap region
     '''
+    # print('Starting %s  with %d matches' % (file,len(xmatch_files)))
 
     one=fits.open('%s/%s' % (indir,file))
     records=[]
@@ -80,11 +177,12 @@ def calculate_one(file,xmatch_files,indir):
     j=0
     while j<len(xmatch_files):
         one_record=[]
+        # print('starting %d %s' % (j,xmatch_files[j]))
         two=fits.open('%s/%s' % (indir,xmatch_files[j]))
         overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
         nonzero=np.count_nonzero(overlap)
 
-        if nonzero>0:
+        if nonzero>npix_min:
             ok=True
             one_record=[file,xmatch_files[j],nonzero]
 
@@ -93,29 +191,59 @@ def calculate_one(file,xmatch_files,indir):
             xmask=overlap-1
             one_masked=np.ma.array(one[0].data,mask=xmask)
             two_masked=np.ma.array(two[0].data,mask=xmask)
-            mean,median,std=sigma_clipped_stats(one_masked,sigma_lower=3,sigma_upper=2,grow=3)
-            if np.isnan(median):
+            xxdelta=two_masked-one_masked
+            xdelta=xxdelta.compressed()
+            # med_true,med_low,med_hi=medianrange(xdelta)
+            mean=np.ma.average(xdelta)
+            med=np.ma.median(xdelta)
+            std=np.ma.std(xdelta)
+            if np.isnan(med):
                 ok=False
-            one_record=one_record+[mean,median,std]
-            mean,median,std=sigma_clipped_stats(two_masked,sigma_lower=3,sigma_upper=2,grow=3)
-            if np.isnan(median):
-                ok=False
-            one_record=one_record+[mean,median,std]  
-                
-            if ok==True:
+
+            if ok:
+                # add the unbiased values
+                one_record=one_record+[mean,med,std]
+                # add the clipped values
+                if calc_sigma_clipped: 
+                    mean1,median1,std1=sigma_clipped_stats(xxdelta,sigma_lower=2,sigma_upper=2,grow=3)
+                    if np.isnan(median1):
+                        ok=False
+                else:
+                    mean1=-99.
+                    median1=-99.
+                    std1=-99.
+
+            # Add the skew and kurtosis
+            if ok:
+                one_record=one_record+[mean1,median1,std1]
+                skew,kurt=quartile_stats(xdelta)
+                if np.isnan(skew):
+                    ok=False
+
+            if ok:
+                one_record=one_record+[skew,kurt]
+                # add the mode
+                xmode=halfsamplemode(xdelta)
+                if np.isnan(xmode):
+                    ok=False
+
+            if ok:
+                one_record=one_record+[xmode]
+                # print('succeeded')
                 records.append(one_record)
-            # print(one_record)
+            else:
+                print('Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
 
         two.close()
         j+=1
     one.close()
-    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file))
+    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
     return records
 
 
         
         
-def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
+def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
 
     sumfile='Summary/%s_%s_overlap.txt' % (field,tile)
     try:
@@ -149,13 +277,15 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     all_inputs=[]
     while i<len(qfiles):
         files=x[x['Filename']==qfiles[i]]
-        all_inputs.append([qfiles[i],files['XFilename'],indir])
+        all_inputs.append([qfiles[i],files['XFilename'],indir,calc_sigma_clipped])
         i+=1
+    
+    log_message('BackStats:  %s %s has %d files to process' % (field,tile,len(all_inputs)))
 
     if nproc<2:
         i=0
-        while i<len(files):
-            xrecords=calculate_one(all_inputs[i][0],all_inputs[i][1],all_inputs[i][2])
+        while i<len(all_inputs):
+            xrecords=calculate_one(all_inputs[i][0],all_inputs[i][1],all_inputs[i][2],all_inputs[i][3])
             records=records+xrecords
             i+=1
     else:
@@ -167,7 +297,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
 
     xrecords=np.array(records)
     
-    xtab=Table(xrecords,names=['file1','file2','npix','mean1','med1','std1','mean2','med2','std2'])
+    xtab=Table(xrecords,names=['file1','file2','npix','mean','med','std','mean_clipped','med_clipped','std_clipped','skew','kurt','Delta'])
     # Next lines are a cheat to get the formats to be sensible
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
     xtab=ascii.read('foo.txt')
@@ -175,12 +305,14 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     # Now rescale to account for pixel size
     scale_factor=(0.27*0.27)/(2.*2.)
 
-    xtab['mean1']*=scale_factor
-    xtab['med1']*=scale_factor
-    xtab['std1']*=scale_factor
-    xtab['mean2']*=scale_factor
-    xtab['med2']*=scale_factor
-    xtab['std2']*=scale_factor
+    xtab['mean']*=scale_factor
+    xtab['med']*=scale_factor
+    xtab['std']*=scale_factor
+    if calc_sigma_clipped:
+        xtab['mean_clipped']*=scale_factor
+        xtab['med_clipped']*=scale_factor
+        xtab['std_clipped']*=scale_factor
+    xtab['Delta']*=scale_factor
 
     colnames=xtab.colnames
     i=0
@@ -200,12 +332,16 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
         
 
     ztab=xtab[colnames]
-    ztab['mean1'].format='.3f'
-    ztab['mean2'].format='.3f'
-    ztab['med1'].format='.3f'
-    ztab['med2'].format='.3f'
-    ztab['std1'].format='.3f'
-    ztab['std2'].format='.3f'
+    ztab['mean'].format='.3f'
+    ztab['mean'].format='.3f'
+    ztab['med'].format='.3f'
+    ztab['std'].format='.3f'
+    ztab['med_clipped'].format='.3f'
+    ztab['mean_clipped'].format='.3f'
+    ztab['std_clipped'].format='.3f'
+    ztab['skew'].format='.3f'
+    ztab['kurt'].format='.3f'
+    ztab['Delta'].format='.3f'
 
 
 
@@ -215,9 +351,6 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1):
     imsum.rename_column('Filename','file1')
 
     ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
-
-
-
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
@@ -233,6 +366,7 @@ def steer(argv):
     xall=False
     nproc=0
     xremove=False
+    calc_sigma_clipped=False
 
     i=1
     while i<len(argv):
@@ -243,6 +377,8 @@ def steer(argv):
             xall=True
         elif argv[i]=='-rm':
             xremove=True
+        elif argv[i]=='-sigma_clipped':
+            calc_sigma_clipped=True
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
@@ -266,14 +402,21 @@ def steer(argv):
         print('The tiles to be processed must be listed after the field, unless -all is invoked')
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
-        log_message('BackStats: Starting %s %s' % (field,one))
+        if calc_sigma_clipped:
+            log_message('BackStats: Starting %s %s with %d processors (w/ sigma_clipped stats)' % (field,one,nproc))
+        else:
+            log_message('BackStats: Starting %s %s with %d processors (w/o sigma_clipped_stats)' % (field,one,nproc))
+
+
+        start_time=timeit.default_timer()
         try:
-            do_one_tile(field,one,nproc)
+            do_one_tile(field,one,nproc,calc_sigma_clipped)
         except IOError:
             log_message('BackStats: Failed on %s %s' % (field,one))
             return
 
-        log_message('BackStats: Finished %s %s' % (field,one))
+        current_time=timeit.default_timer()
+        log_message('BackStats: Finished %s %s in %.1f s' % (field,one,current_time-start_time))
     close_log()
 
     if xremove:

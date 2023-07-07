@@ -59,6 +59,9 @@ Notes:
 
     As written one can only PrepFiles from a specific MEF directory
 
+    Here unlike MefSum.py, individual filess are processed with  individual
+    threads, so generally speaking all requested threads are utilized    
+
 
 History:
 
@@ -208,6 +211,8 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     
     if back_type=='none':
         back=0
+    elif back_type=='mode':
+        back=np.median(det['Mode'])
     elif back_type=='med':
         back=np.median(det['Med'])
     elif back_type=='min':
@@ -370,7 +375,7 @@ def steer(argv):
     xall=False
     redo=True 
     nproc=1
-    xback='med' 
+    xback='mode' 
     outdir=''
 
     i=1
