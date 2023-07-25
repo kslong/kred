@@ -1,0 +1,15 @@
+FIELD=$1
+MefCheck.py $FIELD
+MefSum.py  -np 8 $FIELD
+MefPrep.py -np 8 $FIELD
+SetupTile.py -all $FIELD
+SwarpSetup.py -all  $FIELD
+Swarp.py -all $FIELD
+FindOverlaps.py -all $FIELD
+BackPrep.py -all -run $FIELD
+BackStats.py -all -np 8 -rm $FIELD
+BackCalc.py -all $FIELD
+BackSub.py -all -np 8 $FIELD
+SwarpSetup.py -all -bsub $FIELD
+Swarp.py -all -bsub $FIELD 
+SwarpEval.py -all $FIELD
