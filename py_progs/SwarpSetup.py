@@ -98,58 +98,80 @@ def summarize(field='LMC_c42',tile='T07'):
     print('N708 images : %3d' % len(n708))
     
     print('\nHa')
-    times,counts=np.unique(ha['EXPTIME'],return_counts=True)
+    if len(ha) >0:
+        times,counts=np.unique(ha['EXPTIME'],return_counts=True)
 
-    records=[times,counts]
-    xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['FILTER']='N662'
-    ztab=xtab.copy()
+        records=[times,counts]
+        xtab=Table(records,names=['EXPTIME','Number'])
+        xtab['FILTER']='N662'
+        ztab=xtab.copy()
 
-    i=0
-    while i<len(times):
-        print('   exp %8s  no %4d' % (times[i],counts[i]))
-        i+=1
+        i=0
+        while i<len(times):
+            print('   exp %8s  no %4d' % (times[i],counts[i]))
+            i+=1
+    else:
+        print('This tile contains no Ha images')
 
     print('\nSII')
-    times,counts=np.unique(s2['EXPTIME'],return_counts=True)
 
-    records=[times,counts]
-    xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['FILTER']='N673'
-    ztab=vstack([ztab,xtab])
+    if len(s2)>0:
+        times,counts=np.unique(s2['EXPTIME'],return_counts=True)
 
-    i=0
-    while i<len(times):
-        print('   exp %8s  no %4d' % (times[i],counts[i]))
-        i+=1
+        records=[times,counts]
+        xtab=Table(records,names=['EXPTIME','Number'])
+        xtab['FILTER']='N673'
+        try:
+            ztab=vstack([ztab,xtab])
+        except:
+            ztab=xtab.copy()
+
+        i=0
+        while i<len(times):
+            print('   exp %8s  no %4d' % (times[i],counts[i]))
+            i+=1
+    else:
+        print('This tile contains no SII images')
         
     print('\nR')
-    times,counts=np.unique(r['EXPTIME'],return_counts=True)
+    if len(r)>0:
+        times,counts=np.unique(r['EXPTIME'],return_counts=True)
 
-    records=[times,counts]
-    xtab=Table(records,names=['EXPTIME','Number'])
-    xtab['FILTER']='r'
-    ztab=vstack([ztab,xtab])
+        records=[times,counts]
+        xtab=Table(records,names=['EXPTIME','Number'])
+        xtab['FILTER']='r'
+        try:
+            ztab=vstack([ztab,xtab])
+        except:
+            ztab=xtab.copy()
 
-    i=0
-    while i<len(times):
-        print('   exp %8s  no %4d' % (times[i],counts[i]))
-        i+=1    
+        i=0
+        while i<len(times):
+            print('   exp %8s  no %4d' % (times[i],counts[i]))
+            i+=1    
+    else:
+        print('This tile contains no R band images')
         
     print('\nN708')
-    times,counts=np.unique(n708['EXPTIME'],return_counts=True)
 
-    records=[times,counts]
-    xtab=Table(records,names=['EXPTIME','Number'])
-    if len(xtab)>0:
-        xtab['FILTER']='N708'
-        ztab=vstack([ztab,xtab])
+    if len(n708)>0:
+        times,counts=np.unique(n708['EXPTIME'],return_counts=True)
 
+        records=[times,counts]
+        xtab=Table(records,names=['EXPTIME','Number'])
+        if len(xtab)>0:
+            xtab['FILTER']='N708'
+        try:
+            ztab=vstack([ztab,xtab])
+        except:
+            ztab=xtab.copy()
 
-    i=0
-    while i<len(times):
-        print('   exp %8s  no %4d' % (times[i],counts[i]))
-        i+=1
+        i=0
+        while i<len(times):
+            print('   exp %8s  no %4d' % (times[i],counts[i]))
+            i+=1
+    else:
+        print('This tile contains no N708 images')
 
     return ztab  
 
