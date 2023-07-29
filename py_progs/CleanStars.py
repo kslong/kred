@@ -12,13 +12,20 @@ simple subtraction
 
 Command line usage (if any):
 
-    usage: CleanStars.py directory
+    usage: CleanStars.py [-all] field [tiles]
+
+    where -all will cause CleanStars to be run on all 16 tiles in a field
+
+    and if -all is not given, then one or more tiles should be listed
+
 
 Description:  
 
     This routine produces simple images that
     have been subtracted to remove the coinuum
     (or from the r-band continuum the emissionlines)
+
+    It must be run from the top level kred directory
 
     The routine is currently hardwired to use the
     longest exposures of a particular filter type.
@@ -51,8 +58,7 @@ Description:
     LMC_c42_T07.n708_sub.fits     - n708 image (after subtracting a biased median) 
 
 
-    The outputs are written to the directory from which the program is being run.  The rootnames
-    are taken from the files themselves.  
+    The outputs are written to a subdirectory of DECam_SUB
 
 
 Primary routines:
@@ -81,6 +87,8 @@ from glob import glob
 import matplotlib.pyplot as plt
 from astropy.stats import sigma_clipped_stats
 from astropy.wcs import WCS
+
+from log import *
 
 
 
@@ -120,6 +128,7 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
     s2_exists=False
     r_exists=False
 
+
     
     try:
         zha=fits.open(ha)
@@ -143,14 +152,16 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
         return
     
 
-    mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-    print('ha:  ',mean,median,std)
-    zha[0].data-=median
+    if ha_exists:
+        mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+        print('ha:  ',mean,median,std)
+        zha[0].data-=median
 
     
-    mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-    print('s2:  ',mean,median,std)
-    zs2[0].data-=median
+    if s2_exists:
+        mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+        print('s2:  ',mean,median,std)
+        zs2[0].data-=median
 
     if outroot=='':
         word=ha.split('.')
@@ -215,14 +226,16 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         print('The N708 file could not be opened: %s' % n708)
         return
 
-    mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-    print('ha:  ',mean,median,std)
-    zha[0].data-=median
+    if ha_exists:
+        mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+        print('ha:  ',mean,median,std)
+        zha[0].data-=median
 
     
-    mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-    print('s2:  ',mean,median,std)
-    zs2[0].data-=median
+    if s2_exists:
+        mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+        print('s2:  ',mean,median,std)
+        zs2[0].data-=median
 
     mean,median,std=sigma_clipped_stats(zn708[0].data,sigma_lower=2,sigma_upper=1,grow=3)
     print('n708: ',mean,median,std)
@@ -247,7 +260,7 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         zs2.writeto(outroot+'.s2_sub_n708.fits',overwrite=True)
         
 
-def doit(xdir='data'):
+def doit(xdir='data',outdir='data'):
     '''
     Routine to produce star subtracted images
     '''
@@ -301,17 +314,68 @@ def doit(xdir='data'):
 
 
     if r!='none':
-        make_rband_subtractions(ha,s2,r,outroot=zroot)
+        make_rband_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
         print('No r band image found')
 
     if n708!='none':
-        make_n708_subtractions(ha,s2,r,outroot=zroot)
+        make_n708_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
         print('No N708 image found')
 
 
 
+
+def steer(argv):
+    '''
+    This is just a steering routine for running swarp on one or more
+    tiles from the command line
+
+    '''
+    field=''
+    tiles=[]
+    xall=False
+
+    i=1
+    while i<len(argv):
+        if argv[i]=='-h':
+            print(__doc__)
+            return
+        elif argv[i]=='-all':
+            xall=True
+        elif field=='':
+            field=argv[i]
+        else:
+            tiles.append(argv[i])
+        i+=1
+
+    if xall:
+        tiles=[]
+        i=1
+        while i<17:
+            tiles.append('T%02d' % i)
+            i+=1
+
+    open_log('%s.log' % field,reinitialize=False)
+
+    for tile in tiles:
+        indir='DECam_SWARP/%s/%s_b/' % (field,tile)
+        outdir='DECam_SUB/%s/%s' % (field,tile)
+
+        if os.path.isdir(indir)==False:
+            print('Cannot find input directory: %s ' % indir)
+            contineu
+        if os.path.isdir(outdir)==False:
+            os.makedirs(outdir)
+
+        doit(indir,outdir)
+
+        log_message('CleanStars: Finished  %s %s ' % (field,tile))
+
+    close_log()
+
+
+    return
 
 
 
@@ -320,7 +384,6 @@ def doit(xdir='data'):
 if __name__ == "__main__":
     import sys
     if len(sys.argv)>1:
-        # doit(int(sys.argv[1]))
-        doit(sys.argv[1])
+        steer(sys.argv)
     else:
         print (__doc__)

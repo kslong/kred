@@ -148,6 +148,12 @@ to highlight flaws.  The images for a field
 are stored in the directory DECam\_SWARP/field/eval
 where field is the field name, e.g. LMC\_c42
 
+* CleanStars.py - This routines attempts to create continuum
+subtracted images by first creating emission line
+fre images of the N708 and r-band images and then 
+subtracting these from the emission line images.  The
+results are stored in the directory DECam\_SUB/field/tile
+
 
 **All of the scripts in this sequence should
 be run from the toplevel directory for the data
@@ -242,6 +248,7 @@ BackSub.py -all -np 8 LMC_c42
 SwarpSetup.py -all -bsub LMC_c42 
 Swarp.py -all -bsub LMC_c42 T02
 SwarpEval.py -all LMC_c42
+CleanStars.py -all LMC_c42
 ````
 
 Creating a command file and commenting out the sections 
