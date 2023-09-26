@@ -18,7 +18,7 @@ Description:
 
     BackPrep.py without the -run simply sets up the Swarps
 
-    With -run it will actaul run all the swarps
+    With -run it will actual run all the swarps
 
                                        
 History:

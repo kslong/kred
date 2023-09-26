@@ -21,8 +21,8 @@ where -all will cause swarp to be run on all 16 tiles.  With these inputs, the r
 use the files ending in _sw.tab to set up run files
 
 and -bsub directs the routine to use data for which an addtioal backgound subtraction
-algorithm has been used.  In theis case the Swarp commmands are written and to
-the DECAam_SWARP/field/tile_b directory, so that data results which are
+algorithm has been used.  In this case the Swarp commmands are written and to
+the DECam_SWARP/field/tile_b directory, so that data results which are
 background sutbracted and those that are not can be compared.
 
 If one wants to run only 1 or a few tiles then the command will be something like

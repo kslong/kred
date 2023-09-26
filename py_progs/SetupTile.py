@@ -59,6 +59,7 @@ from astropy.io import ascii
 from log import *
 
 CWD=os.getcwd()
+DATADIR='%s/DECam_CCD/' % (CWD)
 PREPDIR='%s/DECam_PREP/' % (CWD)
 
 
@@ -161,7 +162,7 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     else:
         print('Failed to set up %s %s' % (field,tile))
 
-    data_dir='%s/%s/data' % (PREPDIR,field)
+    data_dir='%s/%s/data' % (DATADIR,field)
 
     if os.path.isdir(data_dir) == False:
         print('Error: %s does not appear to exist' % data_dir)
@@ -246,6 +247,10 @@ def steer(argv):
                 tiles.append(argv[i])
         i+=1
 
+    if xall==False and len(tiles)==0:
+        print('Sorry: there seems to be nothing to do')
+        print('-all not set and no tiles to set up provided' )
+        return
 
 
     if table=='':
