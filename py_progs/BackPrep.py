@@ -298,11 +298,22 @@ def steer(argv):
         i+=1
 
     if xall:
-        tiles=[]
-        i=1
-        while i<17:
-            tiles.append('T%02d' % i)
-            i+=1
+        # Assumme all directories with fits files should be searched
+        # Assume we could have both background subtracted and non
+        # background subtracted data to deal with
+        xfiles=glob('%s/%s/*/*.fits' % (PREPDIR,field))
+        xdirs=[]
+        for one in xfiles:
+            words=one.split('/')
+            xdirs.append(words[-2].replace('_b',''))
+
+        tiles=np.unique(xdirs)
+#    if xall:
+#        tiles=[]
+#        i=1
+#        while i<17:
+#            tiles.append('T%02d' % i)
+#            i+=1
 
     if len(tiles)==0:
         print('The tiles to be processed must be listed after the field, unless -all is invoked')

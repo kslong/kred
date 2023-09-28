@@ -75,16 +75,6 @@ def get_files(field,tile,xfilter='Ha'):
     with a specific filter in a tile
     '''
 
-    det_file='Summary/%s_det.tab' % (field)
-    try:
-        det=ascii.read(det_file)
-        filenames=[]
-        for one in det:
-            filenames.append('%s_%s.fits' % (one['Root'],one['EXTNAME']))
-        det['Filename']=filenames
-    except:
-        print('Error could not locate %s ' % det_file)
-        raise IOError 
 
     imsum_file='Summary/%s_%s.txt' % (field,tile)  
     try:
@@ -93,9 +83,8 @@ def get_files(field,tile,xfilter='Ha'):
         print('Error: could not locate %s' % imsum_file)
         raise IOError
 
-    xall=join(imsum,det,join_type='left')
 
-    xtab=xall[xall['FILTER']==xfilter]
+    xtab=imsum[imsum['FILTER']==xfilter]
 
     if len(xtab)==False:
         print('No appropriate files were found for %s' % xfilter)

@@ -63,7 +63,9 @@ DATADIR='%s/DECam_CCD/' % (CWD)
 PREPDIR='%s/DECam_PREP/' % (CWD)
 
 
-def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.17,size_deg=.1):
+def find_files_to_prep(field='LMC_c45',ra_center=81.1,dec_center=-66.17,size_deg=.1):
+
+
     
     tab_file='Summary/%s_det.tab' % (field)
     if os.path.isfile(tab_file):
@@ -150,28 +152,41 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
 
 
 
-def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67):
+def setup_one_tile(field='LMC_c42',xmaster='snr',tile='foo',ra=81.108313,dec=-66.177280,size_deg=0.67):
     
 
-    
+    if field=='all':
+        det_files=glob('Summary/*det.tab')
+        print('Det files ',det_files)
+        xfield=[]
+        for one in det_files:
+            words=one.split('/')
+            xfield.append(words[-1].replace('_det.tab',''))
+    else:
+        xfield=field
+
+    print(xfield)
+
+    i=0
+    for one in xfield:
+        if i==0:
+           x=find_files_to_prep(one,ra,dec,size_deg)
+           if len(x)>0:
+               i+=1
+        else:
+            xx=find_files_to_prep(one,ra,dec,size_deg)
+            x=vstack([x,xx])
         
-    x=find_files_to_prep(field,tile,ra,dec,size_deg)
 
     if len(x)>0:
-        outfile='Summary/%s_%s.txt' % (field,tile)
+        outfile='Summary/%s_%s.txt' % (xmaster,tile)
         x.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
-        print('Failed to set up %s %s' % (field,tile))
+        print('Failed to set up %s %s  %s' % (field,xmaster,tile))
 
-    data_dir='%s/%s/data' % (DATADIR,field)
+    tile_dir='%s/%s/%s/' % (PREPDIR,xmaster,tile)
 
-    if os.path.isdir(data_dir) == False:
-        print('Error: %s does not appear to exist' % data_dir)
-        print('Run PrepMef on this field first')
-        raise IOError
-
-    tile_dir='%s/%s/%s/' % (PREPDIR,field,tile)
-
+    print('HELLO',tile_dir)
     if os.path.isdir(tile_dir)==False:
         print('Creating the Prep directory as %s' % tile_dir)
         os.makedirs(tile_dir)
@@ -185,6 +200,15 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
 
     nerrors=0
     for one in x:
+
+        data_dir='%s/%s/data' % (DATADIR,one['Field'])
+
+        if os.path.isdir(data_dir) == False:
+            print('Error: %s does not appear to exist' % data_dir)
+            print('Run PrepMef on this field first')
+            raise IOError
+
+
         one_file=one['Filename']
         data_file='%s/%s' % (data_dir,one_file)
         tile_file='%s/%s' % (tile_dir,one_file)
@@ -217,45 +241,85 @@ def setup_tiles(xtab):
         setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'])
 
 
+def setup_objects(source_names,table_name,fields,xdir):
+    '''
+    '''
+
+    print('got here')
+    x=ascii.read(table_name)
+
+    for one in source_names:
+        ztab=x[x['Source_name']==one]
+        print('ok',ztab)
+        name=ztab['Source_name'][0]
+        xra=ztab['RA'][0]
+        xdec=ztab['Dec'][0]
+        try:
+            xsize=ztab['Size'][0]
+        except:
+            xsize=0.3
+
+        setup_one_tile(field=fields,xmaster=xdir,tile=name,ra=xra,dec=xdec,size_deg=xsize)
+
+
+
+
+
 def steer(argv):
     '''
     This is just a steering routine
+
+    The command line it interprets is
+
+    SetupSpecial  [-all]  [-field LMC_c40] [-field LMC_c42] -top_dir foo tab source_name1 [Source_name]
+
+    where -top_dir gives the top_level directories a name
+    where -all says to do all of the sources in the xtab file
     '''
     field=''
     tiles=[]
     xall=False
     table=''
+    xfields=[]
+    xobjects=[]
+    top_dir=''
 
     i=1
+
     while i<len(argv):
         if argv[i]=='-h':
             print(__doc__)
             return
         elif argv[i]=='-all':
             xall=True
-        elif argv[i]=='-xtab':
+        elif argv[i]=='-field':
             i+=1
-            table=argv[i]
+            xfields.append(argv[i])
         elif argv[i][0]=='-':
             print('Error: Unknown switch %s ' % argv[i])
             return
-        elif field=='':
-            field=argv[i]
+        elif table=='':
+            table= argv[i]
         else:
-            if field=='':
-                field=argv[i]
-            else:
-                tiles.append(argv[i])
+            xobjects.append(argv[i])
         i+=1
 
-    if xall==False and len(tiles)==0:
+    if table=='':
+        print('Sorry: there seems to be nothing to do')
+        print('No table of sources provided' )
+        return
+
+    try:
+        xtab=ascii.read(table)
+    except:
+        print('Sorry: could not read %s' % table)
+
+
+
+    if xall==False and len(xobjects)==0:
         print('Sorry: there seems to be nothing to do')
         print('-all not set and no tiles to set up provided' )
         return
-
-
-    if table=='':
-        table='MC_tiles.txt'
 
     kred=os.getenv('KRED')
     if os.path.isfile(table):
@@ -266,39 +330,52 @@ def steer(argv):
         print('Error: Could not find %s in local director or in kred/config' % table)
         return
 
-    xtab=xtab[xtab['Field']==field]
 
-    if len(xtab)==0:
-        print('Could not find field %s in %s' % (field,table))
-        return 0
-
-    if xall==False:
-
-        i=0         
-        for one_tile in tiles:
-            q=xtab[xtab['Tile']==one_tile]
-            if i==0:
-                xtiles=q.copy()
-                i+=1
-            else:
-                xtiles=vstack([xtiles,q])
+    if xall==True:
+        xobjects=xtab['Source_name']
     else:
-        xtiles=xtab
+        # Verify the objects are in the table
+        xfound=[]
+        objects_in_table=xtab['Source_name']
+        for one in xobjects:
+            good=False
+            igood=[]
+            i=0
+            for one_object in objects_in_table:
+                if one==one_object:
+                    xfound.append(one)
+                    print('Found %s in table' % one)
+                    good=True
+                    break
+                i+=1
+            if good==False:
+                print('Could not find %s in table' % one)
 
-    if len(xtiles)==0:
-        print('Sorry: there seems to be nothing to do')
-        print('Looked for the following tiles: ',tiles)
+            xobjects=xfound
+
+    if len(xobjects)==0:
+        print('Sorrry: there seems to be nothing to do')
         return
+    else:
+        print('There are %d objects to setup' % len(xobjects))
 
-    setup_tiles(xtiles)
+    # At this point the objects we want to analyze are contained in xobjects
 
-    fields=np.unique(xtiles['Field'])
-    for one in fields:
-        open_log('%s.log' % one)
-        foo=xtiles[xtiles['Field']==one]
-        for one_tile in foo:
-            log_message('SetupTile %s %s' % (one_tile['Field'],one_tile['Tile']))
-        close_log()
+    if top_dir=='':
+        words=table.split('/')
+        top_dir=words[-1].replace('.txt','')
+
+
+
+    setup_objects(source_names=xobjects,table_name=table,fields=xfields,xdir=top_dir)
+
+    # fields=np.unique(xtiles['Field'])
+    # for one in fields:
+    #     open_log('%s.log' % one)
+    #     foo=xtiles[xtiles['Field']==one]
+    #     for one_tile in foo:
+    #         log_message('SetupTile %s %s' % (one_tile['Field'],one_tile['Tile']))
+    #     close_log()
 
 
     return
