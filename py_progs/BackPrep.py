@@ -12,13 +12,14 @@ background
 
 Command line usage (if any):
 
-    usage: BackPrep.py [-all ] [-run] field tile
+    usage: BackPrep.py [-all ] [-setup] [-run] field tile
 
 Description:  
 
     BackPrep.py without the -run simply sets up the Swarps
 
-    With -run it will actual run all the swarps
+    With -run it will actual run all the swarps (this is the default
+    with -setup it will only set everything up.
 
                                        
 History:
@@ -286,6 +287,8 @@ def steer(argv):
             xall=True
         elif argv[i]=='-run':
             xrun=True
+        elif argv[i]=='-setup':
+            xrun=False
         elif argv[i]=='-redo':
             xredo=True
         elif argv[i][0]=='-':
@@ -296,6 +299,11 @@ def steer(argv):
         else:
             tiles.append(argv[i])
         i+=1
+
+    if xrun:
+        print('Preparing runs and executing')
+    else:
+        print('Preparing run, but NOT executing')
 
     if xall:
         # Assumme all directories with fits files should be searched
@@ -308,12 +316,6 @@ def steer(argv):
             xdirs.append(words[-2].replace('_b',''))
 
         tiles=np.unique(xdirs)
-#    if xall:
-#        tiles=[]
-#        i=1
-#        while i<17:
-#            tiles.append('T%02d' % i)
-#            i+=1
 
     if len(tiles)==0:
         print('The tiles to be processed must be listed after the field, unless -all is invoked')

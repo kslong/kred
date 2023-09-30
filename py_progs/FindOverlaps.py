@@ -52,7 +52,10 @@ Notes:
     file_b matches file_a
 
     There is no significance to the order of
-    filer_a and file_b.  
+    file_a and file_b.  
+
+    This routine depends on having run either SetupTile or SetupSpecial, but does
+    not require SwarpSetup, or Swarp.
                                        
 History:
 

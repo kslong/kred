@@ -9,6 +9,8 @@ import subprocess
 import os
 import sys
 
+LOG_DIR='./Log/'
+
 log_file = None
 
 def open_log(file_name, reinitialize=False):
@@ -22,7 +24,10 @@ def open_log(file_name, reinitialize=False):
     else:
         mode = 'a'
     
-    log_file = open(file_name, mode)
+    if os.path.isdir(LOG_DIR==False):
+        os.mkdir(LOG_DIR)
+
+    log_file = open('%s/%s' % (LOG_DIR,file_name), mode)
 
     commit=get_current_commit()
     if commit is not None:
