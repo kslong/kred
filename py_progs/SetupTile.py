@@ -214,7 +214,14 @@ def setup_tiles(xtab):
     '''
 
     for one in xtab:
-        setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'])
+        try:
+            setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'])
+        except IOError:
+            print('Error: Something is wrong, and must be sorted before continuing')
+            print('Try rerunning MefPrep.py -finish, and then repeat this step')
+            return
+
+    return
 
 
 def steer(argv):

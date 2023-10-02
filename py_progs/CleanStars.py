@@ -359,12 +359,12 @@ def steer(argv):
     open_log('%s.log' % field,reinitialize=False)
 
     for tile in tiles:
-        indir='DECam_SWARP/%s/%s_b/' % (field,tile)
+        indir='DECam_SWARP2/%s/%s/' % (field,tile)
         outdir='DECam_SUB/%s/%s' % (field,tile)
 
         if os.path.isdir(indir)==False:
             print('Cannot find input directory: %s ' % indir)
-            contineu
+            continue
         if os.path.isdir(outdir)==False:
             os.makedirs(outdir)
 

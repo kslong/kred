@@ -57,7 +57,7 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
     if bsub==False:
         run_dir='%s1/%s/%s/' % (SWARPDIR,field,tile)
     else:
-        run_dir='%s1/%s/%s/' % (SWARPDIR,field,tile)
+        run_dir='%s2/%s/%s/' % (SWARPDIR,field,tile)
 
 
     try:
@@ -153,9 +153,9 @@ def steer(argv):
     open_log('%s.log' % field,reinitialize=False)
 
     for one in tiles:
-        if bsub and one.count('_b')==0:
+        if bsub :
             log_message('Swarp: Start run on %s %s with modified background' % (field,one))
-            one='%s_b' % one
+            one='%s' % one
         else:
             log_message('Swarp: Start run on %s %s ' % (field,one))
 
