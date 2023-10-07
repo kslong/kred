@@ -74,6 +74,7 @@ import shutil
 from medianrange import *
 import timeit
 
+ierror=False
 
 
 def halfsamplemode(inputData, axis=None):
@@ -170,6 +171,7 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
     in the overlap region
     '''
     # print('Starting %s  with %d matches' % (file,len(xmatch_files)))
+    global ierror
 
     one=fits.open('%s/%s' % (indir,file))
     records=[]
@@ -179,8 +181,13 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
         one_record=[]
         # print('starting %d %s' % (j,xmatch_files[j]))
         two=fits.open('%s/%s' % (indir,xmatch_files[j]))
-        overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
-        nonzero=np.count_nonzero(overlap)
+        try:
+            overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
+            nonzero=np.count_nonzero(overlap)
+        except:
+            log_message('Error: Problem comparing %s and %s' % (file,xmatch_files[j]))
+            nonzero=0
+            ierror=True
 
         if nonzero>npix_min:
             ok=True
@@ -417,15 +424,18 @@ def steer(argv):
 
         current_time=timeit.default_timer()
         log_message('BackStats: Finished %s %s in %.1f s' % (field,one,current_time-start_time))
-    close_log()
 
-    if xremove:
+    if ierror:
+        log_message('Error: This run of BaskStats.py had errors')
+        log_message('Error: BackPrep files not removed')
+    elif xremove:
         for one in tiles:
             xdir='%s/%s/%s' % (BACKDIR,field,one)
-            print('Removing %s' % (xdir))
+            print('There were no errors reported, removing %s' % (xdir))
             shutil.rmtree(xdir)
 
 
+    close_log()
     return
 
 
