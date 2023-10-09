@@ -282,3 +282,18 @@ and are only usdful if one wants to see the immprovement
 from a more sophistcated image mataching of backgrounds
 
 
+## Additional tools
+
+Two other programs are currently available.  Both make use of
+astropy tables with (minimally) the columns: Source\_name,RA,Dec
+where RA and Dec must be in degrees.  (Examples can be found
+in the config folder, for LMC and SMC SNRs.)
+
+* Cutout.py can be used to created cutout images at the positions of a set of objects.  Depending
+on the command line options, one can create cutouts of all the fits images in a particular directory
+or in all of the images in that directory or any of its subdirectories.
+
+* SetupSpecial.py can be used to create 'tiles' at an arbitrary set of positions, which can then
+be processed in the standard manner.  Depending on the command line switches, the program will
+attempt to use only data from specific fields, or all of the data that exists  on one's machine.
+

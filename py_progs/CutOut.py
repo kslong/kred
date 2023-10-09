@@ -11,7 +11,7 @@ in the images contained in a specific directory or set of directories
 
 Command line usage (if any):
 
-    usage: CutOut.py [-recursive] [-size 10] image_directory object_table
+    usage: CutOut.py [-r] [-size 10] image_directory object_table
 
 Description:  
 

@@ -11,26 +11,44 @@ out the initial processing steps to run PrepFiles on a set of data
 
 Command line usage (if any):
 
-    usage: SetupTile.py [-h] [-all] [-xtab myfile.txt] field tile1 tile2 ...
+    usage: SetupSpecial  -h [-all]  [-field LMC_c40] [-field LMC_c42] source_table.txt  [source_name1] [Source_name]
 
     where:
-        field is that name of a field, e.g LMC_c42
-        tile1, tiles are the names of tiles as specified in the MC_tiles.txt file 
+
+        source_table.txt is an astrpy table with the source names and positions
+
     and the optional prameters 
+
+        -field is that name of a field, e.g LMC_c42.  For multiple files one can add 
+        tile1, tiles are the names of tiles as specified in the MC_tiles.txt file 
+        If no fields are provided all of the data will be searched.
+
         -h prints this help 
-        -all  causes the program to create talbles containing the relevant
-            infomation for all of the tiles in a field
-        -xtab myfile.txt causes the program to use a different tile defination file
+        -all  causes the program to create 'tiles'  containing the relevant
+            infomation for all of the sources in the table
 
 Description:  
 
-    This program reads a tile defination file with the folowing format and 
-    to search for CCD images that should prepped to create fits files 
-    to construct images in tiles of a field.  It writes the results to
-    a table in the Summary directory
+    This program reads an astropy table containing at least the following columns
 
-    The program searches for the tile definition file in the local direcotry
-    and in the $KRED/config directory.
+    Source_name  - a string (one_word no space) naming the object
+    RA, Dec       - the right ascension and declination of the object in degrees
+
+    and constructs 'tiles' of one or more of the objects from some of all of the
+    available data.
+
+    The astropy table can be local, or it can be stored in the config directory
+
+    If the table also contains a column 
+
+    Size   - a size in degrees
+
+    then the that size will be used in selecting the images that can contribute 
+    to the total.  If it does not then a default is assumed.
+
+    At present the program does not use the size for anything except what images
+    to include in the processing of that tile.
+
 
     The program works by reading the det.tab files created by MefSum.py
 
@@ -152,10 +170,12 @@ def find_files_to_prep(field='LMC_c45',ra_center=81.1,dec_center=-66.17,size_deg
 
 
 
-def setup_one_tile(field='LMC_c42',xmaster='snr',tile='foo',ra=81.108313,dec=-66.177280,size_deg=0.67):
+def setup_one_tile(field=['LMC_c42'],xmaster='snr',tile='foo',ra=81.108313,dec=-66.177280,size_deg=0.67):
     
 
-    if field=='all':
+    print('Field a',field)
+
+    if len(field)==0:
         det_files=glob('Summary/*det.tab')
         print('Det files ',det_files)
         xfield=[]
@@ -165,24 +185,27 @@ def setup_one_tile(field='LMC_c42',xmaster='snr',tile='foo',ra=81.108313,dec=-66
     else:
         xfield=field
 
-    print(xfield)
+    print('Fields to try', xfield)
 
     i=0
     for one in xfield:
         if i==0:
            x=find_files_to_prep(one,ra,dec,size_deg)
            if len(x)>0:
+               print(x)
                i+=1
         else:
             xx=find_files_to_prep(one,ra,dec,size_deg)
             x=vstack([x,xx])
+            print(x)
         
 
-    if len(x)>0:
+    if i>0:
         outfile='Summary/%s_%s.txt' % (xmaster,tile)
         x.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
         print('Failed to set up %s %s  %s' % (field,xmaster,tile))
+        return
 
     tile_dir='%s/%s/%s/' % (PREPDIR,xmaster,tile)
 
@@ -202,6 +225,7 @@ def setup_one_tile(field='LMC_c42',xmaster='snr',tile='foo',ra=81.108313,dec=-66
     for one in x:
 
         data_dir='%s/%s/data' % (DATADIR,one['Field'])
+        print('Toasty ',data_dir)
 
         if os.path.isdir(data_dir) == False:
             print('Error: %s does not appear to exist' % data_dir)
@@ -217,6 +241,7 @@ def setup_one_tile(field='LMC_c42',xmaster='snr',tile='foo',ra=81.108313,dec=-66
             nerrors+=1
         else:
             os.symlink(data_file,tile_file)
+
     if nerrors:
         print('Failed to find %d of %d files in %s' % (nerrors,len(x),data_dir))
         raise IOError
@@ -245,8 +270,16 @@ def setup_objects(source_names,table_name,fields,xdir):
     '''
     '''
 
+
+    kred=os.getenv('KRED')
+    if os.path.isfile(table_name):
+        x=ascii.read(table_name)
+    elif os.path.isfile(kred+'/config/'+table_name):
+        x=ascii.read(kred+'/config/'+table_name)
+    else:
+        print('Could not find ',table_name)
     print('got here')
-    x=ascii.read(table_name)
+    # x=ascii.read(table_name)
 
     for one in source_names:
         ztab=x[x['Source_name']==one]
@@ -271,9 +304,8 @@ def steer(argv):
 
     The command line it interprets is
 
-    SetupSpecial  [-all]  [-field LMC_c40] [-field LMC_c42] -top_dir foo tab source_name1 [Source_name]
+    SetupSpecial  [-all]  [-field LMC_c40] [-field LMC_c42] source_table source_name1 [Source_name]
 
-    where -top_dir gives the top_level directories a name
     where -all says to do all of the sources in the xtab file
     '''
     field=''
@@ -309,13 +341,6 @@ def steer(argv):
         print('No table of sources provided' )
         return
 
-    try:
-        xtab=ascii.read(table)
-    except:
-        print('Sorry: could not read %s' % table)
-
-
-
     if xall==False and len(xobjects)==0:
         print('Sorry: there seems to be nothing to do')
         print('-all not set and no tiles to set up provided' )
@@ -329,6 +354,8 @@ def steer(argv):
     else:
         print('Error: Could not find %s in local director or in kred/config' % table)
         return
+
+
 
 
     if xall==True:
