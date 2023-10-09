@@ -42,7 +42,7 @@ astropy 5.1
 numpy 1.25.0
 ````
 
-The routines assume a specfic directory structure 
+The routines assume a specific directory structure 
 to one of our own.  At present the new structure
 presumes:
 
@@ -57,7 +57,13 @@ Additional directories will be created as various
 programs are run.  
 
 To get help on the options of the various routines, one should
-type the program name, with a -h option
+type the program name, with a -h option.  
+
+**Several of the programs have a flag -bsub that change 
+the data on which the operate.  The first discussion
+of each routine assumes the -bsub flag is NOT invoked
+so that users can get a clearer idea of the flow. 
+The -bsub option will be explained later**
 
 ## Standard Processing
 
@@ -74,7 +80,7 @@ downstream programs.)
 * MefSum.py - This summarizes the mef files in a field.
 If it does not already exist this program creates a directory 
 that is created called Summary and writes two astropy
-tables that contain the summary informatioon
+tables that contain the summary information
 
 
 Note that MefSum.py -all wil attempt to create a summary of all of the files
@@ -100,7 +106,7 @@ a field or fields, subtracts background if desired, and
 stores the results in "data" directories located with the
 DECam\_PREP directories.   For example,
 if one processes field LMC\_c45, the data will be in
-DECam\_PREP/LMC\_c45/data.
+DECam\_CCD/LMC\_c45/data.
 
 Note - this routine has switches that allow one 
 to subtract background or not from the original
@@ -108,6 +114,10 @@ images.  The default currently is to subtract a single
 background from all of the CCDS associated with a given
 exposure.  The default is to subtract the median value 
 of the mode for the individual detectors.
+
+
+Also, like MefSum.py one can run this on all of the fields
+with the -all switch.
 
 
 * SetupTile.py - This is intended to identify CCD images
@@ -123,24 +133,26 @@ this to a different configuration file.  Note though, that at
 present each field is separate.
 
 
-* SwarpSetup.py - This creates directoires inputs (the.run and .default files)
+* SwarpSetup.py - This creates directories inputs (the.run and .default files)
 for running swarp to create the tile images on the tile images.  It assumes we
 want to make tile images for each filter and for each 
-exposure time.  
+exposure time.    
 
 
 Note - At present this routine does not use the field
 centers defined in the .config file, but takes the center
 of all of the images in a tile to be the center of the
-swarp field.  This is something that still needs updating.
+swarp field.  
+
+ When run without the -bsub flag, the routine creates directories
+ in DECam\_SWARP and sets up the inputs so the files which will
+ be 'swarp'ed come from the subdirctories of DECam\_CCD.
+
 
 * Swarp.py -  The purpose of Swarp.py 
 is to run all of the commands that
 have been created with SetupSwarp.  
 
-Note - When run without switches the routine takes the images taht
-were produced by MefPrep.  These do not have the best 
-background subtracted.
 
 * SwarpEval.py - This routine creates a set of evaluation
 figures for the Swarped images.  The scaling is intended
@@ -162,14 +174,15 @@ reduction.**
 
 ## Using overlaps regions to improve the background matching
 
-The various scripts abave allow one to produce swarped imaged
+The various scripts above allow one to produce swarped imaged
 for each tile, but they do not include any attempt to
 match backgrounds between images.
 
 
 In order to improve backrouund matching one
-should run the scripts below, after at least MefProp has
-been run on a field.
+should run the scripts below. They depend on MefPrep having
+been run on a field, BUT the other steps in the standard
+processing are unnecessary.
 
 
 The routines should be run in the following order.
@@ -195,17 +208,19 @@ all of LMC\_c42, for example, about 420 GB of images will be created.
 * BackStats.py determines the background in the overlap regions of images as
 identified in FindOverlaps, using the impages created by BackPrep.  The
 routine produces a single file for each tile that contains estimates of the
-background. Optionally, BackStats removes the files created by BackPrep,
+background. 
+
+Note _ Optionally, with the -rm option, BackStats removes the files created by BackPrep,
 to retain diskspace, since BackPrep can generate up to a half a TB of
 data.
 
-* BackCalc.py uses the differences calcuated with BackStats between 
+* BackCalc.py uses the differences calculated with BackStats between 
 images to determine an optimal set of offsets to add or 
-subtract from the images to produce better image matching.  Th
+subtract from the images to produce better image matching.  
 
 * BackSub.py uses the results of BackCalc to create new images with 
 the backgounds values produced by BalCalc.py subtracted.  The outputs
-appear in a directories, with names of  DECam\_Prep/field/tile\_b.  
+appear in a directories, with names of  DECam\_Prep2/field/tile.  
 
 * SwarpSetup.py is run (again) but with the -bsub flag in order to 
 create directories of the form  DECam\_Swarp/field/tile\_b and commands
@@ -216,6 +231,10 @@ from SetupSwarp.py
 
 * SwarpEval.py  is run to make images (pngs) of for both types of 
 processing. 
+
+* CleanStars.py is run with the bsub option.  It now uses data in 
+the DECam\_SWARP2 directory, and it writes the data to the 
+DECam\_SUB2 directory
 
 The progams generally write information to a log file, one log file
 for each field. The file is initialised by running MefSum, and then
@@ -237,9 +256,12 @@ one could then process all of LMC\_c42, with the following
 set of commands:
 
 ````
+
 SetupTile.py -all LMC_c42
 SwarpSetup.py -all  LMC_c42
 Swarp.py -all LMC_c42
+SwarpEval.py -all DECam_SWARP LMC_c42
+
 FindOverlaps.py -all LMC_c42
 BackPrep.py -all -run LMC_c42
 BackStats.py -all -np 8 -rm LMC_c42 
@@ -247,11 +269,16 @@ BackCalc.py -all LMC_c42
 BackSub.py -all -np 8 LMC_c42
 SwarpSetup.py -all -bsub LMC_c42 
 Swarp.py -all -bsub LMC_c42 T02
-SwarpEval.py -all LMC_c42
+SwarpEval.py -all DECam_SWARP2 LMC_c42
 CleanStars.py -all LMC_c42
+SwarpEval.py -all DECam_SUB2 LMC_c42
 ````
 
 Creating a command file and commenting out the sections 
-that one has completed is a  sensible approch to precesing.
+that one has completed is a sensible approch to precesing.
+
+Note that the first 4 commands here are not normall necessary
+and are only usdful if one wants to see the immprovement
+from a more sophistcated image mataching of backgrounds
 
 

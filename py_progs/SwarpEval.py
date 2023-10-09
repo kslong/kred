@@ -2,19 +2,33 @@
 # coding: utf-8
 '''
 
-Create plots of the images that are in the DECam_Swarp directorie after running Swarp.py
+Create plots of the images that are in the DECam_Swarp  after running Swarp.py, CleanStars.py 
+etc 
 
 
-Usage:   SwarpEval.py [-all] field [tiles]
+Usage:   SwarpEval.py [-all] xdir field [tiles]
+
 
 where -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
 use the files ending in _sw.tab to set up run files
 
+and
+    xdir is the top level directory containing subdirectories with fields and tiles
+
+and 
+    filed is a field
+
 If one wants to run only 1 or a few tiles then the command will be something like
 
-SwarpEval.py LMC_c42  T01 T03 
+SwarpEval.py DECam_SWARP2  LMC_c42  T01 T03 
 
 
+The evaluation imags will be stored in a directory eval, located in this case in DECam_SWARP2/LMC_c42
+
+
+Note: 231009 - This routine and the command line interface to it functions 
+differently from most other routines, in that one specifies a top level
+directory.   
 '''
 
 
@@ -31,7 +45,6 @@ import os
 import numpy as np
 
 
-SWARPDIR='DECam_SWARP/'
 exec_dir=os.getcwd()
 
 
@@ -111,9 +124,9 @@ def display_fits_image(image_file, scale='linear', invert=False, vmin=None, vmax
 
 # Example usage
 
-def get_images(field='LMC_c01',tile='T01'):
+def get_images(xdir='DECam_SWARP2',field='LMC_c01',tile='T01'):
     
-    swarpdir='%s/%s/%s/' % (SWARPDIR,field,tile)
+    swarpdir='%s/%s/%s/' % (xdir,field,tile)
     xfiles=glob('%s/*.fits' % swarpdir)
     files=[]
     for one in xfiles:
@@ -122,13 +135,12 @@ def get_images(field='LMC_c01',tile='T01'):
                      
     return(files)
     
-files=get_images()
     
 
 
 
 
-def get_stats(xfiles=files):
+def get_stats(xfiles):
     root=[]
     med=[]
     mean=[]
@@ -161,17 +173,17 @@ def get_stats(xfiles=files):
     
 
 
-def make_plots(field='LMC_c01',tile='T01'):
+def make_plots(xdir='DECam_SWARP2',field='LMC_c01',tile='T01'):
 
     
     print('Beginning %s %s' % (field,tile))
-    files=get_images(field,tile)
+    files=get_images(xdir,field,tile)
     if len(files)==0:
-        print('Error: No images were found for field %s tile %s' % (field,tile))
+        print('Error: No images were found for field %s tile %s in %s' % (field,tile,xdir))
         return
 
     xtab=get_stats(files)
-    xdir='%s/%s/eval' % (SWARPDIR,field)
+    xdir='%s/%s/eval' % (xdir,field)
     if os.path.isdir(xdir)==False:
         os.makedirs(xdir)
     for one in xtab:
@@ -188,10 +200,14 @@ def steer(argv):
     tiles from the command line
 
     '''
+
+    xdir=''
     field=''
     tiles=[]
     xall=False
     redo=True
+    bsub=False
+    star_sub=False
 
     i=1
     while i<len(argv):
@@ -203,6 +219,8 @@ def steer(argv):
         elif argv[i][0]=='-':
             print('Error: Unknown switch %s' % argv[i])
             return
+        elif xdir=='':
+            xdir=argv[i]
         elif field=='':
             field=argv[i]
         else:
@@ -217,8 +235,9 @@ def steer(argv):
             tiles.append('T%02d_b' % i)
             i+=1
 
+
     for one in tiles:
-        make_plots(field,one)
+        make_plots(xdir, field,one)
 
 
     return

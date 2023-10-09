@@ -12,11 +12,17 @@ simple subtraction
 
 Command line usage (if any):
 
-    usage: CleanStars.py [-all] field [tiles]
+    usage: CleanStars.py [-all] [-bsub] field [tiles]
 
-    where -all will cause CleanStars to be run on all 16 tiles in a field
+    where 
+        -all will cause CleanStars to be run on all 16 tiles in a field
+            and if -all is not given, then one or more tiles should be listed
+        -bsub will search for inputs in the DECam_SWARP2 directories which
+            have "better" background matching, while if it is absence
+            one will use the data in the DECam_SWARP directories, which use
+            the background form the overal fields
 
-    and if -all is not given, then one or more tiles should be listed
+
 
 
 Description:  
@@ -335,6 +341,7 @@ def steer(argv):
     field=''
     tiles=[]
     xall=False
+    bsub=False
 
     i=1
     while i<len(argv):
@@ -343,6 +350,8 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-bsub':
+            bsub=True
         elif field=='':
             field=argv[i]
         else:
@@ -358,9 +367,16 @@ def steer(argv):
 
     open_log('%s.log' % field,reinitialize=False)
 
+    if bsub:
+        xindir='DECam_SWARP2/'
+        xoutdir='DECam_SUB2/'
+    else:
+        xindir='DECam_SWARP/'
+        xoutdir='DECam_SUB/'
+
     for tile in tiles:
-        indir='DECam_SWARP2/%s/%s/' % (field,tile)
-        outdir='DECam_SUB/%s/%s' % (field,tile)
+        indir='%s/%s/%s/' % (xindir,field,tile)
+        outdir='%s/%s/%s' % (xoutdir,field,tile)
 
         if os.path.isdir(indir)==False:
             print('Cannot find input directory: %s ' % indir)
