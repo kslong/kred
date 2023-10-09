@@ -62,6 +62,8 @@ from glob import glob
 
 def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',default_value=0):
     # Open the input FITS file
+
+    print('Starting %s  %f %f\n' % (source_name,ra,dec))
     hdul = fits.open(input_fits)
     
     # Extract WCS information
@@ -79,6 +81,13 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     xmax = int(min(hdul[0].data.shape[1], x + size_pixels/2))
     ymin = int(max(0, y - size_pixels/2))
     ymax = int(min(hdul[0].data.shape[0], y + size_pixels/2))
+
+    # print('test1: ',xmin,xmax,ymin,ymax,xmax-xmin,ymax-ymin)
+
+    if xmax-xmin>ymax-ymin:
+        xmax=xmin+ymax-ymin
+    elif ymax-ymin>xmax-xmin:
+        ymax=ymin+xmax-xmin
     
     # Check if the position is within the image
     if not (0 <= x < hdul[0].data.shape[1] and 0 <= y < hdul[0].data.shape[0]):
@@ -88,16 +97,10 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     
     # Extract the region
     extracted_data = hdul[0].data[ymin:ymax, xmin:xmax]
+
     
     # Create a new array with the fixed size
     output_data = np.full((int(size_pixels), int(size_pixels)), default_value, dtype=extracted_data.dtype)
-
-    # Determine the size of the extracted region
-    extracted_size = extracted_data.shape[0]
-
-    # Ensure output_data has the same shape as the extracted region
-    if output_data.shape[0] != extracted_size or output_data.shape[1] != extracted_size:
-        output_data = np.full((extracted_size, extracted_size), default_value, dtype=extracted_data.dtype)
 
     # Insert the extracted data into the new array
     output_data[:extracted_data.shape[0], :extracted_data.shape[1]] = extracted_data
@@ -123,6 +126,7 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     output_fits='%s/%s_%s' % (outdir,source_name,word[-1])
 
     
+    print('Writing   %s ' % (output_fits))
     # Write to the output FITS file
     hdul_out.writeto(output_fits, overwrite=True)
     
@@ -145,6 +149,7 @@ def make_cutouts(object_table='lmc_snr.txt',size_arcmin=10,directory='T07',subdi
         search all subdirectories as well
 
     '''
+
 
 
     try:
@@ -200,7 +205,7 @@ def steer(argv):
             print(__doc__)
             return
         elif argv[i]=='-r':
-            recursivel=True
+            recursive=True
         elif argv[i]=='-size':
             i+=1
             size=int(argv[i])
