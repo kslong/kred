@@ -24,7 +24,7 @@ def open_log(file_name, reinitialize=False):
     else:
         mode = 'a'
     
-    if os.path.isdir(LOG_DIR==False):
+    if os.path.isdir(LOG_DIR)==False:
         os.mkdir(LOG_DIR)
 
     log_file = open('%s/%s' % (LOG_DIR,file_name), mode)
