@@ -179,7 +179,7 @@ def make_plots(xdir='DECam_SWARP2',field='LMC_c01',tile='T01'):
     print('Beginning %s %s' % (field,tile))
     files=get_images(xdir,field,tile)
     if len(files)==0:
-        print('Error: No images were found for field %s tile %s in %s' % (field,tile,xdir))
+        print('No images were found for field %s tile %s in %s' % (field,tile,xdir))
         return
 
     xtab=get_stats(files)
@@ -232,8 +232,19 @@ def steer(argv):
         i=1
         while i<17:
             tiles.append('T%02d' % i)
-            tiles.append('T%02d_b' % i)
             i+=1
+
+
+    if os.path.isdir('%s/%s' % (xdir,field))==False:
+        print(__doc__)
+        print('Check inputs: %s/%s does not appear to be a directory' % (xdir,fieeld))
+        return
+    if len(tiles)==0:
+        print(__doc__)
+        print('Check inputs: No tiles requested',argv)
+        return
+
+
 
 
     for one in tiles:

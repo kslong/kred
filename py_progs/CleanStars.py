@@ -371,8 +371,8 @@ def steer(argv):
         xindir='DECam_SWARP2/'
         xoutdir='DECam_SUB2/'
     else:
-        xindir='DECam_SWARP/'
-        xoutdir='DECam_SUB/'
+        xindir='DECam_SWARP1/'
+        xoutdir='DECam_SUB1/'
 
     for tile in tiles:
         indir='%s/%s/%s/' % (xindir,field,tile)
