@@ -12,7 +12,7 @@ background
 
 Command line usage (if any):
 
-    usage: BackPrep.py [-all ] [-setup] [-run] field tile
+    usage: BackPrep.py [-all ] [-setup] [-run] [-indir whatever] field tile
 
 Description:  
 
@@ -20,6 +20,10 @@ Description:
 
     With -run it will actual run all the swarps (this is the default
     with -setup it will only set everything up.
+    with -indir whatever  the inpuut data will be taken from 
+        a specified directory, e.g DECam_PREP2 for diagnostic
+        purposes.  If this is invoked, the ouputs will be 
+        in a subdirectory of XXX
 
                                        
 History:
@@ -272,6 +276,9 @@ def steer(argv):
     '''
     This is just a steering routine
     '''
+    global SWARPDIR
+    global PREPDIR
+
     field=''
     tiles=[]
     xall=False
@@ -291,6 +298,10 @@ def steer(argv):
             xrun=False
         elif argv[i]=='-redo':
             xredo=True
+        elif argv[i]=='-indir':
+            i+=1
+            PREPDIR=os.path.abspath(argv[i])
+            SWARPDIR='XXX/'
         elif argv[i][0]=='-':
             print('Error: Unknown switch %s' % argv[i])
             return

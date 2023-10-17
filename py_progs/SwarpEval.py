@@ -141,6 +141,10 @@ def get_images(xdir='DECam_SWARP2',field='LMC_c01',tile='T01'):
 
 
 def get_stats(xfiles):
+    '''
+    Characterize the stats of the images, assuing
+    that 0 represents a pixel should be masked.
+    '''
     root=[]
     med=[]
     mean=[]
