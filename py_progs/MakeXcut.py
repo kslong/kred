@@ -94,26 +94,26 @@ def radec2pix(filename='c4d_221221_004943_ooi_N673_req_N24.fits',ra='01:02:38.6'
         xfilt='Unknown'
         xtime==-99.
 
-    print(ra,dec)
+    # print(ra,dec)
     try:
         ra=eval(ra)
         dec=eval(dec)
     except:
-        print('what')
+        # print('what')
         xra, xdec =  convert_coordinates(ra,dec,False)
         ra=xra
         dec=xdec
 
 
-    print(ra,dec)
+    # print(ra,dec)
     # Create a SkyCoord object with the target coordinates
     target_coord = SkyCoord(ra=ra, dec=dec, unit='deg')
     
 
-    print(target_coord)
+    # print(target_coord)
     # Convert RA and Dec to pixel coordinates
     pixel_x, pixel_y = wcs.world_to_pixel(target_coord)
-    print(pixel_x,pixel_y)
+    # print(pixel_x,pixel_y)
     pixel_x=round2integer(pixel_x)
     pixel_y=round2integer(pixel_y)
 
@@ -229,7 +229,7 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
         row_sum[istart:istop]=np.add(row_sum[istart:istop],row)
         
         plt.subplot(2,1,1)
-        plt.plot(xcol,row)
+        plt.plot(xcol,row,'.')
         
         
         col=f[1].data[:,one_row['x']]
@@ -239,8 +239,8 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
         xmax=int(one_row['y']+0.5*size)
         offset=0
         if xmin<0:
-            xmin=0
             offset=-xmin
+            xmin=0
         if xmax>=f[1].header['NAXIS2']:
             xmax=f[1].header['NAXIS2']-1
         
@@ -255,11 +255,11 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
         col_sum[istart:istop]=np.add(col_sum[istart:istop],col)
         
         plt.subplot(2,1,2)
-        plt.plot(xrow,col)
+        plt.plot(xrow,col,'.')
         
     row_ave=row_sum/row_num
     plt.subplot(2,1,1)
-    plt.plot(base,row_ave,'ko')
+    plt.plot(base,row_ave,'k.')
     plt.xlabel('Column')
     plt.ylabel('Counts')
     plt.xlim(-size/2,size/2)
@@ -269,7 +269,7 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
     
     col_ave=col_sum/col_num
     plt.subplot(2,1,2)
-    plt.plot(base,col_ave,'ko')
+    plt.plot(base,col_ave,'k.')
     plt.xlabel('Row')
     plt.ylabel('Counts')
     plt.xlim(-size/2,size/2)
