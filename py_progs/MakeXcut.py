@@ -94,19 +94,26 @@ def radec2pix(filename='c4d_221221_004943_ooi_N673_req_N24.fits',ra='01:02:38.6'
         xfilt='Unknown'
         xtime==-99.
 
-    # Convert coordinates if necessary
-    if type(ra)!=type(-99.):
+    print(ra,dec)
+    try:
+        ra=eval(ra)
+        dec=eval(dec)
+    except:
+        print('what')
         xra, xdec =  convert_coordinates(ra,dec,False)
         ra=xra
         dec=xdec
 
 
+    print(ra,dec)
     # Create a SkyCoord object with the target coordinates
     target_coord = SkyCoord(ra=ra, dec=dec, unit='deg')
     
 
+    print(target_coord)
     # Convert RA and Dec to pixel coordinates
     pixel_x, pixel_y = wcs.world_to_pixel(target_coord)
+    print(pixel_x,pixel_y)
     pixel_x=round2integer(pixel_x)
     pixel_y=round2integer(pixel_y)
 
@@ -160,7 +167,10 @@ def find_overlaps(xdir='.',ra='01:02:38.6',dec='-71:59:08.23'):
             xfilt.append(xxfilt)
             xtime.append(xxtime)
     if len(xfile)==0:
-        print('Files, but none with valid pixels at %.6f %.6f' % (ra,dec))
+        if isinstance(ra,float):
+            print('Files, but none with valid pixels at %.6f %.6f' % (ra,dec))
+        else:
+            print('Files, but none with valid pixels at %s %s' % (ra,dec))
         return []
     else:
         print('Found %d files that overlap' % (len(xfile)))
@@ -193,6 +203,7 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
     col_num=np.zeros_like(base)    
     
     plt.figure(1,(12,6))
+    plt.clf()
     for one_row in qtab:
         f=fits.open(one_row['Filename'])
         row=f[1].data[one_row['y'],]
@@ -219,11 +230,7 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
         
         plt.subplot(2,1,1)
         plt.plot(xcol,row)
-        plt.xlim(-size/2,size/2)
-        if ymin!=0 or ymax!=0:
-            plt.ylim(ymin,ymax)
         
-        plt.subplot(2,1,2)
         
         col=f[1].data[:,one_row['x']]
         xrow=np.arange(len(col))-one_row['y']
@@ -247,16 +254,17 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
         col_num[istart:istop]+=1
         col_sum[istart:istop]=np.add(col_sum[istart:istop],col)
         
+        plt.subplot(2,1,2)
         plt.plot(xrow,col)
-        plt.xlim(-size/2,size/2)
-        if ymin!=0 or ymax!=0:
-            plt.ylim(ymin,ymax)
         
     row_ave=row_sum/row_num
     plt.subplot(2,1,1)
     plt.plot(base,row_ave,'ko')
     plt.xlabel('Column')
     plt.ylabel('Counts')
+    plt.xlim(-size/2,size/2)
+    if ymin!=0 or ymax!=0:
+        plt.ylim(ymin,ymax)
     plt.tight_layout()
     
     col_ave=col_sum/col_num
@@ -264,6 +272,10 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
     plt.plot(base,col_ave,'ko')
     plt.xlabel('Row')
     plt.ylabel('Counts')
+    plt.xlim(-size/2,size/2)
+    if ymin!=0 or ymax!=0:
+        plt.ylim(ymin,ymax)
+    plt.tight_layout()
     plt.tight_layout()
 
     return 1
@@ -274,9 +286,12 @@ def doit(ra='01:02:38.6',dec='-71:59:08.23',xdir='.',xfilt='N662',exptime=400,si
     '''
     
     xtab=find_overlaps(xdir,ra,dec)
+
     if len(xtab)==0:
         print('No files with this position')
         return
+
+    xtab.write('xcut_tab.txt',format='ascii.fixed_width_two_line',overwrite=True)
     
 
     ireturn=do_xcut_plot(xtab,xfilt,exptime,size,ymin,ymax)
@@ -334,7 +349,7 @@ def steer(argv):
         elif argv[i]=='-ymax':
             i+=1
             ymax=eval(argv[i])
-        elif argv[i][0]=='-' and argv[i].count(':')==0:
+        elif argv[i][0]=='-' and xdir=='':
             print('Error: Unknown switch %s ' % argv[i])
             return
         elif xdir=='':
