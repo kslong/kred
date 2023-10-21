@@ -23,6 +23,9 @@ Description:
     that contains the calculated values for 
     the offsets.
 
+    Files (xxx) are also generated that show how
+    good the the actual fits is. 
+
 Primary routines:
 
 
@@ -61,26 +64,31 @@ def xeval(xall):
 
 
 
-def diff_eval(xdelta,files,return_diff=False):
+def diff_eval(xdelta,xback,return_diff=False):
     '''
     Given a table that contains the measured differences between 
-    the flux in different images, and another the table that 
+    the flux (xdelta) in different images, and another the table (xback) that 
     gives the current version the backgrounds for the images,
     calculated the 'effective chi*2'
     
     Note that this is the only statistic we have access to
     for a real case, since we do not know what the actual offsets
     are.
+
+    The goodness of fit is returned 
     '''
     j=0
     xsum=0
     delta=[]
+    xdelta['Error']=0.0
+    xdelta['Error'].format='.3f'
     for one in xdelta:
-        diff=one['Delta']-(files['b'][one['j']]-files['b'][one['i']])
+        diff=one['Error']=one['Delta']-(xback['b'][one['j']]-xback['b'][one['i']])
         delta.append(diff)
     delta=np.array(delta)
     xsum=np.dot(delta,delta)
     xsum=np.sqrt(xsum)/len(delta)
+    print(xdelta)
     if return_diff==True:
         return xsum,delta
     else:
@@ -131,6 +139,10 @@ def xpath(xdelta,files,nstart=2):
         
 
 def monte(xdelta,files):
+    '''
+    This simply evaluates differences in a prediction
+    for the background.  
+    '''
     i=0
     chi_best=1e10
     xbest=files.copy()
@@ -151,6 +163,10 @@ def monte(xdelta,files):
 svd_u=svd_w=svd_vt=svd_b=0
 
 def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
+    '''
+    Do a single value decomposition fit of the backgounds contained
+    in the table xcross
+    '''
 
     global svd_u, svd_w, svd_vt, svd_b
 
@@ -211,6 +227,9 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
 
 
 def do_svd(xcross,bfile,threshold=0.1,new=True,verbose=False):
+    '''
+    The driving routine for a SVD fit of the backgrounds
+    '''
 
     xbfile=bfile.copy()
 
@@ -222,6 +241,10 @@ def do_svd(xcross,bfile,threshold=0.1,new=True,verbose=False):
 
 
 def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
+    '''
+    Create the inputs needed to fit different backgrounds for a single filter and
+    exposure time.
+    '''
     
     try:
         x=ascii.read(infile)
@@ -308,8 +331,8 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
 
 def do_one_tile(field,tile):
     '''
-    Geneerate a set of backgrounds to be used for maaching images
-    in a tile.
+    Generate a set of backgrounds to be used for matching images
+    in a tile based on differences in the fluxes in images..
     '''
 
     time_start=timeit.default_timer()
@@ -337,7 +360,6 @@ def do_one_tile(field,tile):
             bfile=infile.replace('xxx.txt','bbb_%s_%d.txt' % (one_filter,one_exp))
             # btab.write(bfile,format='ascii.fixed_width_two_line',overwrite=True)
             xfile=infile.replace('xxx.txt','xxx_%s_%d.txt' % (one_filter,one_exp))
-            y_all.write(xfile,format='ascii.fixed_width_two_line',overwrite=True)
 
             print('Field %s  Tile %s Filter %s Exptime %d ' % (field,tile,one_filter,one_exp))
 
@@ -377,6 +399,7 @@ def do_one_tile(field,tile):
                 best_val=xsvd1
 
 
+            y_all.write(xfile,format='ascii.fixed_width_two_line',overwrite=True)
 
             print('Original b=0:     %.2f' % orig)
             print('Simple  b=b_init:  %.2f' % simple)
