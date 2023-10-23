@@ -56,62 +56,84 @@ from astropy.coordinates import SkyCoord
 from astropy import units as u
 from decimal import Decimal, ROUND_HALF_EVEN
 
+from astropy.wcs import WCS
+
+def get_pixel_scale(filename):
+    '''
+    Return the pixel scale from and image 
+    that is presumed to be in extension 1
+    '''
+
+    # Open the FITS file
+    hdulist = fits.open(filename)
+
+    # Assuming the WCS information is in the header of the second HDU (extension 1)
+    wcs = WCS(hdulist[1].header)
+
+    # Get the center coordinates of the image
+    image_center = (hdulist[1].data.shape[1] / 2, hdulist[1].data.shape[0] / 2)
+
+    # Convert the center pixel coordinates to world coordinates
+    world_center = wcs.pixel_to_world(*image_center)
+
+    # Get the coordinates of an adjacent pixel
+    adjacent_pixel = (image_center[0] + 1, image_center[1])
+
+    # Convert the adjacent pixel coordinates to world coordinates
+    world_adjacent = wcs.pixel_to_world(*adjacent_pixel)
+
+    # Calculate the pixel scale
+    delta_x = world_adjacent.ra.deg - world_center.ra.deg
+    delta_y = world_adjacent.dec.deg - world_center.dec.deg
+
+    pixel_scale = ((delta_x**2 + delta_y**2)**0.5) * 3600  # Convert to arcseconds
+
+    # Close the FITS file
+    hdulist.close()
+
+    return pixel_scal
+
 def round2integer(arr):
     rounded_arr = np.vectorize(lambda x: int(Decimal(x).quantize(Decimal('1'), rounding=ROUND_HALF_EVEN)))(arr)
     return rounded_arr
 
 
 
-def convert_coordinates(ra, dec, is_degrees=True):
+def radec2deg(ra, dec):
     '''
     Convert coordiantes to degrees if
     necessary
     '''
 
-    if is_degrees:
-        return ra, dec
-    else:
+    try:
+        ra=eval(ra)
+        dec=eval(dec)
+        return ra,deg
+    except:
         coord = SkyCoord(ra=ra, dec=dec, unit=(u.hourangle, u.deg))
         return coord.ra.deg, coord.dec.deg
 
 
 
-def radec2pix(filename='c4d_221221_004943_ooi_N673_req_N24.fits',ra='01:02:38.6',dec='-71:59:08.23'):
+def radec2pix(x,ra=15.,dec=-71):
     '''
-    Open a file and see if the postion is inside the image.  If so incdicate the location and
+    Open a file and see if the position is inside the image.  If so incdicate the location and
     flux nearby.  Also collect some other information about the object
+
+    If the position is not in the image, then -99, -99  is returned for the pixel position
     '''
+
+
     # Load the FITS file
-    hdulist = fits.open(filename)
-    # hdulist.info()
+    hdulist = x
     wcs = WCS(hdulist[1].header)
-    try:
-        xfilt=hdulist[0].header['FILTER']
-        words=xfilt.split()
-        xfilt=words[0]
-        xtime=hdulist[0].header['EXPTIME']
-    except:
-        xfilt='Unknown'
-        xtime==-99.
-
-    # print(ra,dec)
-    try:
-        ra=eval(ra)
-        dec=eval(dec)
-    except:
-        # print('what')
-        xra, xdec =  convert_coordinates(ra,dec,False)
-        ra=xra
-        dec=xdec
 
 
-    # print(ra,dec)
+    print(ra,dec)
     # Create a SkyCoord object with the target coordinates
     target_coord = SkyCoord(ra=ra, dec=dec, unit='deg')
     
 
-    # print(target_coord)
-    # Convert RA and Dec to pixel coordinates
     pixel_x, pixel_y = wcs.world_to_pixel(target_coord)
     # print(pixel_x,pixel_y)
     pixel_x=round2integer(pixel_x)
@@ -121,64 +143,43 @@ def radec2pix(filename='c4d_221221_004943_ooi_N673_req_N24.fits',ra='01:02:38.6'
     # Check if the pixel coordinates are within the image bounds
     if not (0 <= pixel_x < hdulist[1].header['NAXIS1'] and 0 <= pixel_y < hdulist[1].header['NAXIS2']):
         pixel_x=pixel_y=value=-99
-    else:
-        half=5
-        ymin=pixel_y-half-1
-        ymax=ymin+2*half
-        xmin=pixel_x-half-1
-        xmax=xmin+2*half
-        if ymin<0:
-            ymin=0
-        if xmin<0:
-            xmin=0
-        if ymax>=hdulist[1].header['NAXIS2']:
-            ymax=hdulist[1].header['NAXIS2']-1
-        if xmax>=hdulist[1].header['NAXIS1']:
-            xmax=hdulist[1].header['NAXIS1']-1
-        xarray=hdulist[1].data[ymin:ymax,xmin:xmax]
-        value=np.median(xarray)
-    # Close the FITS file
-    hdulist.close()
-    return pixel_x,pixel_y,value,xfilt,xtime
+    return pixel_x,pixel_y
 
 
+def  make_xcut_tab(xdir):
 
-def find_overlaps(xdir='.',ra='01:02:38.6',dec='-71:59:08.23',size=1000):
-    
     glob_string='%s/*fits' % (xdir)
     files=glob(glob_string)
     if len(files)==0:
-        print ('Foound no overlaps at {ra} {dec}')
+        print ('Found no fits files in %s' % xdir)
         return []
     
     xfile=[]
-    x=[]
-    y=[]
-    xmed=[]
     xfilt=[]
     xtime=[]
     for one_file in files:
-        xx,yy,value,xxfilt,xxtime=radec2pix(one_file,ra,dec)
-        if xx>0:
-            x.append(xx)
-            y.append(yy)
-            xmed.append(value)
-            xfile.append(one_file)
-            xfilt.append(xxfilt)
-            xtime.append(xxtime)
-    if len(xfile)==0:
-        if isinstance(ra,float):
-            print('Files, but none with valid pixels at %.6f %.6f' % (ra,dec))
-        else:
-            print('Files, but none with valid pixels at %s %s' % (ra,dec))
-        return []
-    else:
-        print('Found %d files that overlap' % (len(xfile)))
-        xtab=Table([xfile,xfilt,xtime,x,y,xmed],names=['Filename','Filter','Exptime','x','y','Counts'])
-        return xtab
-        
+        x=fits.open(one_file)
+        xfile.apend(one_file)
+        filt=hdulist[0].header['FILTER']
+        words=filt.split()
+        xfilt.append(words[0])
+        xtime.append(hdulist[0].header['EXPTIME'])
 
-def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
+    xtab=Table([xfile,xfilt,xtime],names=['Filename','Filter','Exptime'])
+    xtab_name='%s/xcut_tab.txt' % xdir
+    xtab.write(xtab_name,forrmat='ascii.fixed_width_two_line',overwrite=True)
+    return xtab
+    
+
+
+
+def do_xcut_plot(ztab_name,ra=10,dec=-70,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
+
+    try:
+        ztab=ascii.read(ztab_name)
+    except:
+        print('Could not read %s' % ztab_name)
+        return 0
     
     if xfilt!='':
         zztab=ztab[ztab['Filter']==xfilt]
@@ -206,10 +207,11 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
     plt.clf()
     for one_row in qtab:
         f=fits.open(one_row['Filename'])
-        row=f[1].data[one_row['y'],]
-        xcol=np.arange(len(row))-one_row['x']
-        xmin=int(one_row['x']-0.5*size)
-        xmax=int(one_row['x']+0.5*size)
+        x,y=radec2pix(f,ra,dec)
+        row=f[1].data[y,]
+        xcol=np.arange(len(row))-x
+        xmin=int(x-0.5*size)
+        xmax=int(y+0.5*size)
         offset=0
         if xmin<0:
             offset=-xmin
@@ -232,11 +234,11 @@ def do_xcut_plot(ztab,xfilt='N662',exptime=400.,size=100,ymin=30,ymax=100):
         plt.plot(xcol,row,'.')
         
         
-        col=f[1].data[:,one_row['x']]
+        col=f[1].data[:,x]
         xrow=np.arange(len(col))-one_row['y']
         
-        xmin=int(one_row['y']-0.5*size)
-        xmax=int(one_row['y']+0.5*size)
+        xmin=int(y-0.5*size)
+        xmax=int(y+0.5*size)
         offset=0
         if xmin<0:
             offset=-xmin
@@ -284,21 +286,20 @@ def doit(ra='01:02:38.6',dec='-71:59:08.23',xdir='.',xfilt='N662',exptime=400,si
     '''
     Run the script
     '''
-    
-    xtab=find_overlaps(xdir,ra,dec,size)
 
-    if len(xtab)==0:
-        print('No files with this position')
-        return
 
-    xtab.write('xcut_tab.txt',format='ascii.fixed_width_two_line',overwrite=True)
-    
+    xtab_name='%s/xcut_tab.txt' % xdir
+    if os.path.isfile(xtab_name)==False:
+        make_xcut_tab(xdir)
 
-    ireturn=do_xcut_plot(xtab,xfilt,exptime,size,ymin,ymax)
+    ra,dec=radec2deg(ra,dec)
+
+    ireturn=do_xcut_plot(xtab_name,ra,dec,xfilt,exptime,size,ymin,ymax)
 
     if ireturn:
         plt.savefig('xcut_%s_%s.png' % (xfilt,exptime))
     else:
+        xtab=ascii.read(xtab_name)
         filters=np.unique(xtab['Filter'])
         for one_filter in filters:
             foo=xtab[xtab['Filter']==one_filter]
