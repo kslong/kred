@@ -241,7 +241,7 @@ def steer(argv):
 
     if os.path.isdir('%s/%s' % (xdir,field))==False:
         print(__doc__)
-        print('Check inputs: %s/%s does not appear to be a directory' % (xdir,fieeld))
+        print('Check inputs: %s/%s does not appear to be a directory' % (xdir,field))
         return
     if len(tiles)==0:
         print(__doc__)
