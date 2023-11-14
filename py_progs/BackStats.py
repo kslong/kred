@@ -310,7 +310,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
     xtab=ascii.read('foo.txt')
 
     # Now rescale to account for pixel size
-    scale_factor=(0.27*0.27)/(2.*2.)
+    scale_factor=(0.2631*0.2631)/(2.*2.)
 
     xtab['mean']*=scale_factor
     xtab['med']*=scale_factor

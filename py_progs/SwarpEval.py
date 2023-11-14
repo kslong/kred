@@ -177,17 +177,18 @@ def get_stats(xfiles):
     
 
 
-def make_plots(xdir='DECam_SWARP2',field='LMC_c01',tile='T01'):
+def make_plots(xdirectory='DECam_SWARP2',field='LMC_c01',tile='T01'):
 
     
     print('Beginning %s %s' % (field,tile))
-    files=get_images(xdir,field,tile)
+    files=get_images(xdirectory,field,tile)
     if len(files)==0:
         print('No images were found for field %s tile %s in %s' % (field,tile,xdir))
         return
 
     xtab=get_stats(files)
-    xdir='%s/%s/eval' % (xdir,field)
+    xdir='Figs/%s/%s' % (xdirectory,field)
+    
     if os.path.isdir(xdir)==False:
         os.makedirs(xdir)
     for one in xtab:

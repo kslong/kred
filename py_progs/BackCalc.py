@@ -49,6 +49,78 @@ import timeit
 
 from log import *
 
+def plot_fit_results(field,tile,summary_dir='',zlim=20):
+    
+    xroot='%s_%s' % (field,tile)
+    if summary_dir=='':
+        summary_dir='Summary'
+    
+    ofile='%s/%s_xxx.txt' % (summary_dir,xroot)
+    bfile='%s/%s_bbb.txt' % (summary_dir,xroot)
+    
+    try:
+        offset=ascii.read(ofile)
+    except:
+        print('Could not read %s' % ofile)
+        return
+    
+    try:
+        back=ascii.read(bfile)
+    except:
+        print('Could not read %s' % bfile)
+        return
+    
+    back.rename_column('file','file1')
+    back.rename_column('b','b1')
+    offset=join(offset,back['file1','b1'],join_type='left')
+    # print(offset)
+    back.rename_column('file1','file2')
+    back.rename_column('b1','b2') 
+    offset=join(offset,back['file2','b2'],join_type='left')
+    offset['Delta2']=offset['Delta']+offset['b1']-offset['b2']
+    
+    filters=np.unique(offset['FILTER'])
+    
+    plt.figure(1,(8,8))
+    plt.clf()
+    for one_filter in filters:
+        x=offset[offset['FILTER']==one_filter]
+        i=0
+        while i<len(x):
+            if x['Delta2'][i]>zlim:
+                x['Delta2'][i]=zlim
+            if x['Delta2'][i]<-zlim:
+                x['Delta2'][i]=-zlim
+            i+=1
+        plt.subplot(3,1,1)
+        plt.plot(x['Delta'],x['Delta2'],'.',label=one_filter)
+        plt.subplot(3,1,2)
+        plt.plot(x['EXPTIME'],x['Delta2'],'.',label=one_filter)
+        plt.subplot(3,1,3)
+        plt.plot(x['npix'],x['Delta2'],'.',label=one_filter)
+    plt.subplot(3,1,1)
+    
+    plt.xlabel('Original offset')
+    plt.ylabel('Corrected offset')
+    plt.tight_layout()
+    
+    plt.subplot(3,1,2)
+    plt.xlabel('Exptime')
+    plt.ylabel('Corrected offset')
+    plt.legend()
+    plt.tight_layout()
+
+    plt.subplot(3,1,3)
+    plt.xlabel('Npix')
+    plt.ylabel('Corrected offset')
+    plt.tight_layout()
+    
+    fig_dir='Figs/BackCalc/%s' % field
+    if os.path.isdir(fig_dir)==False:
+        os.makedirs(fig_dir)
+    plot_file='%s/bb_check_%s.png' % (fig_dir,xroot)
+    plt.savefig(plot_file)
+    return 
 
 
 def xeval(xall):
@@ -422,6 +494,7 @@ def do_one_tile(field,tile):
             best_offset.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
 
+
             all_back.append(best_offset)
             records.append(one_record)
 
@@ -436,6 +509,7 @@ def do_one_tile(field,tile):
     all_back.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
     print('Finished %s %s in %.1f s'  % (field,tile, timeit.default_timer()-time_start))
+    plot_fit_results(field,tile)
 
 
 
