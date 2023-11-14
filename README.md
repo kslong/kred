@@ -259,8 +259,11 @@ set of commands:
 
 SetupTile.py -all LMC_c42
 SwarpSetup.py -all  LMC_c42
+
+# Optional, if one wants to see swarps based on the original backgourns
 Swarp.py -all LMC_c42
 SwarpEval.py -all DECam_SWARP LMC_c42
+# End optional section
 
 FindOverlaps.py -all LMC_c42
 BackPrep.py -all -run LMC_c42
@@ -277,8 +280,8 @@ SwarpEval.py -all DECam_SUB2 LMC_c42
 Creating a command file and commenting out the sections 
 that one has completed is a sensible approch to precesing.
 
-Note that the first 4 commands here are not normall necessary
-and are only usdful if one wants to see the immprovement
+Note that the first 4 commands here are not normally necessary
+and are only useful if one wants to see the immprovement
 from a more sophistcated image mataching of backgrounds
 
 
