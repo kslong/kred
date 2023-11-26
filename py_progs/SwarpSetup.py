@@ -21,8 +21,8 @@ where -all will cause swarp to be run on all 16 tiles.  With these inputs, the r
 use the files ending in _sw.tab to set up run files
 
 and -bsub directs the routine to use data for which an addtioal backgound subtraction
-algorithm has been used.  In theis case the Swarp commmands are written and to
-the DECAam_SWARP/field/tile_b directory, so that data results which are
+algorithm has been used.  In this case the Swarp commmands are written and to
+the DECam_SWARP/field/tile_b directory, so that data results which are
 background sutbracted and those that are not can be compared.
 
 If one wants to run only 1 or a few tiles then the command will be something like
@@ -177,7 +177,7 @@ def summarize(field='LMC_c42',tile='T07'):
 
 
 
-def create_swarp_dir(field='LMC_c42',tile='T07'):
+def create_swarp_dir(field='LMC_c42',tile='T07',bsub=False):
     '''
     Create a diretory for the swarp outputs if it does not exist
 
@@ -185,7 +185,11 @@ def create_swarp_dir(field='LMC_c42',tile='T07'):
     tile to be anything specific.  It just creates a subdirecroy
     of SWARPDIR
     '''
-    outdir='%s/%s/%s/' % (SWARPDIR,field,tile)
+    if bsub==False:
+        outdir='%s1/%s/%s/' % (SWARPDIR,field,tile)
+    else:
+        outdir='%s2/%s/%s/' % (SWARPDIR,field,tile)
+
     if os.path.isdir(outdir)==False:
         os.makedirs(outdir)
     return outdir
@@ -338,11 +342,11 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
 
     xtile=tile
 
-    if bsub==True:
-        xtile='%s_b' % tile
+    # if bsub==True:
+    #     xtile='%s_b' % tile
 
 
-    xdir=create_swarp_dir(field,xtile)
+    xdir=create_swarp_dir(field,xtile,bsub)
     
     
 
@@ -449,11 +453,17 @@ def steer(argv):
         i+=1
 
     if xall:
-        tiles=[]
-        i=1
-        while i<17:
-            tiles.append('T%02d' % i)
-            i+=1
+        # Assumme all directories with fits files should be searched
+        # Assume we could have both background subtracted and non
+        # background subtracted data to deal with
+        xfiles=glob('%s/%s/*/*.fits' % (PREPDIR,field))
+        xdirs=[]
+        for one in xfiles:
+            words=one.split('/')
+            xdirs.append(words[-2].replace('_b',''))
+
+        tiles=np.unique(xdirs)
+
 
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:

@@ -24,7 +24,7 @@ exposure.  One can modify this with the optsions indicated below
 
  
 
-Usage:  MefPref.py [-h] [-finish] [-back_min] [-back_none] [-np 4] Field_name or names
+Usage:  MefPref.py [-h] [-finish] [-all] [-back_min] [-back_none] [-np 4] Field_name or names
 
 where -h   --- to print this documentation and exit
        -finish --> do not redo files that have already been processed
@@ -87,7 +87,7 @@ from log import *
 
 
 MEFDIR='DECam_MEF/'
-PREPDIR='DECam_PREP/'
+CCDDIR='DECam_CCD/'
 SUMDIR='Summary/'
 
 
@@ -103,7 +103,7 @@ def prep_one_det(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.f
     data is not compressed.   Added extra keywords to primary header of output file
     that may be useful for swarp, including the rescaled saturation level
     
-    230611 - Addapted fro prep_one_file.  This version allows for several backgroud
+    230611 - Addapted from prep_one_file.  This version allows for several backgroud
     options, based on information assembled by MEFSum
 
     :
@@ -224,7 +224,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     # print(back)
     
     if outdir=='':
-        outdir='%s/%s/data/' % (PREPDIR,field)
+        outdir='%s/%s/data/' % (CCDDIR,field)
     if os.path.isdir(outdir)==False:
         print('Creating Prep Dir as :',outdir)
         os.makedirs(outdir)
