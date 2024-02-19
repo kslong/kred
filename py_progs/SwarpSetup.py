@@ -25,6 +25,7 @@ algorithm has been used.  In this case the Swarp commmands are written and to
 the DECam_SWARP2/field/tile directory and the data are taken from the DECAM_PREP2/field/tile
 directory
 
+
 If one wants to run only 1 or a few tiles then the command will be something like
 
 SwarpSetup.py LMC_c42  T01 T02 T03
