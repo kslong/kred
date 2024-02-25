@@ -11,7 +11,7 @@ out the initial processing steps to run PrepFiles on a set of data
 
 Command line usage (if any):
 
-    usage: SetupTile.py [-h] [-all] [-xtab myfile.txt] field tile1 tile2 ...
+    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] field tile1 tile2 ...
 
     where:
         field is that name of a field, e.g LMC_c42
@@ -21,15 +21,17 @@ Command line usage (if any):
         -all  causes the program to create talbles containing the relevant
             infomation for all of the tiles in a field
         -xtab myfile.txt causes the program to use a different tile defination file
+        -S7 causes the S7 chip to be ignored
+        -seeing_max causes any images with seing greater than the value given to be ignored.
 
 Description:  
 
-    This program reads a tile defination file with the folowing format and 
-    to search for CCD images that should prepped to create fits files 
+    This program reads a tile definition file and 
+    searches for CCD images that should prepped to create fits files 
     to construct images in tiles of a field.  It writes the results to
     a table in the Summary directory
 
-    The program searches for the tile definition file in the local direcotry
+    The program searches for the tile definition file in the local directory
     and in the $KRED/config directory.
 
     The program works by reading the det.tab files created by MefSum.py
@@ -146,16 +148,33 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     x['Field']=field
         
     
-    return x['Field','Filename','Root','EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1','Delta_Dec','Delta_RA','FILTER','EXPTIME']
+    return x['Field','Filename','Root','EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1','Delta_Dec','Delta_RA',
+            'FILTER','EXPTIME','MAGZERO','SEEING']
 
 
 
-def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67):
-    
+def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67,s7=True,seeing_max=1000.):
+    '''
+    find the chip images that should be used for a specific tile with a specific size.  
 
-    
+    if s7 is False elimated the S7 chip
+    if the seeing max is less than a large value, choose only files that have good seeing
+    '''
+
         
     x=find_files_to_prep(field,tile,ra,dec,size_deg)
+    original_length(len(x))
+    if s7==False:
+        x=x[x['EXTNAME']!='S7']
+    if seeing_max<100.:
+        x=x[x['SEEING']<=seeing_max]
+    if len(x)<original_lenth:
+        print('Eliminated %d images of %d that were possible to use due to chip number or seeing' % (original_length-len(x),original_length)
+    else:
+        print('Using all %d imagges possible for this tile' % original_length)
+
+        
+
 
     if len(x)>0:
         outfile='Summary/%s_%s.txt' % (field,tile)
@@ -207,15 +226,19 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         
     return
 
-def setup_tiles(xtab):
-    '''
+def setup_tiles(xtab,s7,seeing_max): '''
     Run setup_one_tile multiple times, with the possibility of parallel
     processing
+
+    where 
+        if s7 is True, we will include chip s7, but if false we will not
+        if seeeing_max is less than some large value this will be used to
+            limit thes size
     '''
 
     for one in xtab:
         try:
-            setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'])
+            setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max)
         except IOError:
             print('Error: Something is wrong, and must be sorted before continuing')
             print('Try rerunning MefPrep.py -finish, and then repeat this step')
@@ -232,6 +255,8 @@ def steer(argv):
     tiles=[]
     xall=False
     table=''
+    seeing_max=1000.
+    use_s7=True
 
     i=1
     while i<len(argv):
@@ -240,9 +265,14 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-S7':
+            use_s7=False
         elif argv[i]=='-xtab':
             i+=1
             table=argv[i]
+        elif argv[i]=='-seeing_max':
+            i+=1
+            seeing_max=eval(argv[i])
         elif argv[i][0]=='-':
             print('Error: Unknown switch %s ' % argv[i])
             return
@@ -297,7 +327,7 @@ def steer(argv):
         print('Looked for the following tiles: ',tiles)
         return
 
-    setup_tiles(xtiles)
+    setup_tiles(xtiles,s7,seeing_max)
 
     fields=np.unique(xtiles['Field'])
     for one in fields:
