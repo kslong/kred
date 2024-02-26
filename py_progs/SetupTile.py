@@ -43,6 +43,9 @@ Primary routines:
     doit
 
 Notes:
+    If the directory exists where one is going to place links to the
+    files that are to be prepped, sll the file(link)s are removed so
+    that only the files including in this run should be in the direcory
                                        
 History:
 
