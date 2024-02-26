@@ -166,15 +166,21 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
 
         
     x=find_files_to_prep(field,tile,ra,dec,size_deg)
-    original_length(len(x))
+    original_length=len(x)
+    delta_s7=0
+    delta_seeing=0
     if s7==False:
+        foo=x[x['EXTNAME']=='S7']
+        delta_s7=len(foo)
         x=x[x['EXTNAME']!='S7']
     if seeing_max<100.:
+        foo=x[x['SEEING']>seeing_max]
+        delta_seeing=len(foo)
         x=x[x['SEEING']<=seeing_max]
-    if len(x)<original_lenth:
-        print('Eliminated %d images of %d that were possible to use due to chip number or seeing' % (original_length-len(x),original_length)
+    if len(x)<original_length:
+        print('Eliminated %d s7 images and %d bad seeing images of %d that were possible' % (delta_s7,delta_seeing,original_length))
     else:
-        print('Using all %d imagges possible for this tile' % original_length)
+        print('Using all %d images possible for this tile' % original_length)
 
         
 
@@ -221,15 +227,11 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     else:
         print('Successfully linked files from %s to %s' % (data_dir,tile_dir))
             
-
-
-
-
-
-        
     return
 
-def setup_tiles(xtab,s7,seeing_max): '''
+
+def setup_tiles(xtab,s7,seeing_max): 
+    '''
     Run setup_one_tile multiple times, with the possibility of parallel
     processing
 
@@ -268,7 +270,7 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
-        elif argv[i]=='-S7':
+        elif argv[i]=='-S7' or argv[i]=='-s7':
             use_s7=False
         elif argv[i]=='-xtab':
             i+=1
@@ -330,7 +332,7 @@ def steer(argv):
         print('Looked for the following tiles: ',tiles)
         return
 
-    setup_tiles(xtiles,s7,seeing_max)
+    setup_tiles(xtiles,use_s7,seeing_max)
 
     fields=np.unique(xtiles['Field'])
     for one in fields:
