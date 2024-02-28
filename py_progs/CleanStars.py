@@ -272,6 +272,10 @@ def doit(xdir='data',outdir='data'):
     '''
 
     files=glob('%s/*.fits' % xdir)
+    if len(files)==0:
+        print("No files found for %s" % xdir)
+        return
+
     print(files)
     records=[]
     qfile=[]
@@ -379,14 +383,14 @@ def steer(argv):
         outdir='%s/%s/%s' % (xoutdir,field,tile)
 
         if os.path.isdir(indir)==False:
-            print('Cannot find input directory: %s ' % indir)
-            continue
-        if os.path.isdir(outdir)==False:
-            os.makedirs(outdir)
+            log_message('CleanStars: Cannot find input directory: %s ' % indir)
+        else:
+            if os.path.isdir(outdir)==False:
+                os.makedirs(outdir)
 
-        doit(indir,outdir)
+            doit(indir,outdir)
 
-        log_message('CleanStars: Finished  %s %s ' % (field,tile))
+            log_message('CleanStars: Finished  %s %s ' % (field,tile))
 
     close_log()
 
