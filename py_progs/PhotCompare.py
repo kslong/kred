@@ -36,8 +36,9 @@ History:
 
 
 
+import os
 import numpy as np
-from astropy.io import fits
+from astropy.io import fits,ascii
 from photutils.detection import DAOStarFinder
 
 from astropy.stats import mad_std
@@ -55,6 +56,118 @@ import astropy.units as u
 
 
 from astroquery.gaia import Gaia
+
+import pathlib
+import os.path as path
+import requests
+from gaiaxpy import calibrate
+
+
+
+
+def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
+    """
+    Load or download and load from cache the spectrum of a gaia star, converted to erg/s/cm^2/A
+
+    Note that I have 'appropiated' this from the lvm drp
+    """
+    # create cache dir if it does not exist
+    pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+
+    if path.exists(GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv") is True:
+        # read the tables from our cache
+        gaiaflux = Table.read(
+            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv", format="csv"
+        )
+        gaiawave = Table.read(
+            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + "_sampling.csv", format="csv"
+        )
+    else:
+        # need to download from Gaia archive
+        CSV_URL = (
+            "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"
+            + str(gaiaID)
+            + "&format=CSV&DATA_STRUCTURE=RAW"
+        )
+        FILE = GAIA_CACHE_DIR + "/XP_" + str(gaiaID) + "_RAW.csv"
+
+        with requests.get(CSV_URL, stream=True) as r:
+            r.raise_for_status()
+            if len(r.content) < 2:
+                return []
+            with open(FILE, "w") as f:
+                f.write(r.content.decode("utf-8"))
+
+        # convert coefficients to sampled spectrum
+        _, _ = calibrate(
+            FILE,
+            output_path=GAIA_CACHE_DIR,
+            output_file="gaia_spec_" + str(gaiaID),
+            output_format="csv",
+        )
+        # read the flux and wavelength tables
+        gaiaflux = Table.read(
+            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv", format="csv"
+        )
+        gaiawave = Table.read(
+            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + "_sampling.csv", format="csv"
+        )
+
+    # make numpy arrays from whatever weird objects the Gaia stuff creates
+    wave = np.fromstring(gaiawave["pos"][0][1:-1], sep=",") * 10  # in Angstrom
+    flux = (
+        1e7 * 1e-1 * 1e-4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")
+    )  # W/s/micron -> in erg/s/cm^2/A
+
+    results=Table([wave,flux],names=['WAVE','FLUX'])
+    return results     
+
+
+def get_gaia_flux(xid=4658604348568208768):
+    '''
+    Get the flux for a Gaia star as observed throught the various filters
+    '''
+    xtab=get_gaia_spec(xid)
+    if len(xtab)==0:
+        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
+        return
+
+    test_dir=os.path.dirname(__file__)
+    print('test2',test_dir)
+
+
+    data_dir=os.path.dirname(__file__).replace('py_progs','data')
+
+    print('test',data_dir)
+
+    xfilt=ascii.read('%s/%s' % (data_dir,'n662.txt'))
+    xtab['HA_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
+                                       left=0, right=0)
+
+
+    xfilt=ascii.read('%s/%s' % (data_dir,'n673.txt'))
+    xtab['S2_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
+                                       left=0, right=0)
+    xfilt=ascii.read('%s/%s' % (data_dir,'r.txt'))
+    xtab['R_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
+                                       left=0, right=0)
+
+
+    xfilt=ascii.read('%s/%s' % (data_dir,'n708.txt'))
+    xtab['N708_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
+                                       left=0, right=0)
+
+    xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
+
+    dw=20.
+
+    r_flux=np.dot(xtab['FLUX'],xtab['R_TRANS'])*dw
+    ha_flux=np.dot(xtab['FLUX'],xtab['HA_TRANS'])*dw
+    s2_flux=np.dot(xtab['FLUX'],xtab['S2_TRANS'])*dw
+    n708_flux=np.dot(xtab['FLUX'],xtab['N708_TRANS'])*dw
+
+    return ha_flux,s2_flux,r_flux,n708_flux
+
 
 
 def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1):
