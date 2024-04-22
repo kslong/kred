@@ -56,7 +56,8 @@ from log import *
 
 
 CWD=os.getcwd()
-PREPDIR='%s/DECam_PREP/' % (CWD)
+DATADIR='%s/DECam_PREP/' % (CWD)
+PREPDIR='%s/DECam_PREP2/' % (CWD)
 
 def do_one_file(filein,fileout,b):
     # print(filein,fileout,b)
@@ -77,8 +78,8 @@ def subtract_one_tile(field='LMC_c42',tile='T07', np=1):
         print('Failed to find %s' % table_name)
         raise IOError
     
-    data_dir='%s/%s/%s/' % (PREPDIR,field,tile)
-    out_dir='%s/%s/%s_b/' % (PREPDIR,field,tile)
+    data_dir='%s/%s/%s/' % (DATADIR,field,tile)
+    out_dir='%s/%s/%s/' % (PREPDIR,field,tile)
     if os.path.isdir(data_dir) == False:
         print('Error: %s does not appear to exist' % data_dir)
         raise IOError
