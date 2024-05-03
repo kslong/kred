@@ -125,7 +125,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
 
 def get_gaia_flux(xid=4658604348568208768):
     '''
-    Get the flux for a Gaia star as observed throught the various filters
+    Get the flux for a Gaia star as observed through the various filters
     '''
     xtab=get_gaia_spec(xid)
     if len(xtab)==0:
@@ -170,12 +170,21 @@ def get_gaia_flux(xid=4658604348568208768):
 
 
 
-def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1):
+def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
     '''
-    Get data from the Gaia catalog
+    Get data from the Gaia photometric catalog
     '''
+    if outroot=='':
+        outroot='%.1f_%.1f' % (ra,dec)
+    
+    outfile='Gaia.%s.txt' % outroot
+
+    if redo==False and os.path.isfile(outfile)==True:
+        print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
+        return outfile
     
     print('get_gaia: Getting data from RA Dec of  %.5f %.5f and size of %.2f' % (ra,dec,rad_deg))
+
     
 
 
@@ -202,10 +211,6 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
     r.rename_column('phot_bp_mean_mag','B')
     r.rename_column('phot_rp_mean_mag','R')
     
-    if outroot=='':
-        outroot='%.1f_%.1f' % (ra,dec)
-    
-    outfile='Gaia.%s.txt' % outroot
     r['Source_name','RA','Dec','B','G','R'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' %(outfile,len(r)))
     return outfile
@@ -223,6 +228,9 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         return 'Error'
 
     print('get_photometry: Beginning photometry of %s' % filename)
+
+    xexptime=x['PRIMARY'].header['EXPTIME']
+    xfilter=x['PRIMARY'].header['FILTER']
 
     
     if outroot=='':
@@ -280,6 +288,9 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     phot_table['Source_name']=names
     phot_table['RA']=pos.ra.degree
     phot_table['Dec']=pos.dec.degree
+    phot_table['File']=outroot
+    phot_table['Filter']=xfilter
+    phot_table['Exptime']=xexptime
 
 
     
@@ -326,6 +337,12 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
 
     # Create a new table to store the closest objects and their separations
     table1['Sep']=closest_separations*u.arcsec
+    del table2['Source_name']
+    del table2['RA']
+    del table2['Dec']
+    table1['Sep'].format='.3f'
+    table1['RA'].format='.6f'
+    table1['Dec'].foramt='6f'
     xtab=hstack([table1,table2[closest_indices]])
     
     xtab=xtab[xtab['Sep']<max_sep]
