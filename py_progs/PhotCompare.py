@@ -123,9 +123,64 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
     return results     
 
 
+def get_gaia_mag27_flux(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
+    '''
+     Get the giaa flux of a star at a particular wavelength and calculate thoe
+     total flux assuming in the bandpass from this if it were the same star
+     at mag27`.  
+
+     Note:
+     Added 240503. This is one possible way of calculating 
+    '''
+    xtab=get_gaia_spec(xid)
+    if len(xtab)==0:
+        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
+        return None
+    # xtab.info()
+    # print(xtab)
+    i=0
+    while xtab['WAVE'][i] < wavelength and i<len(xtab):
+        i+=1
+    #print(xtab['WAVE'][i])
+    frac=(wavelength-xtab['WAVE'][i-1])/(xtab['WAVE'][i]-xtab['WAVE'][i-1])
+    # print(frac)
+    flux=(1-frac) * xtab['FLUX'][i-1]+frac*xtab['FLUX'][i]
+    # print(flux)
+    flux27=flux*10**(-0.4*(27-gmag))*dlambda
+    return flux27
+
+def get_gaia_mag27_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
+    '''
+     Get the averge gaia flux of a star in a partcular wavelength band
+
+     Note:
+     Added 240503 - This is a variant of the routine above
+    '''
+    xtab=get_gaia_spec(xid)
+    if len(xtab)==0:
+        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
+        return None
+    # xtab.info()
+    # print(xtab)
+    wmax=wavelength+dlambda/2.
+    wmin=wavelength-dlambda/2
+    z=xtab[xtab['WAVE'] < wmax]
+    z=z[z['WAVE']>wmin]
+    flux=np.average(z['FLUX'])
+    flux27=flux*10**(-0.4*(27-gmag))*dlambda
+    return flux27
+                         
+                   
+                   
+
+
 def get_gaia_flux(xid=4658604348568208768):
     '''
     Get the flux for a Gaia star as observed through the various filters
+
+    240503 - I am not convince this is useful for anything, as this is
+    not normalized an way, and it is unrelated to the flux calibraiton
+    memo.
     '''
     xtab=get_gaia_spec(xid)
     if len(xtab)==0:
