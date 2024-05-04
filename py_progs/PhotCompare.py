@@ -265,8 +265,11 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
     r.rename_column('phot_g_mean_mag','G')
     r.rename_column('phot_bp_mean_mag','B')
     r.rename_column('phot_rp_mean_mag','R')
+    r.rename_column('teff_gspphot','teff')
+    r.rename_column('logg_gspphot','log_g')
+    r.rename_column('distance_gspphot','D')
     
-    r['Source_name','RA','Dec','B','G','R'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
+    r['Source_name','RA','Dec','B','G','R','teff','log_g','D'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' %(outfile,len(r)))
     return outfile
 

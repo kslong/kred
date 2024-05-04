@@ -222,12 +222,13 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
         return
     
     # print(back)
+    # exist_ok should prevent makdirs from throwing an error if the directory already exists
     
     if outdir=='':
         outdir='%s/%s/data/' % (CCDDIR,field)
     if os.path.isdir(outdir)==False:
         print('Creating Prep Dir as :',outdir)
-        os.makedirs(outdir)
+        os.makedirs(outdir,exist_ok=True)
     
     mef_fits_file='DECam_MEF/%s/mef/%s.fits.fz' % (field,root)
     
