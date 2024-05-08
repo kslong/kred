@@ -65,7 +65,7 @@ from gaiaxpy import calibrate
 
 
 
-def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
+def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     """
     Load or download and load from cache the spectrum of a gaia star, converted to erg/s/cm^2/A
 
@@ -290,6 +290,10 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     xexptime=x['PRIMARY'].header['EXPTIME']
     xfilter=x['PRIMARY'].header['FILTER']
 
+    tab_dir='./TabPhot'
+
+    os.makedirs(tab_dir,exist_ok=True)
+
     
     if outroot=='':
         words=filename.split('/')
@@ -312,7 +316,7 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         sources[col].info.format = '%.8g'  # for consistent table output
 
     # print(sources) 
-    sources.write('%s_sources.txt' % outroot,format='ascii.fixed_width_two_line',overwrite=True)
+    sources.write('TabPhot/%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
     
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
 
@@ -353,7 +357,7 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
 
     
     # print(phot_table)  
-    outfile='%s_phot.txt' % outroot
+    outfile='TabPhot/%s/%s_phot.txt' % (tab_dir,outroot)
     phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' % (outfile,len(phot_table)))
     return outfile
@@ -412,7 +416,7 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
         one=words[-1].replace('.txt','')
         words=table2_path.split('/')
         two=words[-1].replace('.txt','')
-        outfile='xmatch_%s_%s.txt' % (one,two)
+        outfile='TabPhot/xmatch_%s_%s.txt' % (one,two)
         xtab.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
         print('Error: There are no objects that are closer thn %f arcsec' % max_sep)
@@ -422,7 +426,7 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
 
 
 
-def do_all(filename='LMC_c48_T08.r.t060.fits',outroot=''):
+def do_all(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',outroot=''):
     '''
     Compare photometry in an image to photometry from Gaia
     '''
@@ -431,31 +435,37 @@ def do_all(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     except:
         print('Could not open %s' % filename)
         return
+
+    if gaia_cat_file!='' and os.path.isfile(gaia_cat_file)==True:
+        gaia_file=gaia_cat_file
+        print('Using existing GaiaCat file: %s' % gaia_cat_file)
+    else:
+        print('Making new GaiCat file')
     
     
-    wcs = WCS(x[0].header)
+        wcs = WCS(x[0].header)
          
-    # Get the shape of the image
-    naxis1 = x[0].header['NAXIS1']
-    naxis2 = x[0].header['NAXIS2']
+        # Get the shape of the image
+        naxis1 = x[0].header['NAXIS1']
+        naxis2 = x[0].header['NAXIS2']
         
-    # Calculate the pixel coordinates of the center
-    center_pixel = (naxis1 / 2, naxis2 / 2)
+        # Calculate the pixel coordinates of the center
+        center_pixel = (naxis1 / 2, naxis2 / 2)
         
-    # Convert pixel coordinates to RA and Dec
-    center_ra_dec = wcs.pixel_to_world(center_pixel[0], center_pixel[1])
+        # Convert pixel coordinates to RA and Dec
+        center_ra_dec = wcs.pixel_to_world(center_pixel[0], center_pixel[1])
         
-    # Calculate the size of the image in degrees
-    # The size is determined by the diagonal distance from the center to the corner of the image
-    corner_pixel = (0, 0)
-    corner_ra_dec = wcs.pixel_to_world(corner_pixel[0], corner_pixel[1])
-    size_deg = center_ra_dec.separation(corner_ra_dec).to(u.degree).value
-    ra=center_ra_dec.ra.deg
-    dec=center_ra_dec.dec.deg
+        # Calculate the size of the image in degrees
+        # The size is determined by the diagonal distance from the center to the corner of the image
+        corner_pixel = (0, 0)
+        corner_ra_dec = wcs.pixel_to_world(corner_pixel[0], corner_pixel[1])
+        size_deg = center_ra_dec.separation(corner_ra_dec).to(u.degree).value
+        ra=center_ra_dec.ra.deg
+        dec=center_ra_dec.dec.deg
     
-    # print(ra,dec,size_deg)
+        # print(ra,dec,size_deg)
     
-    gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+        gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
     
     phot_file=get_photometry(filename,outroot)
     
@@ -474,6 +484,8 @@ def do_all(filename='LMC_c48_T08.r.t060.fits',outroot=''):
 
 
 def do_fig(xtab,outroot):
+
+    os.makedirs('./Figs_phot',exist_ok=True)
     plt.figure(1,(12,6))
     plt.clf()
     plt.subplot(1,2,1)
@@ -499,7 +511,7 @@ def do_fig(xtab,outroot):
     plt.ylim(11,22)
     plt.xlim(11,22)  
     plt.tight_layout()
-    plt.savefig('%s.png' % outroot)
+    plt.savefig('./Figs_phot/%s.png' % outroot)
 
     
 
@@ -508,6 +520,7 @@ def steer(argv):
     Run the script given choices from the command line
     '''
 
+    gaia_cat_file=''
     files=[]
     
     i=1
@@ -515,6 +528,9 @@ def steer(argv):
         if argv[i].count('-h'):
             print(__doc__)
             return
+        elif argv[i]=='-gcat':
+            i+=1
+            gaia_cat_file=argv[i]
         elif argv[i][0]=='-':
             print('Unknown switch ',argv)
             return
@@ -524,7 +540,7 @@ def steer(argv):
 
     for one in files:
         print('Processing %s' % one)
-        do_all(one)
+        do_all(one,gaia_cat_file)
 
 
 
