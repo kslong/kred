@@ -37,12 +37,16 @@ import timeit
 import subprocess
 from log import *
 from kred_repo_info import get_kred_git_commit_info
+from astropy.wcs import WCS
 
 exec_dir=os.getcwd()
 
 
 SWARPDIR='DECam_SWARP'
 PREPDIR=os.path.abspath('DECam_PREP')
+
+
+
 
 
 def add_header_keywords(root,run_dir='./',field='',tile=''):
@@ -80,6 +84,7 @@ def add_header_keywords(root,run_dir='./',field='',tile=''):
     xobject=field
     if len(tile)>0:
         xobject='%s_%s' % (field,tile)
+    shdr['PROPID']='DeMCELS'
     shdr['OBJECT']=xobject
     shdr['EXPTIME']=hdr['EXPTIME']
     shdr['TELESCOP']=hdr['TELESCOP']
@@ -87,12 +92,27 @@ def add_header_keywords(root,run_dir='./',field='',tile=''):
     shdr['INSTRUME']=hdr['INSTRUME']
     shdr['FILTER']=hdr['FILTER']
     shdr['N_EXP']=len(lines)
+    shdr['PROCTYPE']='Stacked'
 
     commit,commit_date=get_kred_git_commit_info()
 
     shdr['PIPELINE'] = 'kred'
     shdr['COMMIT'] = commit
     shdr['PDATE']=commit_date
+
+    naxis1=shdr['NAXIS1']
+    naxis2=shdr['NAXIS2']
+
+    corners_pixels = np.array([[0, 0], [0, naxis2-1], [naxis1-1, 0], [naxis1-1, naxis2-1]])
+    wcs=WCS(shdr)
+
+    corners_ra_dec = wcs.all_pix2world(corners_pixels, 0)
+
+    print(corners_ra_dec)
+    for i in range(4):
+        shdr[f'COR{i+1}RA1'] = corners_ra_dec[i, 0]
+        shdr[f'COR{i+1}DEC1'] = corners_ra_dec[i, 1]
+
     swarp.flush()
     swarp.close()
 
