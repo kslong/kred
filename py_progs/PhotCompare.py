@@ -6,7 +6,7 @@
 
 Synopsis:  
 
-Compare the brightneess of objects found in kred-prociessed images to Gaia
+Compare the brightness es of objects found in kred-processed images to Gaia
 assuming our standard rescaling
 
 
@@ -24,10 +24,22 @@ Primary routines:
     doit
 
 Notes:
+
+    The routine retrieves if necessary Gaia catalog information for
+    an image (or group of images), carrieds out aperture photometry
+    on the images, and then x-correlates the results.  
+
+    The most time-consuming part of the process is Gaia catalog
+    retrieval, so this is only done once, if all of the files
+    have the same centers.  
+
+    (There are los of functions that are not in the end used.)
+
                                        
 History:
 
 240318 ksl Coding begun
+240527 ksl Sped up the catalog matching.
 
 '''
 
@@ -53,6 +65,11 @@ from astropy.table import Table,join,hstack
 
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+import timeit
+import time
+import multiprocessing
+multiprocessing.set_start_method("spawn",force=True)
+
 
 
 from astroquery.gaia import Gaia
@@ -61,6 +78,19 @@ import pathlib
 import os.path as path
 import requests
 from gaiaxpy import calibrate
+
+from scipy.spatial import KDTree
+
+
+def get_no_jobs(jobs):
+    '''
+    Check how many jobs are running
+    '''
+    njobs=0
+    for one in jobs:
+        if one.is_alive():
+            njobs+=1
+    return njobs
 
 
 
@@ -242,8 +272,6 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
 
     
 
-
-
     Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
 
     coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
@@ -275,6 +303,38 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
 
 
 
+
+def do_fig(xtab,outroot):
+
+    os.makedirs('./Figs_phot',exist_ok=True)
+    plt.figure(1,(12,6))
+    plt.clf()
+    plt.subplot(1,2,1)
+    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    plt.plot(xtab['G'],xtab['phot_mag'],'.',alpha=.05)
+    plt.xlabel('Gaia G mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,22],[11,22],'k-')
+    plt.text(13,20,outroot)
+
+    plt.ylim(11,22)
+    plt.xlim(11,22) 
+
+
+
+    plt.tight_layout()
+    plt.subplot(1,2,2)
+    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    plt.plot(xtab['R'],xtab['phot_mag'],'.',alpha=.05)
+    plt.xlabel('Gaia R mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,22],[11,22],'k-')
+    plt.ylim(11,22)
+    plt.xlim(11,22)  
+    plt.tight_layout()
+    plt.savefig('./Figs_phot/%s.png' % outroot)
+
+    
 
 
 def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
@@ -316,7 +376,8 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         sources[col].info.format = '%.8g'  # for consistent table output
 
     # print(sources) 
-    sources.write('TabPhot/%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
+    # sources.write('TabPhot/%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
+    sources.write('%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
     
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
 
@@ -357,16 +418,20 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
 
     
     # print(phot_table)  
-    outfile='TabPhot/%s/%s_phot.txt' % (tab_dir,outroot)
+    outfile='%s/%s_phot.txt' % (tab_dir,outroot)
     phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' % (outfile,len(phot_table)))
     return outfile
+
 
 
 def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     '''
     Find the objects with a given distance given two astropy tables.  The
     routine returns only the closest object that satisvies this criterion.
+
+
+    240527 - this is a new version which useds KDTree
     '''
     # Read the two Astropy tables
     try:
@@ -384,30 +449,41 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     print('get_closest_objects: Beginning x-match of %s and %s' % (table1_path,table2_path))
     
     # Convert RA and Dec columns to SkyCoord objects
-    coords_table1 = SkyCoord(ra=table1['RA'] * u.degree, dec=table1['Dec'] * u.degree)
-    coords_table2 = SkyCoord(ra=table2['RA'] * u.degree, dec=table2['Dec'] * u.degree)
-    
-    # Find the closest objects in table2 to each object in table1
-    closest_indices = []
-    closest_separations = []
+    coords1 = SkyCoord(ra=table1['RA'] * u.degree, dec=table1['Dec'] * u.degree)
+    coords2 = SkyCoord(ra=table2['RA'] * u.degree, dec=table2['Dec'] * u.degree)
 
-    for coord1 in coords_table1:
-        separations = coord1.separation(coords_table2)
-        min_index = np.argmin(separations)
-        closest_indices.append(min_index)
-        closest_separations.append(separations[min_index].to(u.arcsec).value)
+    # Convert SkyCoord to Cartesian coordinates
+    cartesian_coords1 = np.array([coords1.cartesian.x.value, coords1.cartesian.y.value, coords1.cartesian.z.value]).T
+    cartesian_coords2 = np.array([coords2.cartesian.x.value, coords2.cartesian.y.value, coords2.cartesian.z.value]).T
+
+    # Build a KDTree for the second set of coordinates
+    tree = KDTree(cartesian_coords2)
+
+
+
+    # Query the KDTree for the closest neighbor in table2 for each object in table1
+    distances, indices = tree.query(cartesian_coords1)
+
+    # Extract the matching rows from table2. this resorts table2 in the order of table 1
+    closest_matches = table2[indices]
+
+        # Compute the separations
+    closest_coords = SkyCoord(ra=closest_matches['RA']*u.degree, dec=closest_matches['Dec']*u.degree)
+    separations = coords1.separation(closest_coords).arcsecond
+
 
     # Create a new table to store the closest objects and their separations
-    table1['Sep']=closest_separations*u.arcsec
+    table1['Sep']=separations
     del table2['Source_name']
     del table2['RA']
     del table2['Dec']
     table1['Sep'].format='.3f'
     table1['RA'].format='.6f'
     table1['Dec'].foramt='6f'
-    xtab=hstack([table1,table2[closest_indices]])
+    xtab=hstack([table1,closest_matches])
     
     xtab=xtab[xtab['Sep']<max_sep]
+
     
     print('Of %d objects in %s and %d objects in %s, found %d matches' % (len(table1),table1_path,len(table2),table2_path,len(xtab)))
     
@@ -425,47 +501,36 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     return xtab
 
 
+def get_size(filename='LMC_c48_T08.r.t060.fits'):
 
-def do_all(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',outroot=''):
-    '''
-    Compare photometry in an image to photometry from Gaia
-    '''
     try:
         x=fits.open(filename)
     except:
         print('Could not open %s' % filename)
-        return
-
-    if gaia_cat_file!='' and os.path.isfile(gaia_cat_file)==True:
-        gaia_file=gaia_cat_file
-        print('Using existing GaiaCat file: %s' % gaia_cat_file)
-    else:
-        print('Making new GaiCat file')
+        return 
     
-    
-        wcs = WCS(x[0].header)
+    wcs = WCS(x[0].header)
          
-        # Get the shape of the image
-        naxis1 = x[0].header['NAXIS1']
-        naxis2 = x[0].header['NAXIS2']
+     # Get the shape of the image
+    naxis1 = x[0].header['NAXIS1']
+    naxis2 = x[0].header['NAXIS2']
         
-        # Calculate the pixel coordinates of the center
-        center_pixel = (naxis1 / 2, naxis2 / 2)
+    # Calculate the pixel coordinates of the center
+    center_pixel = (naxis1 / 2, naxis2 / 2)
         
-        # Convert pixel coordinates to RA and Dec
-        center_ra_dec = wcs.pixel_to_world(center_pixel[0], center_pixel[1])
+    # Convert pixel coordinates to RA and Dec
+    center_ra_dec = wcs.pixel_to_world(center_pixel[0], center_pixel[1])
         
-        # Calculate the size of the image in degrees
-        # The size is determined by the diagonal distance from the center to the corner of the image
-        corner_pixel = (0, 0)
-        corner_ra_dec = wcs.pixel_to_world(corner_pixel[0], corner_pixel[1])
-        size_deg = center_ra_dec.separation(corner_ra_dec).to(u.degree).value
-        ra=center_ra_dec.ra.deg
-        dec=center_ra_dec.dec.deg
-    
-        # print(ra,dec,size_deg)
-    
-        gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+    # Calculate the size of the image in degrees
+    # The size is determined by the diagonal distance from the center to the corner of the image
+    corner_pixel = (0, 0)
+    corner_ra_dec = wcs.pixel_to_world(corner_pixel[0], corner_pixel[1])
+    size_deg = center_ra_dec.separation(corner_ra_dec).to(u.degree).value
+    ra=center_ra_dec.ra.deg
+    dec=center_ra_dec.dec.deg
+    return ra,dec,size_deg
+
+def do_xphot(filename,gaia_file,outroot):
     
     phot_file=get_photometry(filename,outroot)
     
@@ -480,40 +545,31 @@ def do_all(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',outroot=''):
 
     do_fig(closest_objects_table,outroot)
 
-    return
-
-
-def do_fig(xtab,outroot):
-
-    os.makedirs('./Figs_phot',exist_ok=True)
-    plt.figure(1,(12,6))
-    plt.clf()
-    plt.subplot(1,2,1)
-    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['G'],xtab['phot_mag'],'.',alpha=.05)
-    plt.xlabel('Gaia G mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,22],[11,22],'k-')
-    plt.text(13,20,outroot)
-
-    plt.ylim(11,22)
-    plt.xlim(11,22) 
-
-
-
-    plt.tight_layout()
-    plt.subplot(1,2,2)
-    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['R'],xtab['phot_mag'],'.',alpha=.05)
-    plt.xlabel('Gaia R mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,22],[11,22],'k-')
-    plt.ylim(11,22)
-    plt.xlim(11,22)  
-    plt.tight_layout()
-    plt.savefig('./Figs_phot/%s.png' % outroot)
-
     
+
+
+def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',outroot=''):
+    '''
+    Compare photometry in an image to photometry from Gaia
+    '''
+    try:
+        x=fits.open(filename)
+    except:
+        print('Could not open %s' % filename)
+        return
+
+    if gaia_cat_file!='' and os.path.isfile(gaia_cat_file)==True:
+        gaia_file=gaia_cat_file
+        print('Using existing GaiaCat file: %s' % gaia_cat_file)
+    else:
+        print('Making new GaiCat file')
+        ra,dec,size_deg=get_size(filename)
+        gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+
+
+    do_xphot(filename,gaia_file,outroot)
+
+    return
 
 def steer(argv):
     '''
@@ -538,9 +594,11 @@ def steer(argv):
             files.append(argv[i])
         i+=1
 
+
+
     for one in files:
         print('Processing %s' % one)
-        do_all(one,gaia_cat_file)
+        do_one(one,gaia_cat_file)
 
 
 
