@@ -105,6 +105,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
     if path.exists(GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv") is True:
+        print('Star is in cache')
         # read the tables from our cache
         gaiaflux = Table.read(
             GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv", format="csv"
@@ -113,6 +114,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
             GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + "_sampling.csv", format="csv"
         )
     else:
+        print('Star is must be retrieved')
         # need to download from Gaia archive
         CSV_URL = (
             "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"

@@ -60,10 +60,16 @@ from astropy.coordinates import SkyCoord
 import numpy as np
 from glob import glob
 
-def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',default_value=0):
+def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',default_value=0,frac_off=0.01):
+    '''
+    Extract a region of a given size, but do not write an image if a fraction of an
+    image has not data exceeds frac_off
+
+
+    '''
     # Open the input FITS file
 
-    print('Starting %s  %f %f\n' % (source_name,ra,dec))
+    print('Starting %s  %f %f on %s' % (source_name,ra,dec,input_fits))
     hdul = fits.open(input_fits)
     
     # Extract WCS information
@@ -99,12 +105,21 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     extracted_data = hdul[0].data[ymin:ymax, xmin:xmax]
 
     
-    # Create a new array with the fixed size
-    output_data = np.full((int(size_pixels), int(size_pixels)), default_value, dtype=extracted_data.dtype)
+    try:
+        # Create a new array with the fixed size
+        output_data = np.full((int(size_pixels), int(size_pixels)), default_value, dtype=extracted_data.dtype)
+        # Insert the extracted data into the new array
+        output_data[:extracted_data.shape[0], :extracted_data.shape[1]] = extracted_data
+    except Exception as e:
+        print(f"An error occurred on {input_fits}: {e}")
+        return
 
-    # Insert the extracted data into the new array
-    output_data[:extracted_data.shape[0], :extracted_data.shape[1]] = extracted_data
-    
+    num_default_value_pixels = np.sum(output_data == default_value)
+    frac_default=num_default_value_pixels/output_data.size
+    if frac_default>frac_off:
+        print(f"This image had {frac_default} > {frac_off} so ignoring")
+        return
+
     # Update WCS information for the output image
     new_center_ra, new_center_dec = wcs.all_pix2world(xmin + size_pixels/2, ymin + size_pixels/2, 0)
     wcs_output = wcs.deepcopy()

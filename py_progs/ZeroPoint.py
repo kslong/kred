@@ -91,6 +91,7 @@ def gaia_choose(filename='TabPhot/xmatch_Gaia.LMC_c32_T07_LMC_c32_T07.N673.t800_
     ftab=ftab[ftab['teff']<tmax]
     
     
+    random.seed(10) # This is an attmpt to cause the routine to always slect the same objects for n image.
     if len(ftab)>nmax:
         
         print('Selecting %d from %d possibilities' % (nmax,len(ftab)))
@@ -173,7 +174,10 @@ def do_one(xmatch_file,Rmin=14,Rmax=18,tmin=8000,tmax=15000, nmax=1000):
 
     words=xmatch_file.split('/')
     outroot='Figs_phot/%s' % (words[-1])
-    do_plot(final,outroot)
+    try:
+        do_plot(final,outroot)
+    except:
+        print('Error could not make plots for %s' % (xmatch_file))
     return final
         
         
@@ -218,23 +222,23 @@ def steer(argv):
         xave_s2.append(np.average(s2))
         xstd_s2.append(np.std(s2))
 
-    xtab=Table([names,xmed_ha,xave_ha,xstd_ha,xmed_s2,xave_s2,xstd_s2],names=['Filename','Ha(Med)','Ha(Ave)','Ha(Std)','S2(Med)','S2(Ave)','S2(Std)'])
+        xtab=Table([names,xmed_ha,xave_ha,xstd_ha,xmed_s2,xave_s2,xstd_s2],names=['Filename','Ha(Med)','Ha(Ave)','Ha(Std)','S2(Med)','S2(Ave)','S2(Std)'])
 
-    if os.path.isfile('PhotMaster.txt'):
-        xmaster=ascii.read('PhotMaster.txt')
-        combined_table=vstack([xmaster,xtab])
-        unique_filenames, indices, counts = np.unique(combined_table['Filename'], return_index=True, return_counts=True)
+        if os.path.isfile('PhotMaster.txt'):
+            xmaster=ascii.read('PhotMaster.txt')
+            combined_table=vstack([xmaster,xtab])
+            unique_filenames, indices, counts = np.unique(combined_table['Filename'], return_index=True, return_counts=True)
 
         
-        # Identify the filenames that appear twice (in both tables)
-        duplicate_filenames = unique_filenames[counts == 2]
+            # Identify the filenames that appear twice (in both tables)
+            duplicate_filenames = unique_filenames[counts == 2]
 
-        # Remove rows from table1 where Filename is in the duplicate_filenames list
-        mask = ~np.isin(xmaster['Filename'], duplicate_filenames)
-        filtered_table1 = xmaster[mask]
-        xtab=vstack([xmaster,xtab])
+            # Remove rows from table1 where Filename is in the duplicate_filenames list
+            mask = ~np.isin(xmaster['Filename'], duplicate_filenames)
+            filtered_table1 = xmaster[mask]
+            xtab=vstack([xmaster,xtab])
 
-    xtab.write('PhotMaster.txt',format='ascii.fixed_width_two_line',overwrite=True)
+        xtab.write('PhotMaster.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
 
 
