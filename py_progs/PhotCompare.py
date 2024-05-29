@@ -474,9 +474,9 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
 
     # Create a new table to store the closest objects and their separations
     table1['Sep']=separations
-    del table2['Source_name']
-    del table2['RA']
-    del table2['Dec']
+    del closest_matches['Source_name']
+    del closest_matches['RA']
+    del closest_matches['Dec']
     table1['Sep'].format='.3f'
     table1['RA'].format='.6f'
     table1['Dec'].foramt='6f'

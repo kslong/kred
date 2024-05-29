@@ -30,6 +30,7 @@ History:
 import sys
 import os
 from astropy.io import ascii
+from astropy.table import Table,vstack
 import numpy as np
 import matplotlib.pyplot as plt
 import random
@@ -117,7 +118,13 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
     while i<len(xtab):
         one=xtab[i]
         xtest='%s' % one['Source_name']
-        spec_tab=get_gaia_spec(xtest)
+        try:
+            spec_tab=get_gaia_spec(xtest)
+        except:
+            spec_tab=[]
+            print('Failed calling get_gaia_spec  for ',  one['Source_name'])
+            return None
+
         if len(spec_tab)>0:
             f_ha=get_flux(spec_tab,6563)
             ha_values.append(f_ha)
@@ -147,7 +154,8 @@ def do_plot(ztab, outroot='foo'):
     plt.subplot(3,2,3)
     plt.loglog(ztab['Ha'],ztab['Net'],'o')
     plt.subplot(3,2,5)
-    plt.hist(ztab['S2']/ztab['Net'],range=[0,5e-20])
+    plt.hist(ztab['Ha']/ztab['Net'],range=[0,5e-20])
+
     plt.subplot(3,2,2)
     plt.hist(ztab['S2'])
     plt.subplot(3,2,4)
@@ -166,6 +174,7 @@ def do_one(xmatch_file,Rmin=14,Rmax=18,tmin=8000,tmax=15000, nmax=1000):
     words=xmatch_file.split('/')
     outroot='Figs_phot/%s' % (words[-1])
     do_plot(final,outroot)
+    return final
         
         
     
@@ -185,9 +194,47 @@ def steer(argv):
 
         i+=1
 
+    names=[]
+    xmed_ha=[]
+    xave_ha=[]
+    xstd_ha=[]
+    xmed_s2=[]
+    xave_s2=[]
+    xstd_s2=[]
     for one in files:
         print(one)
-        do_one(one)
+        final=do_one(one)
+        xfile=one.split('/')[-1]
+        names.append(xfile)
+        ha=final['Ha']/final['Net']
+        s2=final['S2']/final['Net']
+
+        xmed_ha.append(np.median(ha))
+        xave_ha.append(np.average(ha))
+        xstd_ha.append(np.std(ha))
+
+
+        xmed_s2.append(np.median(s2))
+        xave_s2.append(np.average(s2))
+        xstd_s2.append(np.std(s2))
+
+    xtab=Table([names,xmed_ha,xave_ha,xstd_ha,xmed_s2,xave_s2,xstd_s2],names=['Filename','Ha(Med)','Ha(Ave)','Ha(Std)','S2(Med)','S2(Ave)','S2(Std)'])
+
+    if os.path.isfile('PhotMaster.txt'):
+        xmaster=ascii.read('PhotMaster.txt')
+        combined_table=vstack([xmaster,xtab])
+        unique_filenames, indices, counts = np.unique(combined_table['Filename'], return_index=True, return_counts=True)
+
+        
+        # Identify the filenames that appear twice (in both tables)
+        duplicate_filenames = unique_filenames[counts == 2]
+
+        # Remove rows from table1 where Filename is in the duplicate_filenames list
+        mask = ~np.isin(xmaster['Filename'], duplicate_filenames)
+        filtered_table1 = xmaster[mask]
+        xtab=vstack([xmaster,xtab])
+
+    xtab.write('PhotMaster.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
 
 
