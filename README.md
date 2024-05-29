@@ -300,3 +300,11 @@ or in all of the images in that directory or any of its subdirectories.
 be processed in the standard manner.  Depending on the command line switches, the program will
 attempt to use only data from specific fields, or all of the data that exists  on one's machine.
 
+* PhotCompare.py is a routine that identifies stars in the DECam images, does simple aperture 
+photometry on them, and then compares the derived magnitudes to magnitudes of GAIA stars in
+the field.
+
+* ZeroPoint.py is a routine that takes a subset of the objects identified with PhotCompare.py and 
+retrieves the low resolution GAIA spectra, and calculates the conversion between DN for the 
+Ha and [SII] filters to flux in ergs/s.
+
