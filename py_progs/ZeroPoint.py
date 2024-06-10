@@ -11,15 +11,24 @@ Get flux corresponding to 1DN through various filters
 
 Command line usage (if any):
 
-    usage: ZeroPoint.py filename
+    usage: ZeroPoint.py xmatch*.txt
+
+    where the inputs are one or more xmatch files
 
 Description:  
+
+    This routine estimates the zeropoints based on the
+    ouputs from the PhotCompare routine
 
 Primary routines:
 
     doit
 
 Notes:
+
+    The routine produces or adds to the PhotMaster.txt file 
+    and produces a historgram plot of the derived 
+    zero points.
                                        
 History:
 
@@ -178,6 +187,8 @@ def do_one(xmatch_file,Rmin=14,Rmax=18,tmin=8000,tmax=15000, nmax=1000):
         do_plot(final,outroot)
     except:
         print('Error could not make plots for %s' % (xmatch_file))
+    print('test -- final')
+    print(final)
     return final
         
         

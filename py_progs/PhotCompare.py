@@ -350,7 +350,12 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     print('get_photometry: Beginning photometry of %s' % filename)
 
     xexptime=x['PRIMARY'].header['EXPTIME']
-    xfilter=x['PRIMARY'].header['FILTER']
+    try:
+        xfilter=x['PRIMARY'].header['FILTER']
+    except:
+        words=filename.split('.')
+        xfilter=words[-3]
+        print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
 
     tab_dir='./TabPhot'
 
