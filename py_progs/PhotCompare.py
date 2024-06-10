@@ -148,8 +148,8 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     # make numpy arrays from whatever weird objects the Gaia stuff creates
     wave = np.fromstring(gaiawave["pos"][0][1:-1], sep=",") * 10  # in Angstrom
     flux = (
-        1e7 * 1e-1 * 1e-4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")
-    )  # W/s/micron -> in erg/s/cm^2/A
+        1e4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")
+    )  # W/s/nm -> in erg/s/cm^2/A
 
     results=Table([wave,flux],names=['WAVE','FLUX'])
     return results     
