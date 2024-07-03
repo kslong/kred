@@ -80,7 +80,9 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     x, y = wcs.all_world2pix(coords.ra.deg, coords.dec.deg, 0)
     
     # Convert size from arcminutes to pixels
-    size_pixels = (size_arcmin / 60) / abs(wcs.wcs.cd[0, 0])
+    size_pixels = np.rint((size_arcmin / 60) / abs(wcs.wcs.cd[0, 0]))
+    if size_pixels % 2 != 0:
+        size_pixels+=1
     
     # Define the region to extract
     xmin = int(max(0, x - size_pixels/2))
@@ -107,11 +109,11 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     
     try:
         # Create a new array with the fixed size
-        output_data = np.full((int(size_pixels), int(size_pixels)), default_value, dtype=extracted_data.dtype)
+        output_data = np.full((extracted_data.shape[0], extracted_data.shape[1]), default_value, dtype=extracted_data.dtype)
         # Insert the extracted data into the new array
         output_data[:extracted_data.shape[0], :extracted_data.shape[1]] = extracted_data
     except Exception as e:
-        print(f"An error occurred on {input_fits}: {e}")
+        print(f"B An error occurred on {input_fits}: {e}")
         return
 
     num_default_value_pixels = np.sum(output_data == default_value)
@@ -121,7 +123,8 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
         return
 
     # Update WCS information for the output image
-    new_center_ra, new_center_dec = wcs.all_pix2world(xmin + size_pixels/2, ymin + size_pixels/2, 0)
+    offset=-1
+    new_center_ra, new_center_dec = wcs.all_pix2world(xmin + size_pixels/2+offset, ymin + size_pixels/2+offset, 0)
     wcs_output = wcs.deepcopy()
     wcs_output.wcs.crval = [new_center_ra, new_center_dec]
     wcs_output.wcs.crpix = [size_pixels/2, size_pixels/2]  # Update reference pixel coordinates
