@@ -183,7 +183,7 @@ def make_plots(xdirectory='DECam_SWARP2',field='LMC_c01',tile='T01'):
     print('Beginning %s %s' % (field,tile))
     files=get_images(xdirectory,field,tile)
     if len(files)==0:
-        print('No images were found for field %s tile %s in %s' % (field,tile,xdir))
+        print('No images were found for field %s tile %s in %s' % (field,tile,xdirectory))
         return
 
     xtab=get_stats(files)

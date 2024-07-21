@@ -57,11 +57,11 @@ def add_header_keywords(root,run_dir='./',field='',tile=''):
         run_dir='./'
     swarp_file='%s/%s.fits' % (run_dir,root)
     if os.path.isfile(swarp_file)==False:
-        print('Error: swarp: Could not find %s to add header info' % swarp_file)
+        log_mesage('Error: swarp: Could not find %s to add header info' % swarp_file)
         return
     inputs='%s/%s.in' % (run_dir,root)
     if os.path.isfile(inputs)==False:
-        print('Error: swarp: Could not find file inputs %s to add header info' % inputs)
+        log_message('Error: swarp: Could not find file inputs %s to add header info' % inputs)
         return
 
     f=open(inputs)
@@ -140,7 +140,7 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
     try:
         os.chdir(run_dir)
     except:
-        print('Error: Could not cd to %s' % run_dir)
+        log_message('Error: Could not cd to %s' % run_dir)
         os.chdir(exec_dir)
 
     run_files=glob('*.run')
