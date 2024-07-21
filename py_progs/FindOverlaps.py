@@ -69,7 +69,7 @@ from astropy.io import ascii
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.table import join, vstack
-
+from log import *
 
 
 def get_files(field,tile,xfilter='Ha'):
@@ -185,18 +185,24 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
 
     i=0
     imax=len(xtab)-2
+    xx=[]
     while i<imax:
         z=get_overlap(i,xtab)
         if len(z)>0:
             xout=z['Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
             xout['XFilename']=xtab['Filename'][i]
-            if i==0:
+            if len(xx)==0:
                 xx=xout.copy()
             else:
                 xx=vstack([xx,xout])
         # print('Finished row',i)
         i+=1
-    xx.sort(['EXPTIME','delta'])
+
+    if len(xx)==0:
+        log_message('Error: FindOverlaps: Found no overlaps for  %s %s %s' % (field,tile,fileter))
+        return []
+
+    xx.sort(['EXPTIME','delta']) 
 
     # outfile='Summary/%s_%s_%s_overlap.txt' % (field,tile,xfilter)
     # xx.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
@@ -267,7 +273,23 @@ def steer(argv):
             tiles.append('T%02d' % i)
             i+=1
 
+    if field=='':
+        print('Error: FindOverlaps: No field provided:',argv)
+        return
+    else:
+        open_log('%s.log' % field)
+
+    if len(tiles)==0:
+        log_message('Error: FindOverlaps: No tiles to analyize')
+        log_close()
+        return
+
+
+
+
+
     for one in tiles:
+        log_message('Find Overlaps: Beginning %s %s' % (field,one))
         do_one_tile(field,one)
 
 

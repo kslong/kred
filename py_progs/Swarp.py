@@ -28,7 +28,7 @@ Notes:
 
 
 import os, stat
-from astropy.io import ascii
+from astropy.io import ascii,fits
 import matplotlib.pyplot as plt
 import numpy as np
 from astropy.table import Table, vstack
@@ -36,12 +36,89 @@ from glob import glob
 import timeit
 import subprocess
 from log import *
+from kred_repo_info import get_kred_git_commit_info
+from astropy.wcs import WCS
 
 exec_dir=os.getcwd()
 
 
 SWARPDIR='DECam_SWARP'
 PREPDIR=os.path.abspath('DECam_PREP')
+
+
+
+
+
+def add_header_keywords(root,run_dir='./',field='',tile=''):
+    '''
+    Add header keywords to an the results of Swarp
+    '''
+    if run_dir=='':
+        run_dir='./'
+    swarp_file='%s/%s.fits' % (run_dir,root)
+    if os.path.isfile(swarp_file)==False:
+        log_mesage('Error: swarp: Could not find %s to add header info' % swarp_file)
+        return
+    inputs='%s/%s.in' % (run_dir,root)
+    if os.path.isfile(inputs)==False:
+        log_message('Error: swarp: Could not find file inputs %s to add header info' % inputs)
+        return
+
+    f=open(inputs)
+    lines=f.readlines()
+    hdr_file=lines[0].strip()
+    try:
+        xhdr=fits.open(hdr_file)
+        hdr=xhdr['PRIMARY'].header
+    except:
+        print('Failed to open %s' % hdr_file)
+        return
+
+    try:
+        swarp=fits.open(swarp_file,mode='update')
+        shdr=swarp['PRIMARY'].header
+    except:
+        print('Failed to open %s' % swarp_file)
+        return
+
+    xobject=field
+    if len(tile)>0:
+        xobject='%s_%s' % (field,tile)
+    shdr['PROPID']='DeMCELS'
+    shdr['OBJECT']=xobject
+    shdr['EXPTIME']=hdr['EXPTIME']
+    shdr['TELESCOP']=hdr['TELESCOP']
+    shdr['OBSERVAT']=hdr['OBSERVAT']
+    shdr['INSTRUME']=hdr['INSTRUME']
+    shdr['FILTER']=hdr['FILTER']
+    shdr['N_EXP']=len(lines)
+    shdr['PROCTYPE']='Stacked'
+
+    commit,commit_date=get_kred_git_commit_info()
+
+    shdr['PIPELINE'] = 'kred'
+    shdr['COMMIT'] = commit
+    shdr['PDATE']=commit_date
+
+    naxis1=shdr['NAXIS1']
+    naxis2=shdr['NAXIS2']
+
+    corners_pixels = np.array([[0, 0], [0, naxis2-1], [naxis1-1, 0], [naxis1-1, naxis2-1]])
+    wcs=WCS(shdr)
+
+    corners_ra_dec = wcs.all_pix2world(corners_pixels, 0)
+
+    print(corners_ra_dec)
+    for i in range(4):
+        shdr[f'COR{i+1}RA1'] = corners_ra_dec[i, 0]
+        shdr[f'COR{i+1}DEC1'] = corners_ra_dec[i, 1]
+
+    swarp.flush()
+    swarp.close()
+
+
+    return
+
 
 
 def run_swarp(field='LMC_c42',tile='T07',bsub=False):
@@ -63,7 +140,7 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
     try:
         os.chdir(run_dir)
     except:
-        print('Error: Could not cd to %s' % run_dir)
+        log_message('Error: Could not cd to %s' % run_dir)
         os.chdir(exec_dir)
 
     run_files=glob('*.run')
@@ -94,6 +171,10 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
             print(xline)
 
         print('***Finished writing end of outputs')
+
+        # Note that when this routine is run we are in the actual directory where Swarp is tun
+        xroot=one.replace('.run','')
+        add_header_keywords(xroot,'',field,tile)
 
         print('***Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
         start_time=current_time

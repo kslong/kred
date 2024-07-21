@@ -42,6 +42,15 @@ astropy 5.1
 numpy 1.25.0
 ````
 
+If one wishes to use the ancillary routines that involve the
+GAIA data one must also have the following installed
+
+````
+photutils
+astroquery
+GaiaXPy
+````
+
 The routines assume a specific directory structure 
 to one of our own.  At present the new structure
 presumes:
@@ -296,7 +305,27 @@ in the config folder, for LMC and SMC SNRs.)
 on the command line options, one can create cutouts of all the fits images in a particular directory
 or in all of the images in that directory or any of its subdirectories.
 
+* XSnap.py, which is similar to Cutout.py in may respects, also creates cutout positions for a set of objects 
+defined in a "masterfile".  In this case, the master file defines not only the center position for the 
+cutout, but also a circular or elliptical shape for each object and overplots that on the image.  
+
 * SetupSpecial.py can be used to create 'tiles' at an arbitrary set of positions, which can then
 be processed in the standard manner.  Depending on the command line switches, the program will
 attempt to use only data from specific fields, or all of the data that exists  on one's machine.
+
+
+* GetGaiaCat.py is a routine that retrieves catalog data from the GAIA archive for a filed or some
+tiles in a field
+
+* PhotCompare.py is a routine that identifies stars in the DECam images, does simple aperture 
+photometry on them, and then compares the derived magnitudes to magnitudes of GAIA stars in
+the field.
+
+* ZeroPoint.py is a routine that takes a subset of the objects identified with PhotCompare.py and 
+retrieves the low resolution GAIA spectra, and calculates the conversion between DN for the 
+Ha and [SII] filters to flux in ergs/s.
+
+* MakeReg.py is a simpple utility routine which creates a set of region files with one region for each fits file  with a
+unque filter and exposure in a directory.  The region for each file is defined by the corners of the image, as defined in the header.
+It is intended to make it easy to overlay on, for example, an MCELS image, the areas covered by a set of exposures.
 

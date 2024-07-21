@@ -6,7 +6,7 @@
 
 Synopsis:  
 
-Compare the brightneess of objects found in kred-prociessed images to Gaia
+Compare the brightness es of objects found in kred-processed images to Gaia
 assuming our standard rescaling
 
 
@@ -24,10 +24,22 @@ Primary routines:
     doit
 
 Notes:
+
+    The routine retrieves if necessary Gaia catalog information for
+    an image (or group of images), carrieds out aperture photometry
+    on the images, and then x-correlates the results.  
+
+    The most time-consuming part of the process is Gaia catalog
+    retrieval, so this is only done once, if all of the files
+    have the same centers.  
+
+    (There are los of functions that are not in the end used.)
+
                                        
 History:
 
 240318 ksl Coding begun
+240527 ksl Sped up the catalog matching.
 
 '''
 
@@ -53,6 +65,11 @@ from astropy.table import Table,join,hstack
 
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+import timeit
+import time
+import multiprocessing
+multiprocessing.set_start_method("spawn",force=True)
+
 
 
 from astroquery.gaia import Gaia
@@ -62,10 +79,23 @@ import os.path as path
 import requests
 from gaiaxpy import calibrate
 
+from scipy.spatial import KDTree
+
+
+def get_no_jobs(jobs):
+    '''
+    Check how many jobs are running
+    '''
+    njobs=0
+    for one in jobs:
+        if one.is_alive():
+            njobs+=1
+    return njobs
 
 
 
-def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
+
+def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     """
     Load or download and load from cache the spectrum of a gaia star, converted to erg/s/cm^2/A
 
@@ -75,6 +105,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
     pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
 
     if path.exists(GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv") is True:
+        print('Star is in cache')
         # read the tables from our cache
         gaiaflux = Table.read(
             GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv", format="csv"
@@ -83,6 +114,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
             GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + "_sampling.csv", format="csv"
         )
     else:
+        print('Star is must be retrieved')
         # need to download from Gaia archive
         CSV_URL = (
             "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"
@@ -116,16 +148,71 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./gaia'):
     # make numpy arrays from whatever weird objects the Gaia stuff creates
     wave = np.fromstring(gaiawave["pos"][0][1:-1], sep=",") * 10  # in Angstrom
     flux = (
-        1e7 * 1e-1 * 1e-4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")
-    )  # W/s/micron -> in erg/s/cm^2/A
+        1e4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")
+    )  # W/s/nm -> in erg/s/cm^2/A
 
     results=Table([wave,flux],names=['WAVE','FLUX'])
     return results     
 
 
+def get_gaia_mag27_flux(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
+    '''
+     Get the giaa flux of a star at a particular wavelength and calculate thoe
+     total flux assuming in the bandpass from this if it were the same star
+     at mag27`.  
+
+     Note:
+     Added 240503. This is one possible way of calculating 
+    '''
+    xtab=get_gaia_spec(xid)
+    if len(xtab)==0:
+        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
+        return None
+    # xtab.info()
+    # print(xtab)
+    i=0
+    while xtab['WAVE'][i] < wavelength and i<len(xtab):
+        i+=1
+    #print(xtab['WAVE'][i])
+    frac=(wavelength-xtab['WAVE'][i-1])/(xtab['WAVE'][i]-xtab['WAVE'][i-1])
+    # print(frac)
+    flux=(1-frac) * xtab['FLUX'][i-1]+frac*xtab['FLUX'][i]
+    # print(flux)
+    flux27=flux*10**(-0.4*(27-gmag))*dlambda
+    return flux27
+
+def get_gaia_mag27_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
+    '''
+     Get the averge gaia flux of a star in a partcular wavelength band
+
+     Note:
+     Added 240503 - This is a variant of the routine above
+    '''
+    xtab=get_gaia_spec(xid)
+    if len(xtab)==0:
+        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
+        return None
+    # xtab.info()
+    # print(xtab)
+    wmax=wavelength+dlambda/2.
+    wmin=wavelength-dlambda/2
+    z=xtab[xtab['WAVE'] < wmax]
+    z=z[z['WAVE']>wmin]
+    flux=np.average(z['FLUX'])
+    flux27=flux*10**(-0.4*(27-gmag))*dlambda
+    return flux27
+                         
+                   
+                   
+
+
 def get_gaia_flux(xid=4658604348568208768):
     '''
-    Get the flux for a Gaia star as observed throught the various filters
+    Get the flux for a Gaia star as observed through the various filters
+
+    240503 - I am not convince this is useful for anything, as this is
+    not normalized an way, and it is unrelated to the flux calibraiton
+    memo.
     '''
     xtab=get_gaia_spec(xid)
     if len(xtab)==0:
@@ -170,15 +257,22 @@ def get_gaia_flux(xid=4658604348568208768):
 
 
 
-def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1):
+def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
     '''
-    Get data from the Gaia catalog
+    Get data from the Gaia photometric catalog
     '''
+    if outroot=='':
+        outroot='%.1f_%.1f' % (ra,dec)
+    
+    outfile='Gaia.%s.txt' % outroot
+
+    if redo==False and os.path.isfile(outfile)==True:
+        print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
+        return outfile
     
     print('get_gaia: Getting data from RA Dec of  %.5f %.5f and size of %.2f' % (ra,dec,rad_deg))
+
     
-
-
 
     Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
 
@@ -201,17 +295,48 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
     r.rename_column('phot_g_mean_mag','G')
     r.rename_column('phot_bp_mean_mag','B')
     r.rename_column('phot_rp_mean_mag','R')
+    r.rename_column('teff_gspphot','teff')
+    r.rename_column('logg_gspphot','log_g')
+    r.rename_column('distance_gspphot','D')
     
-    if outroot=='':
-        outroot='%.1f_%.1f' % (ra,dec)
-    
-    outfile='Gaia.%s.txt' % outroot
-    r['Source_name','RA','Dec','B','G','R'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
+    r['Source_name','RA','Dec','B','G','R','teff','log_g','D'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' %(outfile,len(r)))
     return outfile
 
 
 
+
+def do_fig(xtab,outroot):
+
+    os.makedirs('./Figs_phot',exist_ok=True)
+    plt.figure(1,(12,6))
+    plt.clf()
+    plt.subplot(1,2,1)
+    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    plt.plot(xtab['G'],xtab['phot_mag'],'.',alpha=.05)
+    plt.xlabel('Gaia G mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,22],[11,22],'k-')
+    plt.text(13,20,outroot)
+
+    plt.ylim(11,22)
+    plt.xlim(11,22) 
+
+
+
+    plt.tight_layout()
+    plt.subplot(1,2,2)
+    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    plt.plot(xtab['R'],xtab['phot_mag'],'.',alpha=.05)
+    plt.xlabel('Gaia R mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,22],[11,22],'k-')
+    plt.ylim(11,22)
+    plt.xlim(11,22)  
+    plt.tight_layout()
+    plt.savefig('./Figs_phot/%s.png' % outroot)
+
+    
 
 
 def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
@@ -223,6 +348,18 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         return 'Error'
 
     print('get_photometry: Beginning photometry of %s' % filename)
+
+    xexptime=x['PRIMARY'].header['EXPTIME']
+    try:
+        xfilter=x['PRIMARY'].header['FILTER']
+    except:
+        words=filename.split('.')
+        xfilter=words[-3]
+        print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
+
+    tab_dir='./TabPhot'
+
+    os.makedirs(tab_dir,exist_ok=True)
 
     
     if outroot=='':
@@ -246,7 +383,8 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         sources[col].info.format = '%.8g'  # for consistent table output
 
     # print(sources) 
-    sources.write('%s_sources.txt' % outroot,format='ascii.fixed_width_two_line',overwrite=True)
+    # sources.write('TabPhot/%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
+    sources.write('%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
     
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
 
@@ -280,20 +418,27 @@ def get_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     phot_table['Source_name']=names
     phot_table['RA']=pos.ra.degree
     phot_table['Dec']=pos.dec.degree
+    phot_table['File']=outroot
+    phot_table['Filter']=xfilter
+    phot_table['Exptime']=xexptime
 
 
     
     # print(phot_table)  
-    outfile='%s_phot.txt' % outroot
+    outfile='%s/%s_phot.txt' % (tab_dir,outroot)
     phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' % (outfile,len(phot_table)))
     return outfile
+
 
 
 def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     '''
     Find the objects with a given distance given two astropy tables.  The
     routine returns only the closest object that satisvies this criterion.
+
+
+    240527 - this is a new version which useds KDTree
     '''
     # Read the two Astropy tables
     try:
@@ -311,24 +456,41 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     print('get_closest_objects: Beginning x-match of %s and %s' % (table1_path,table2_path))
     
     # Convert RA and Dec columns to SkyCoord objects
-    coords_table1 = SkyCoord(ra=table1['RA'] * u.degree, dec=table1['Dec'] * u.degree)
-    coords_table2 = SkyCoord(ra=table2['RA'] * u.degree, dec=table2['Dec'] * u.degree)
-    
-    # Find the closest objects in table2 to each object in table1
-    closest_indices = []
-    closest_separations = []
+    coords1 = SkyCoord(ra=table1['RA'] * u.degree, dec=table1['Dec'] * u.degree)
+    coords2 = SkyCoord(ra=table2['RA'] * u.degree, dec=table2['Dec'] * u.degree)
 
-    for coord1 in coords_table1:
-        separations = coord1.separation(coords_table2)
-        min_index = np.argmin(separations)
-        closest_indices.append(min_index)
-        closest_separations.append(separations[min_index].to(u.arcsec).value)
+    # Convert SkyCoord to Cartesian coordinates
+    cartesian_coords1 = np.array([coords1.cartesian.x.value, coords1.cartesian.y.value, coords1.cartesian.z.value]).T
+    cartesian_coords2 = np.array([coords2.cartesian.x.value, coords2.cartesian.y.value, coords2.cartesian.z.value]).T
+
+    # Build a KDTree for the second set of coordinates
+    tree = KDTree(cartesian_coords2)
+
+
+
+    # Query the KDTree for the closest neighbor in table2 for each object in table1
+    distances, indices = tree.query(cartesian_coords1)
+
+    # Extract the matching rows from table2. this resorts table2 in the order of table 1
+    closest_matches = table2[indices]
+
+        # Compute the separations
+    closest_coords = SkyCoord(ra=closest_matches['RA']*u.degree, dec=closest_matches['Dec']*u.degree)
+    separations = coords1.separation(closest_coords).arcsecond
+
 
     # Create a new table to store the closest objects and their separations
-    table1['Sep']=closest_separations*u.arcsec
-    xtab=hstack([table1,table2[closest_indices]])
+    table1['Sep']=separations
+    del closest_matches['Source_name']
+    del closest_matches['RA']
+    del closest_matches['Dec']
+    table1['Sep'].format='.3f'
+    table1['RA'].format='.6f'
+    table1['Dec'].foramt='6f'
+    xtab=hstack([table1,closest_matches])
     
     xtab=xtab[xtab['Sep']<max_sep]
+
     
     print('Of %d objects in %s and %d objects in %s, found %d matches' % (len(table1),table1_path,len(table2),table2_path,len(xtab)))
     
@@ -337,7 +499,7 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
         one=words[-1].replace('.txt','')
         words=table2_path.split('/')
         two=words[-1].replace('.txt','')
-        outfile='xmatch_%s_%s.txt' % (one,two)
+        outfile='TabPhot/xmatch_%s_%s.txt' % (one,two)
         xtab.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
         print('Error: There are no objects that are closer thn %f arcsec' % max_sep)
@@ -346,21 +508,17 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     return xtab
 
 
+def get_size(filename='LMC_c48_T08.r.t060.fits'):
 
-def do_all(filename='LMC_c48_T08.r.t060.fits',outroot=''):
-    '''
-    Compare photometry in an image to photometry from Gaia
-    '''
     try:
         x=fits.open(filename)
     except:
         print('Could not open %s' % filename)
-        return
-    
+        return 
     
     wcs = WCS(x[0].header)
          
-    # Get the shape of the image
+     # Get the shape of the image
     naxis1 = x[0].header['NAXIS1']
     naxis2 = x[0].header['NAXIS2']
         
@@ -377,10 +535,9 @@ def do_all(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     size_deg = center_ra_dec.separation(corner_ra_dec).to(u.degree).value
     ra=center_ra_dec.ra.deg
     dec=center_ra_dec.dec.deg
-    
-    # print(ra,dec,size_deg)
-    
-    gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+    return ra,dec,size_deg
+
+def do_xphot(filename,gaia_file,outroot):
     
     phot_file=get_photometry(filename,outroot)
     
@@ -395,44 +552,38 @@ def do_all(filename='LMC_c48_T08.r.t060.fits',outroot=''):
 
     do_fig(closest_objects_table,outroot)
 
-    return
-
-
-def do_fig(xtab,outroot):
-    plt.figure(1,(12,6))
-    plt.clf()
-    plt.subplot(1,2,1)
-    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['G'],xtab['phot_mag'],'.',alpha=.05)
-    plt.xlabel('Gaia G mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,22],[11,22],'k-')
-    plt.text(13,20,outroot)
-
-    plt.ylim(11,22)
-    plt.xlim(11,22) 
-
-
-
-    plt.tight_layout()
-    plt.subplot(1,2,2)
-    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['R'],xtab['phot_mag'],'.',alpha=.05)
-    plt.xlabel('Gaia R mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,22],[11,22],'k-')
-    plt.ylim(11,22)
-    plt.xlim(11,22)  
-    plt.tight_layout()
-    plt.savefig('%s.png' % outroot)
-
     
+
+
+def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',outroot=''):
+    '''
+    Compare photometry in an image to photometry from Gaia
+    '''
+    try:
+        x=fits.open(filename)
+    except:
+        print('Could not open %s' % filename)
+        return
+
+    if gaia_cat_file!='' and os.path.isfile(gaia_cat_file)==True:
+        gaia_file=gaia_cat_file
+        print('Using existing GaiaCat file: %s' % gaia_cat_file)
+    else:
+        print('Making new GaiCat file')
+        ra,dec,size_deg=get_size(filename)
+        gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+
+
+    do_xphot(filename,gaia_file,outroot)
+
+    return
 
 def steer(argv):
     '''
     Run the script given choices from the command line
     '''
 
+    gaia_cat_file=''
     files=[]
     
     i=1
@@ -440,6 +591,9 @@ def steer(argv):
         if argv[i].count('-h'):
             print(__doc__)
             return
+        elif argv[i]=='-gcat':
+            i+=1
+            gaia_cat_file=argv[i]
         elif argv[i][0]=='-':
             print('Unknown switch ',argv)
             return
@@ -447,9 +601,11 @@ def steer(argv):
             files.append(argv[i])
         i+=1
 
+
+
     for one in files:
         print('Processing %s' % one)
-        do_all(one)
+        do_one(one,gaia_cat_file)
 
 
 

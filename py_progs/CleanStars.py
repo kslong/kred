@@ -185,16 +185,22 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
     print(mean,median,std)
     r_pure[0].data-=median
     
+    r_pure[0].header['PROCTYPE']='LineSubtracted'
+    r_pure[0].header['SFILTER']=('Ha + SII','Filter of image used for subtracttion')
     r_pure.writeto(outroot+'.r_sub.fits',overwrite=True) 
     
     
     
     x=fits_deep_copy(zha)
     x[0].data-=r_pure[0].data
+    x[0].header['PROCTYPE']='StarSubtracted'
+    x[0].header['SFILTER']=(zr[0].header['FILTER'],'Filter of image used for subtracttion')
     x.writeto(outroot+'.ha_sub_r.fits',overwrite=True)        
 
     x=fits_deep_copy(zs2)
     x[0].data-=r_pure[0].data
+    x[0].header['PROCTYPE']='StarSubtracted'
+    x[0].header['SFILTER']=(zr[0].header['FILTER'],'Filter of image used for subtracttion')
     x.writeto(outroot+'.s2_sub_r.fits',overwrite=True)      
     
     return
@@ -247,6 +253,7 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
     print('n708: ',mean,median,std)
     zn708[0].data-=median
 
+    zn708[0].header['PROCTYPE']='LineSubtracted'
     zn708.writeto(outroot+'.n708_sub.fits',overwrite=True) 
     
     if outroot=='':
@@ -257,11 +264,15 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         
     if ha_exists and n708_exists:
         # zha[0].data-=zn708[0].data
+        zha[0].header['PROCTYPE']='StarSubtracted'
+        zha[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zha[0].data-=zn708[0].data
         zha.writeto(outroot+'.ha_sub_n708.fits',overwrite=True)
 
     if s2_exists and n708_exists:
         # zs2[0].data-=zn708[0].data
+        zs2[0].header['PROCTYPE']='StarSubtracted'
+        zs2[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zs2[0].data-=zn708[0].data
         zs2.writeto(outroot+'.s2_sub_n708.fits',overwrite=True)
         
