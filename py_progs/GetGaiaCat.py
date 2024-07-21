@@ -29,7 +29,7 @@ Command line usage (if any):
 
 Description:  
 
-    The routine retirves catalog data from the GAIA archive and stores the data in a local directory GaiaCat
+    The routine retrieves catalog data from the GAIA archive and stores the data in a local directory GaiaCat
     The resulting data is labelled by the field and tile_no.
 
     The results are stored in a local GaiaCat directory.  If the data has already been retrieved then there
@@ -41,9 +41,9 @@ Primary routines:
 
 Notes:
 
-    The results of this routine are not part of of the kred git repostiroy, because the files produced are 
-    fairly large. However, we suggest that if one is likely to have several directory stucturres for running
-    kred, say a production and a test directory, then we suggest on puts a sympolic link to a master GaiaCat 
+    The results of this routine are not part of of the kred git repostiroy because the files produced are 
+    fairly large. However, we suggest that if one is likely to have several directory stuctures for running
+    kred, say a production and a test directory, then one puts a symbolic link to a master GaiaCat 
     diretory to prevent duplication.  The routine takes about an hour to run on a field.
                                        
 History:

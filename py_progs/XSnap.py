@@ -2,7 +2,7 @@
 # coding: utf-8
 '''
 Create one or more images and fits files of
-snapshots of one or moe sets of souces in 
+snapshots of one or more sets of sources in 
 a masterfile
 
 Usaage:

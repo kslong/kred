@@ -24,7 +24,7 @@ Description:
         -h prints the documentatio and quits
 
         -r is an optional parameter that says not
-        only to serach the directory names above, but also
+        only to search the directory names above, but also
         all of the subdirectories
 
         -size 10 is an optional parameter that gives the size
