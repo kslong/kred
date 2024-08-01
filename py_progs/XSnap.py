@@ -269,8 +269,8 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
             elif one['RegType']=='ellipse':
                 rmajor=2*one['Major']/pixel_scale
                 rminor=2*one['Minor']/pixel_scale
-                pa=-one['Theta']
-                ellipse=patches.Ellipse(pix_coord,rmajor,rminor,angle=pa,edgecolor='red',facecolor='none',linewidth=1)
+                pa=one['Theta']+90 # This seems required to get the correct orienation
+                ellipse=patches.Ellipse(pix_coord,width=rminor,height=rmajor,angle=pa,edgecolor='red',facecolor='none',linewidth=2)
                 ax.add_patch(ellipse)
                 label='%s' % one['Source_name']
                 ax.text(pix_coord[0], pix_coord[1] + 0.5* rmajor + 5, label, color='red', fontsize=12, ha='center')
