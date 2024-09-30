@@ -57,7 +57,7 @@ def add_header_keywords(root,run_dir='./',field='',tile=''):
         run_dir='./'
     swarp_file='%s/%s.fits' % (run_dir,root)
     if os.path.isfile(swarp_file)==False:
-        log_mesage('Error: swarp: Could not find %s to add header info' % swarp_file)
+        log_message('Error: swarp: Could not find %s to add header info' % swarp_file)
         return
     inputs='%s/%s.in' % (run_dir,root)
     if os.path.isfile(inputs)==False:
