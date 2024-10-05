@@ -182,7 +182,8 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     else:
         print('Using all %d images possible for this tile' % original_length)
 
-        
+
+    x.meta['comments']=['RA %f' % ra, 'DEC %f' % dec]
 
 
     if len(x)>0:

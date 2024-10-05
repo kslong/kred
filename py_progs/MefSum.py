@@ -21,7 +21,7 @@ Command line usage (if any):
         -h prints the documentation
         -np 3  causes the processing to be carried out with a a given no of threads
         -all causes all files in the MEF directories to be processed. This should
-        only be sued with cauthion since it will take considerable time, and so
+        only be used with caution since it will take considerable time, and so
         the user is asked to confirm this option.
         -det just runs the individual ccd portion of the process (this is diagnostic)
         -mef just runs the overall mef portions (this is diagnostic)
@@ -46,11 +46,9 @@ Notes:
 
     At present this does not check that a field has been processed
 
-    Here multiple processors are used only to handle multiple fields,
-    and so if one as for 4 threads, but only provides 3 fields
-    only 3 threads will be used.  (This is something that should
-    be changed, but requires a slightly different set of 
-    multiprocessing commands)
+    Here multiple processors are used only to handle individual files
+    so it makes sense to us multiple threads even if only one
+    field is being processed.,
 
 
                                        
