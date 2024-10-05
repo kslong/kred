@@ -11,7 +11,7 @@ out the initial processing steps to run PrepFiles on a set of data
 
 Command line usage (if any):
 
-    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] field tile1 tile2 ...
+    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] [-use_all_data] field tile1 tile2 ...
 
     where:
         field is that name of a field, e.g LMC_c42
@@ -23,6 +23,8 @@ Command line usage (if any):
         -xtab myfile.txt causes the program to use a different tile defination file
         -S7 causes the S7 chip to be ignored
         -seeing_max causes any images with seing greater than the value given to be ignored.
+        -use_all_data causes all of the data regardless of field to be included (as long
+            as that field has been Prepped.
 
 Description:  
 
@@ -46,6 +48,9 @@ Notes:
     If the directory exists where one is going to place links to the
     files that are to be prepped, sll the file(link)s are removed so
     that only the files including in this run should be in the direcory
+
+    The routine reads tables that are contained in the Summary directory
+    to decide what images to include.
                                        
 History:
 
@@ -91,7 +96,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
 
     
 
-    print('Looking for CCD images with RA and DEC of %.5f %.5f and size of %.2f deg' % (ra_center,dec_center,size_deg))
+    print('Looking in %s for CCD images with RA and DEC of %.5f %.5f and size of %.2f deg' % (field,ra_center,dec_center,size_deg))
 
 
     dec_min=dec_center-0.5*size_deg
@@ -107,12 +112,12 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     x=x[x['Dec_min']<dec_max]
 
     if len(x)==0:
-            print('Failed to find any images with Dec less than %.5f ' % dec_max)
+            print('  Failed to find any images with Dec less than %.5f ' % dec_max)
             return []
 
     x=x[x['Dec_max']>dec_min]
     if len(x)==0:
-            print('Failed to find any images with Dec greater than %.5f ' % dec_min)
+            print('  Failed to find any images with Dec greater than %.5f ' % dec_min)
             return []
 
 
@@ -122,14 +127,14 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     
     x=x[x['RA_min']<ra_max]
     if len(x)==0:
-            print('Failed to find any images with RA  less than %.5f ' % ra_max)
+            print('  Failed to find any images with RA  less than %.5f ' % ra_max)
             return []
 
 
     # print(len(x))
     x=x[x['RA_max']>ra_min]
     if len(x)==0:
-            print('Failed to find any images with RA  greater than %.5f ' % ra_min)
+            print('  Failed to find any images with RA  greater than %.5f ' % ra_min)
             return []
 
 
@@ -140,7 +145,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     x['Delta_Dec'].format='.2f'
     x['Delta_RA'].format='.2f'
 
-    print('Found %d CCD extensions that satisfy the input criteria ' % len(x))
+    # print('Found %d CCD extensions that satisfy the input criteria ' % len(x))
 
     xfiles=[]
     for one in x:
@@ -149,6 +154,8 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
 
     x['Filename']=xfiles
     x['Field']=field
+
+    print('  Found %d relevant files in %s' % (len(x),field))
         
     
     return x['Field','Filename','Root','EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1','Delta_Dec','Delta_RA',
@@ -156,7 +163,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
 
 
 
-def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67,s7=True,seeing_max=1000.):
+def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67,s7=True,seeing_max=1000.,use_all_data=False):
     '''
     find the chip images that should be used for a specific tile with a specific size.  
 
@@ -165,7 +172,30 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     '''
 
         
-    x=find_files_to_prep(field,tile,ra,dec,size_deg)
+    if use_all_data==True:
+        words=field.split('_')
+        galaxy=words[0]
+        xfiles=glob('Summary/%s*det.tab' % galaxy)
+        print('There are %d fields to survey' % len(xfiles))
+        fields=[]
+        for one_file in xfiles:
+            xx=one_file.replace('Summary/','')
+            xx=xx.replace('_det.tab','')
+            fields.append(xx)
+        print('hello Knox ',fields)
+        z=[]
+        for one in fields:
+            one_result=find_files_to_prep(one,tile,ra,dec,size_deg)
+            if len(one_result):
+                z.append(one_result)
+        print('hello Knox ',len(z))
+        x=vstack(z)
+            
+    else:
+        x=find_files_to_prep(field,tile,ra,dec,size_deg)
+
+    x.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
+
     original_length=len(x)
     delta_s7=0
     delta_seeing=0
@@ -214,8 +244,9 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
 
     nerrors=0
     for one in x:
+        one_dir='%s/%s/data' % (DATADIR,one['Field'])
         one_file=one['Filename']
-        data_file='%s/%s' % (data_dir,one_file)
+        data_file='%s/%s' % (one_dir,one_file)
         tile_file='%s/%s' % (tile_dir,one_file)
         if os.path.isfile(data_file)==False:
             print('Failed to find %s in %s ' % (one_file,data_dir))
@@ -231,7 +262,7 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     return
 
 
-def setup_tiles(xtab,s7,seeing_max): 
+def setup_tiles(xtab,s7,seeing_max,use_all_data): 
     '''
     Run setup_one_tile multiple times, with the possibility of parallel
     processing
@@ -244,7 +275,7 @@ def setup_tiles(xtab,s7,seeing_max):
 
     for one in xtab:
         try:
-            setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max)
+            setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max,use_all_data)
         except IOError:
             print('Error: Something is wrong, and must be sorted before continuing')
             print('Try rerunning MefPrep.py -finish, and then repeat this step')
@@ -263,6 +294,7 @@ def steer(argv):
     table=''
     seeing_max=1000.
     use_s7=True
+    use_all_data=False
 
     i=1
     while i<len(argv):
@@ -273,6 +305,8 @@ def steer(argv):
             xall=True
         elif argv[i]=='-S7' or argv[i]=='-s7':
             use_s7=False
+        elif argv[i]=='-use_all_data':
+            use_all_data=True 
         elif argv[i]=='-xtab':
             i+=1
             table=argv[i]
@@ -333,7 +367,7 @@ def steer(argv):
         print('Looked for the following tiles: ',tiles)
         return
 
-    setup_tiles(xtiles,use_s7,seeing_max)
+    setup_tiles(xtiles,use_s7,seeing_max,use_all_data)
 
     fields=np.unique(xtiles['Field'])
     for one in fields:
