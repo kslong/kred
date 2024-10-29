@@ -15,7 +15,7 @@ Command line usage (if any):
 
     where:
 
-        source_table.txt is an astrpy table with the source names and positions
+        source_table.txt is an astropy table with the source names and positions
 
     and the optional prameters 
 

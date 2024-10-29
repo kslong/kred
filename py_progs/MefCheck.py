@@ -7,20 +7,31 @@ Synopsis:
 
 Check whether one or more fits files have headers
 that conform to the fits standard, by looking at
-the warnings that astropy generaates
+the warnings that astropy generates
 
 
 Command line usage (if any):
 
-    usage: check.py filename
+    usage: MefCheck.py [-np 8] [-all]  Field ...
 
 Description:  
+
+    where 
+
+        -np 8 imples to run multiple threads, where each
+            thread processes one field 
+        -all implies to do all fields in the DECam_MEF 
+            directory
 
 Primary routines:
 
     doit
 
 Notes:
+
+    Normally, this will not generate any errors.  The
+    routine generates a table mef_qual.tab in the
+    Summary directory for each of the fields.
                                        
 History:
 
