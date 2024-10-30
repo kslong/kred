@@ -82,11 +82,15 @@ def summarize(field='LMC_c42',tile='T07'):
     try:
         x=get_sum_tab(field,tile)
     except:
-        return -1, -1
+        return []
 
     # print(x.info)
     # print(x.meta)
-    header=x.meta['comments']
+    try:
+        header=x.meta['comments']
+    except: 
+        print('Error: SwarpSetup.py: Could not find metadata in Summary/%s_%s.txt' % (field,tile))
+        return []
     # print(header)
 
     ra=-99.
@@ -459,17 +463,15 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
     '''
 
     xtab=summarize(field,tile)
+    if len(xtab)==0:
+        print('Error: SwarpSetup.py: Nothing to swarp')
+        return
 
     # Homoogenize the inputs in a situation where _b has been added to the file name
     if tile.count('_b'):
         tile=tile.replace('_b','')
         bsub=True
 
-    # tabfile='Summary/%s_%s.txt' % (field,tile)
-    # try:
-    #     xtab=ascii.read(tabfile)
-    # except:
-    #     print('Error: Could not read %s' % tabfile)
     #     raise IOError
 
     for one in xtab:

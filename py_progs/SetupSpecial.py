@@ -201,6 +201,7 @@ def setup_one_tile(field=['LMC_c42'],xmaster='snr',tile='foo',ra=81.108313,dec=-
         
 
     if i>0:
+        x.meta['comments']=['RA %f' % ra, 'DEC %f' % dec]
         outfile='Summary/%s_%s.txt' % (xmaster,tile)
         x.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
