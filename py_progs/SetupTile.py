@@ -204,6 +204,7 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         delta_s7=len(foo)
         x=x[x['EXTNAME']!='S7']
     if seeing_max<100.:
+        print('Toasty inside:',len(x),seeing_max)
         foo=x[x['SEEING']>seeing_max]
         delta_seeing=len(foo)
         x=x[x['SEEING']<=seeing_max]
