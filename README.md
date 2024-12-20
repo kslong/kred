@@ -80,8 +80,10 @@ To process the data without attempting to improve over
 the background options in MefPrep, the programs should
 be run in the following order:
 
-* (MefCheck.py - This should not normally be necessary, but it
-will check if there are problems with the headers in the individual
+* (MefCheck.py - This should not normally be necessary unless new
+files have been added to the main data reposiotyr. The routine 
+will check if there are problems with files being "good" fits files
+and chcck for information the headers in the individual
 Mef files.  It creates a table called \_mef\_qual.tab which indicates
 which Mef files are problematic, but is not used by any of the
 downstream programs.)
@@ -89,7 +91,9 @@ downstream programs.)
 * MefSum.py - This summarizes the mef files in a field.
 If it does not already exist this program creates a directory 
 that is created called Summary and writes two astropy
-tables that contain the summary information
+tables that contain the summary information.  Any files that
+do not have the necessary keywords, e.g. MAGZERO, will be contained
+in a separate summary file, and not used in other programs.)
 
 
 Note that MefSum.py -all wil attempt to create a summary of all of the files
@@ -141,6 +145,15 @@ data that was for a different region, then one would need to point
 this to a different configuration file.  Note though, that at
 present each field is separate.
 
+Normally, the files used to construct a tile image are only the datasets
+that were obtained during the exposure sequence for a given field.  However
+there is a switch (-use\_all\_data) that examines all of the CCD images
+in the DECam\_Prep directory to see if they cover a portion of the tile area,
+and if so to use them.  
+
+One can use this approach to create images of regions not defined by the 
+original exposures sequences, e.g of a particular region on the sky.
+
 
 * SwarpSetup.py - This creates directories inputs (the.run and .default files)
 for running swarp to create the tile images on the tile images.  It assumes we
@@ -148,14 +161,15 @@ want to make tile images for each filter and for each
 exposure time.    
 
 
-Note - At present this routine does not use the field
-centers defined in the .config file, but takes the center
-of all of the images in a tile to be the center of the
-swarp field.  
+Note - Normally, this routine does uses the field
+centers defined in the .config file.  There is an optional 
+switch which will center on the mean position of the various
+images (from all filters) which was what was done for the first data release 
 
  When run without the -bsub flag, the routine creates directories
  in DECam\_SWARP and sets up the inputs so the files which will
  be 'swarp'ed come from the subdirctories of DECam\_CCD.
+
 
 
 * Swarp.py -  The purpose of Swarp.py 
