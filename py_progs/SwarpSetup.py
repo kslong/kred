@@ -9,7 +9,7 @@ inputs to run swarp which combines the individual CCD images into tile images.
 To run swarp from the command line (one must be in the normal run directory) since
 a particular directory structure is assumed here)
 
-Usage:   SwarpSetup.py [-all] [-bsub] [-ave_sub field [tiles]
+Usage:   SwarpSetup.py [-all] [-bsub] [-ave_pos field [tiles]
 
 where 
 
@@ -19,7 +19,7 @@ where
         algorithm has been used.  In this case the Swarp commmands are written and to
         the DECam_SWARP2/field/tile directory and the data are taken from the DECAM_PREP2/field/tile
         directory
-    -ave_sub causes the output fits file to be centered on the average position of all of the
+    -ave_pos causes the output fits file to be centered on the average position of all of the
         files which will be swarped
 
 
@@ -32,7 +32,7 @@ Note:
     The current default is to create input files for Swarp that are centered on
     the position designated in the configuration file, unlike what was done
     initially which was to center on the average position of all of the files
-    to be swarped. To restore the old behavior use the switch -ave_sub
+    to be swarped. To restore the old behavior use the switch -ave_pos
 
 '''
 
