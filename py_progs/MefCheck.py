@@ -7,7 +7,8 @@ Synopsis:
 
 Check whether one or more fits files have headers
 that conform to the fits standard, by looking at
-the warnings that astropy generates
+the warnings that astropy generates and for certain
+keywrods in the header.
 
 
 Command line usage (if any):
@@ -32,6 +33,7 @@ Notes:
     Normally, this will not generate any errors.  The
     routine generates a table mef_qual.tab in the
     Summary directory for each of the fields.
+
                                        
 History:
 
@@ -65,7 +67,7 @@ def test(filename='c4d_190108_063145_ooi_N662_v1.fits.fz', outputfile='out.txt')
     x = fits.open(filename, memmap=True)
     for i, hdu in enumerate(x):
         if i == 0:
-            for keyword in ['EXPTIME', 'SEEING']:
+            for keyword in ['EXPTIME', 'SEEING','MAGZERO']:
                 if keyword not in hdu.header:
                     warnings.warn(f"Missing keyword '{keyword}' in extension {i}", UserWarning)
         else:
