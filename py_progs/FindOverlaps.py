@@ -199,7 +199,7 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
         i+=1
 
     if len(xx)==0:
-        log_message('Error: FindOverlaps: Found no overlaps for  %s %s %s' % (field,tile,fileter))
+        log_message('Error: FindOverlaps: Found no overlaps for  %s %s %s' % (field,tile,xfilter))
         return []
 
     xx.sort(['EXPTIME','delta']) 
