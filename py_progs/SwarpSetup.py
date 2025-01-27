@@ -122,10 +122,12 @@ def summarize(field='LMC_c42',tile='T07'):
     s2=x[x['FILTER']=='N673']
     r=x[x['FILTER']=='r']
     n708=x[x['FILTER']=='N708']    
+    n501=x[x['FILTER']=='N501']
     print('Ha  images  : %3d' % len(ha))
     print('SII images  : %3d' % len(s2))
     print('R   images  : %3d' % len(r))
     print('N708 images : %3d' % len(n708))
+    print('N501 images : %3d' % len(n501))
     
     print('\nHa')
     if len(ha) >0:
@@ -203,6 +205,30 @@ def summarize(field='LMC_c42',tile='T07'):
     else:
         print('This tile contains no N708 images')
 
+        
+    print('\nN501')
+
+    if len(n501)>0:
+        times,counts=np.unique(n501['EXPTIME'],return_counts=True)
+
+        records=[times,counts]
+        xtab=Table(records,names=['EXPTIME','Number'])
+        if len(xtab)>0:
+            xtab['FILTER']='N501'
+        try:
+            ztab=vstack([ztab,xtab])
+        except:
+            ztab=xtab.copy()
+
+        i=0
+        while i<len(times):
+            print('   exp %8s  no %4d' % (times[i],counts[i]))
+            i+=1
+    else:
+        print('This tile contains no N501 images')
+
+        
+        
     return ztab  
 
 

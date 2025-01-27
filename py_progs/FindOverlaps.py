@@ -215,7 +215,7 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
     print('\nStarting Field %s Tile %s' % (field,tile))
     
-    xfilters=['N662','N673','r','N708']
+    xfilters=['N662','N673','r','N708','N501']
 
     z=[]
     xlen=[]
