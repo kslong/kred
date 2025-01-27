@@ -194,6 +194,10 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     else:
         x=find_files_to_prep(field,tile,ra,dec,size_deg)
 
+    if len(x)==0:
+        print('Error: no files found for filed/tile  %s %s' % (field,tile))
+        return
+
     x.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
     original_length=len(x)
