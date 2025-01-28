@@ -21,11 +21,11 @@ Command line usage (if any):
 Description:  
 
     Find the images that ovelap that have the same
-    filter and the same exposure time in one or more tiles
+    filter.
 
-    The routine assumes (for now) that we will not try
-    to combine images with different exposure times,
-    though this condition could be dropped
+    The routine calculates overlaps of the same filter,
+    regardless of the exposure times.
+
 
     The overlaps are found based on the RA, DEC corrners 
     of the immages.
@@ -60,6 +60,8 @@ Notes:
 History:
 
 230524 ksl Coding begun
+250128 ksl Modified the code so that both exposure times are recorded. Choosing
+    what exposure times to match background to occurs later.
 
 '''
 
@@ -76,6 +78,10 @@ def get_files(field,tile,xfilter='Ha'):
     '''
     Idenfify all of the files associated
     with a specific filter in a tile
+
+    Note: 
+    This reads the Field_Tile.txt files in the
+    Summary directory
     '''
 
 
@@ -125,7 +131,7 @@ def get_overlap(row,xxtab):
     xtab['Dec_max'] = np.max([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
     xtab['Dec_min'] = np.min([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
 
-    xtab=xtab[xtab['EXPTIME']==one_row['EXPTIME']]
+    # xtab=xtab[xtab['EXPTIME']==one_row['EXPTIME']]
     if len(xtab)==0:
         # print('Failed to find any images with the same exposre time ' % one_row['EXPTIME'])
             return []
@@ -191,6 +197,7 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
         if len(z)>0:
             xout=z['Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
             xout['XFilename']=xtab['Filename'][i]
+            xout['XEXPTIME']=xtab['EXPTIME'][i]
             if len(xx)==0:
                 xx=xout.copy()
             else:
@@ -233,6 +240,7 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
 
     outfile='Summary/%s_%s_overlap.txt' % (field,tile)
+    all_overlaps.meta.clear()
     all_overlaps.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s\n' % outfile)
 

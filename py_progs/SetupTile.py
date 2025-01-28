@@ -33,10 +33,13 @@ Description:
     to construct images in tiles of a field.  It writes the results to
     a table in the Summary directory
 
+    There is one table for tile in the field, e.g  LMC_c30_T16.txt
+
     The program searches for the tile definition file in the local directory
     and in the $KRED/config directory.
 
     The program works by reading the det.tab files created by MefSum.py
+
 
 
 
@@ -195,8 +198,8 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         x=find_files_to_prep(field,tile,ra,dec,size_deg)
 
     if len(x)==0:
-        print('Error: no files found for filed/tile  %s %s' % (field,tile))
-        return
+        print('Error: no files found for field/tile  %s %s' % (field,tile))
+        raise IOError
 
     x.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
@@ -226,6 +229,7 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         x.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
         print('Failed to set up %s %s' % (field,tile))
+        raise IOError
 
     data_dir='%s/%s/data' % (DATADIR,field)
 
@@ -264,10 +268,10 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
     else:
         print('Successfully linked files from %s to %s' % (data_dir,tile_dir))
             
-    return
+    return outfile
 
 
-def setup_tiles(xtab,s7,seeing_max,use_all_data): 
+def setup_tiles(xtab,s7,seeing_max,use_all_data,process_tab): 
     '''
     Run setup_one_tile multiple times, with the possibility of parallel
     processing
@@ -280,11 +284,15 @@ def setup_tiles(xtab,s7,seeing_max,use_all_data):
 
     for one in xtab:
         try:
-            setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max,use_all_data)
+            outfile_name=setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max,use_all_data)
         except IOError:
             print('Error: Something is wrong, and must be sorted before continuing')
             print('Try rerunning MefPrep.py -finish, and then repeat this step')
             return
+
+        xtab=ascii.read(outfile_name)
+        xtab=join(xtab,process_tab,join_type='left')
+        xtab.write(outfile_name,format='ascii.fixed_width_two_line',overwrite=True)
 
     return
 
@@ -297,6 +305,7 @@ def steer(argv):
     tiles=[]
     xall=False
     table=''
+    process_table=''
     seeing_max=1000.
     use_s7=True
     use_all_data=False
@@ -315,6 +324,9 @@ def steer(argv):
         elif argv[i]=='-xtab':
             i+=1
             table=argv[i]
+        elif argv[i]=='-ptab':
+            i+=1
+            process_table=argv[i]
         elif argv[i]=='-seeing_max':
             i+=1
             seeing_max=eval(argv[i])
@@ -338,6 +350,8 @@ def steer(argv):
 
     if table=='':
         table='MC_tiles.txt'
+    if process_table=='':
+        process_table='DeMCELS_images.txt'
 
     kred=os.getenv('KRED')
     if os.path.isfile(table):
@@ -345,8 +359,17 @@ def steer(argv):
     elif os.path.isfile(kred+'/config/'+table):
         xtab=ascii.read(kred+'/config/'+table)
     else:
-        print('Error: Could not find %s in local director or in kred/config' % table)
+        print('Error: Could not find tile config  %s in local directory or in kred/config' % table)
         return
+
+    if os.path.isfile(process_table):
+        ptab=ascii.read(process_table)
+    elif os.path.isfile(kred+'/config/'+process_table):
+        ptab=ascii.read(kred+'/config/'+process_table)
+    else:
+        print('Error: Could not find image config %s in local director or in kred/config' % process_table)
+        return
+
 
     xtab=xtab[xtab['Field']==field]
 
@@ -372,7 +395,7 @@ def steer(argv):
         print('Looked for the following tiles: ',tiles)
         return
 
-    setup_tiles(xtiles,use_s7,seeing_max,use_all_data)
+    setup_tiles(xtiles,use_s7,seeing_max,use_all_data,ptab)
 
     fields=np.unique(xtiles['Field'])
     for one in fields:
