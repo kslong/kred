@@ -11,7 +11,7 @@ out the initial processing steps to run PrepFiles on a set of data
 
 Command line usage (if any):
 
-    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] [-use_all_data] field tile1 tile2 ...
+    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] -ptab my_image.txt [-use_all_data] field tile1 tile2 ...
 
     where:
         field is that name of a field, e.g LMC_c42
@@ -21,6 +21,9 @@ Command line usage (if any):
         -all  causes the program to create talbles containing the relevant
             infomation for all of the tiles in a field
         -xtab myfile.txt causes the program to use a different tile defination file
+        -ptab my_image.txt causes the program to use a different filter exposure table for creating images. This
+            table allows one to combine images with different exposure times together for a filter.  If a filter
+            is missing, that filter will not be processed.
         -S7 causes the S7 chip to be ignored
         -seeing_max causes any images with seing greater than the value given to be ignored.
         -use_all_data causes all of the data regardless of field to be included (as long
@@ -28,19 +31,19 @@ Command line usage (if any):
 
 Description:  
 
-    This program reads a tile definition file and 
-    searches for CCD images that should prepped to create fits files 
+    This program reads a tile definition file and an image definition file to set up
+    how to process expousures.  
+
+    It then searches for CCD images that should prepped to create fits files 
     to construct images in tiles of a field.  It writes the results to
     a table in the Summary directory
 
     There is one table for tile in the field, e.g  LMC_c30_T16.txt
 
-    The program searches for the tile definition file in the local directory
+    The program searches for the tile definition file and the image definition file in the local directory
     and in the $KRED/config directory.
 
-    The program works by reading the det.tab files created by MefSum.py
-
-
+    To find the files that are to used, the program reads the det.tab files created by MefSum.py
 
 
 Primary routines:
@@ -164,9 +167,51 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     return x['Field','Filename','Root','EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1','Delta_Dec','Delta_RA',
             'FILTER','EXPTIME','MAGZERO','SEEING']
 
+def populate_tile_dir(xtab,field,tile):
+    '''
+    This just does the work of creating and populating the tile directory with links
+    to the appropriate files
+    '''
 
+    data_dir='%s/%s/data' % (DATADIR,field)
 
-def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67,s7=True,seeing_max=1000.,use_all_data=False):
+    if os.path.isdir(data_dir) == False:
+        print('Error: %s does not appear to exist' % data_dir)
+        print('Run PrepMef on this field first')
+        raise IOError
+
+    tile_dir='%s/%s/%s/' % (PREPDIR,field,tile)
+
+    if os.path.isdir(tile_dir)==False:
+        print('Creating the Prep directory as %s' % tile_dir)
+        os.makedirs(tile_dir)
+    else:
+        print('The Prep directory %s already exists' % tile_dir )
+        xfiles=glob('%s/*fits*' % tile_dir)
+        if len(xfiles):
+            print('Removing existing fits files or links and reinitializing')
+            for one in xfiles:
+                os.remove(one)
+
+    nerrors=0
+    for one in xtab:
+        one_dir='%s/%s/data' % (DATADIR,one['Field'])
+        one_file=one['Filename']
+        data_file='%s/%s' % (one_dir,one_file)
+        tile_file='%s/%s' % (tile_dir,one_file)
+        if os.path.isfile(data_file)==False:
+            print('Failed to find %s in %s ' % (one_file,data_dir))
+            nerrors+=1
+        else:
+            os.symlink(data_file,tile_file)
+    if nerrors:
+        print('Failed to find %d of %d files in %s' % (nerrors,len(xtab),data_dir))
+        raise IOError
+    else:
+        print('Successfully linked files from %s to %s' % (data_dir,tile_dir))
+            
+
+def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67,s7=True,seeing_max=1000.,use_all_data=False):
     '''
     find the chip images that should be used for a specific tile with a specific size.  
 
@@ -231,68 +276,42 @@ def setup_one_tile(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         print('Failed to set up %s %s' % (field,tile))
         raise IOError
 
-    data_dir='%s/%s/data' % (DATADIR,field)
-
-    if os.path.isdir(data_dir) == False:
-        print('Error: %s does not appear to exist' % data_dir)
-        print('Run PrepMef on this field first')
-        raise IOError
-
-    tile_dir='%s/%s/%s/' % (PREPDIR,field,tile)
-
-    if os.path.isdir(tile_dir)==False:
-        print('Creating the Prep directory as %s' % tile_dir)
-        os.makedirs(tile_dir)
-    else:
-        print('The Prep directory %s already exists' % tile_dir )
-        xfiles=glob('%s/*fits*' % tile_dir)
-        if len(xfiles):
-            print('Removing existing fits files or links and reinitializing')
-            for one in xfiles:
-                os.remove(one)
-
-    nerrors=0
-    for one in x:
-        one_dir='%s/%s/data' % (DATADIR,one['Field'])
-        one_file=one['Filename']
-        data_file='%s/%s' % (one_dir,one_file)
-        tile_file='%s/%s' % (tile_dir,one_file)
-        if os.path.isfile(data_file)==False:
-            print('Failed to find %s in %s ' % (one_file,data_dir))
-            nerrors+=1
-        else:
-            os.symlink(data_file,tile_file)
-    if nerrors:
-        print('Failed to find %d of %d files in %s' % (nerrors,len(x),data_dir))
-        raise IOError
-    else:
-        print('Successfully linked files from %s to %s' % (data_dir,tile_dir))
-            
     return outfile
 
 
-def setup_tiles(xtab,s7,seeing_max,use_all_data,process_tab): 
+def setup_tiles(ztab,s7,seeing_max,use_all_data,process_tab): 
     '''
-    Run setup_one_tile multiple times, with the possibility of parallel
+    Run setup one or more tiles for running Swarp, etc.                
     processing
 
     where 
         if s7 is True, we will include chip s7, but if false we will not
         if seeeing_max is less than some large value this will be used to
             limit thes size
+        if use_all_data is True, look for relevant data outside of
+            this specirc table 
     '''
 
-    for one in xtab:
+    for one in ztab:
+        field=one['Field']
+        tile=one['Tile']
         try:
-            outfile_name=setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max,use_all_data)
+            outfile_name=get_tile_files(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max,use_all_data)
         except IOError:
             print('Error: Something is wrong, and must be sorted before continuing')
             print('Try rerunning MefPrep.py -finish, and then repeat this step')
             return
 
         xtab=ascii.read(outfile_name)
-        xtab=join(xtab,process_tab,join_type='left')
+        # xtab=join(xtab,process_tab,join_type='left')
+        xtab=join(process_tab,xtab,join_type='left')
+        # eliminate lines with no match
+        xtab=xtab[~xtab['Filename'].mask]
         xtab.write(outfile_name,format='ascii.fixed_width_two_line',overwrite=True)
+        try:
+            populate_tile_dir(xtab,field,tile)
+        except IOError:
+            print('Problem with ppulating tile dir for %s %s' % (field,tile))
 
     return
 
