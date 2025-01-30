@@ -25,13 +25,14 @@ Description:
 
     The routine reads the files in the DECam_Prep/field/tile 
     directory and writes the subtacted in imaages to
-    DECam_Prep/field/tile_b
+    DECam_Prep2/field/tile
 
 
 Primary routines:
 
 
 Notes:
+    The input tables  for this have names like  Summary/Field_Tile_bbb.txt
 
 History:
 

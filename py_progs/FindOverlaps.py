@@ -131,7 +131,7 @@ def get_overlap(row,xxtab):
     xtab['Dec_max'] = np.max([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
     xtab['Dec_min'] = np.min([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
 
-    # xtab=xtab[xtab['EXPTIME']==one_row['EXPTIME']]
+    xtab=xtab[xtab['Image']==one_row['Image']]
     if len(xtab)==0:
         # print('Failed to find any images with the same exposre time ' % one_row['EXPTIME'])
             return []
@@ -195,7 +195,7 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
     while i<imax:
         z=get_overlap(i,xtab)
         if len(z)>0:
-            xout=z['Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
+            xout=z['Image','Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
             xout['XFilename']=xtab['Filename'][i]
             xout['XEXPTIME']=xtab['EXPTIME'][i]
             if len(xx)==0:
@@ -209,7 +209,7 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
         log_message('Error: FindOverlaps: Found no overlaps for  %s %s %s' % (field,tile,xfilter))
         return []
 
-    xx.sort(['EXPTIME','delta']) 
+    xx.sort(['Image','EXPTIME','delta']) 
 
     # outfile='Summary/%s_%s_%s_overlap.txt' % (field,tile,xfilter)
     # xx.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
@@ -222,7 +222,7 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
     print('\nStarting Field %s Tile %s' % (field,tile))
     
-    xfilters=['N662','N673','r','N708']
+    xfilters=['N662','N673','r','N708','N501']
 
     z=[]
     xlen=[]

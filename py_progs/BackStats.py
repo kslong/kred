@@ -73,6 +73,7 @@ from log import *
 import shutil
 from medianrange import *
 import timeit
+import gc
 
 ierror=False
 
@@ -242,6 +243,8 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
                 print('Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
 
         two.close()
+        del two
+        gc.collect()
         j+=1
     one.close()
     print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
@@ -265,6 +268,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
     imsumfile='Summary/%s_%s.txt' % (field,tile)
     try:
         imsum=ascii.read(imsumfile)
+        imsum=join(imsum,x['Filename','XEXPTIME'],join_type='left')
     except:
         print('Could not read imsum file: %s' % imsum)
         raise IOError
@@ -357,7 +361,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
 
     imsum.rename_column('Filename','file1')
 
-    ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
+    ztab=join(ztab,imsum['file1','Image','FILTER','EXPTIME','XEXPTIME'],join_type='left')
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)

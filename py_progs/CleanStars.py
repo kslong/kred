@@ -287,46 +287,42 @@ def doit(xdir='data',outdir='data'):
         print("No files found for %s" % xdir)
         return
 
+    # Now the files are of the following form: LMC_c30_T01.N673.fits
     print(files)
     records=[]
     qfile=[]
     qroot=[]
     qfilt=[]
-    qexp=[]
     for one in files:
         word=one.split('/')
         filename=word[-1]
         word=filename.split('.')
         root=word[0]
         xfilt=word[1]
-        xexp=int(word[2].replace('t',''))
-        record=[one,root,xfilt,xexp]
+        record=[one,root,xfilt]
         records.append(record)
         qfile.append(one)
         qroot.append(root)
         qfilt.append(xfilt)
-        qexp.append(xexp)
 
 
 
     r=ha=s2=n708='none'
-    # print(records)
-    # xtab=Table(records,names=['Filename','Root','Filter','Exptime'])
-    xtab=Table([qfile,qroot,qfilt,qexp],names=['Filename','Root','Filter','Exptime'])
-    xtab.sort('Exptime')
+    xtab=Table([qfile,qroot,qfilt],names=['Filename','Root','Image'])
+    xtab.sort('Image')
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
     print(xtab)
     zroot='test'
     for one in xtab:
-        if one['Filter']=='N662':
+        if one['Image']=='N662':
             ha=one['Filename']
             zroot=one['Root']
-        elif one['Filter']=='N673':
+        elif one['Image']=='N673':
             s2=one['Filename']
             zroot=one['Root']
-        elif one['Filter']=='r':
+        elif one['Image']=='r':
             r=one['Filename']
-        elif one['Filter']=='N708':
+        elif one['Image']=='N708':
             n708=one['Filename']
         else:
             print('Unknown fits file: %s '% one['Filename'])
