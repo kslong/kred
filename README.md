@@ -140,7 +140,12 @@ CCDs need to be processed to produce images of a single
 field. It also cretes directories DECam\_PREP/LMC\_c45/Tile01 etc
 that contain links to the appropriate files in the data directories.
 
-Note - This routine uses the config file.  If one wanted to create 
+Note - This routine uses two configuration files:
+
+The default version of the files are stored in the config directory.
+
+* MC\_tiles.txt is the configuration file that defines the tile centers and the tile geometries for 
+the standard processing.  If one wanted to create 
 data that was for a different region, then one would need to point 
 this to a different configuration file.  Note though, that at
 present each field is separate.
@@ -153,6 +158,12 @@ and if so to use them.
 
 One can use this approach to create images of regions not defined by the 
 original exposures sequences, e.g of a particular region on the sky.
+
+* DeMCELS\_images.txt is a file that defines what exposures to combine into the
+final output images.  It is intended to handle the situation where one is trying
+to combine images that have the same filter but slightly different expousre times.
+Filters and exposures that will be processed must be listed in this table.  MOre than
+one EXPTIME can be combined to create a final Image.
 
 
 * SwarpSetup.py - This creates directories inputs (the.run and .default files)
