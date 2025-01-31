@@ -89,14 +89,14 @@ def get_files(field,tile,xfilter='Ha'):
     try:
         imsum=ascii.read(imsum_file)
     except:
-        print('Error: could not locate %s' % imsum_file)
+        print('FindOverlaps: Error: could not locate %s' % imsum_file)
         raise IOError
 
 
     xtab=imsum[imsum['FILTER']==xfilter]
 
     if len(xtab)==False:
-        print('No appropriate files were found for %s' % xfilter)
+        print('FindOverlaps: No appropriate files were found for %s' % xfilter)
         return []
 
     return xtab
@@ -121,7 +121,7 @@ def get_overlap(row,xxtab):
     try: 
         xtab=xxtab[row+1:]
     except:
-        print('Got to end')
+        print('FindOverlaps: Got to end')
         return []
     dec_max=np.max([one_row['COR1DEC1'],one_row['COR2DEC1'],one_row['COR3DEC1'],one_row['COR4DEC1']],axis=0)
     dec_min=np.min([one_row['COR1DEC1'],one_row['COR2DEC1'],one_row['COR3DEC1'],one_row['COR4DEC1']],axis=0)
@@ -220,7 +220,7 @@ def do_one_tile(field='LMC_c45',tile='T07'):
     Find the overlaps for all of the filters in one tile
     '''
 
-    print('\nStarting Field %s Tile %s' % (field,tile))
+    print('\nFindOverlaps: Starting Field %s Tile %s' % (field,tile))
     
     xfilters=['N662','N673','r','N708','N501']
 
@@ -235,14 +235,14 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
     i=0
     while i<len(xfilters):
-        print('For %5s there are %5d overlaps' % (xfilters[i],xlen[i]))
+        print('FindOverlaps: For %5s there are %5d overlaps' % (xfilters[i],xlen[i]))
         i+=1
 
 
     outfile='Summary/%s_%s_overlap.txt' % (field,tile)
     all_overlaps.meta.clear()
     all_overlaps.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s\n' % outfile)
+    print('FindOverlaps: Wrote %s\n' % outfile)
 
 
 
@@ -266,7 +266,7 @@ def steer(argv):
         elif argv[i]=='-all':
             xall=True
         elif argv[i][0]=='-':
-            print('Error: Unknown switch  %s' % argv[i])
+            print('FindOverlaps: Error: Unknown switch  %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -282,7 +282,7 @@ def steer(argv):
             i+=1
 
     if field=='':
-        print('Error: FindOverlaps: No field provided:',argv)
+        print('FindOverlaps: Error: FindOverlaps: No field provided:',argv)
         return
     else:
         open_log('%s.log' % field)

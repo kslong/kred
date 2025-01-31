@@ -61,13 +61,13 @@ def plot_fit_results(field,tile,summary_dir='',zlim=20):
     try:
         offset=ascii.read(ofile)
     except:
-        print('Could not read %s' % ofile)
+        print('BackCalc: Could not read %s' % ofile)
         return
     
     try:
         back=ascii.read(bfile)
     except:
-        print('Could not read %s' % bfile)
+        print('BackCalc: Could not read %s' % bfile)
         return
     
     back.rename_column('file','file1')
@@ -228,7 +228,7 @@ def monte(xdelta,files):
             xbest=z.copy()
             chi_best=chi
         i+=1
-    print('chi: min %.2f  max %.2f ave %.2f std %.2f' % 
+    print('BackCalc: chi: min %.2f  max %.2f ave %.2f std %.2f' % 
           (np.min(xchi),np.max(xchi),np.average(xchi),np.std(xchi)))
     return xbest
         
@@ -243,7 +243,7 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
     global svd_u, svd_w, svd_vt, svd_b
 
     if new==False:
-        print('Using an earlier SVD inversion, just changing threshold')
+        print('BackCalc: Using an earlier SVD inversion, just changing threshold')
 
     else:
 
@@ -280,20 +280,20 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
         svd_b = (wt*delta).sum(axis=1)
 
         if verbose:
-            print(f"determinant of A {np.linalg.det(a):.4}")
-            print(f"product of diagonal {np.prod(np.diag(a)):.4}")
+            print(f"BackCalc: determinant of A {np.linalg.det(a):.4}")
+            print(f"BackCalc: product of diagonal {np.prod(np.diag(a)):.4}")
         assert (a == np.transpose(a)).all()
 
         # Compute the SVD
         svd_u, svd_w, svd_vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
         if verbose:
-            print(f"Largest SV {svd_w[0]}")
-            print("10 smallest SVs:", svd_w[-10:])
+            print(f"BackCalc: Largest SV {svd_w[0]}")
+            print("BackCalc: 10 smallest SVs:", svd_w[-10:])
 
     # Edit the singular values and solve for sky offsets
     winvert = (svd_w>=threshold)/(svd_w + (svd_w < threshold))
     if verbose:
-        print(f"{(svd_w<threshold).sum()} SVs removed by threshold {threshold}")
+        print(f"BackCalc: {(svd_w<threshold).sum()} SVs removed by threshold {threshold}")
     bkgd = (svd_vt.T @ np.diag(winvert) @ svd_u.T) @ svd_b
     return bkgd
 
@@ -321,12 +321,12 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',ximage='N673'):
     try:
         x=ascii.read(infile)
     except:
-        print('Could not read %s' % infile)
+        print('BackCalc: Could not read %s' % infile)
         raise IOError
     # print(x.info)
     
     y=x[x['Image']==ximage]
-    print('Found %d xmatches with %s' % (len(y),ximage))
+    print('BackCalc: Found %d xmatches with %s' % (len(y),ximage))
     
     
     # print(y.info)
@@ -338,10 +338,10 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',ximage='N673'):
     y=y[y['npix']!=-999]
     
     if len(y)==0:
-        print('There are no xmatches to work with')
+        print('BackCalc: There are no xmatches to work with')
         raise IOError
     else:
-        print('Found %d xmatches with image %s' % (len(y),ximage))
+        print('BackCalc: Found %d xmatches with image %s' % (len(y),ximage))
     
     x1=np.array(y['file1'])
     x2=np.array(y['file2'])
@@ -412,7 +412,7 @@ def do_one_tile(field,tile):
     try:
         x=ascii.read(infile)
     except:
-        print('Could not read %s with all of the stats' % infile)
+        print('BackCalc: Could not read %s with all of the stats' % infile)
         return 
 
 
@@ -432,7 +432,7 @@ def do_one_tile(field,tile):
         # btab.write(bfile,format='ascii.fixed_width_two_line',overwrite=True)
         xfile=infile.replace('xxx.txt','xxx_%s.txt' % (one_image))
 
-        print('Field %s  Tile %s Image %s ' % (field,tile,one_image))
+        print('BackCalc: Field %s  Tile %s Image %s ' % (field,tile,one_image))
 
         orig=diff_eval(y_all,btab)
 
@@ -472,11 +472,11 @@ def do_one_tile(field,tile):
 
         y_all.write(xfile,format='ascii.fixed_width_two_line',overwrite=True)
 
-        print('Original b=0:     %.2f' % orig)
-        print('Simple  b=b_init:  %.2f' % simple)
+        print('BackCalc: Original b=0:     %.2f' % orig)
+        print('BackCalc: Simple  b=b_init:  %.2f' % simple)
         # print('Monte           :  %.2f' % xmonte)
-        print('SVD             :  %.2f' % xsvd)
-        print('SVD1            :  %.2f' % xsvd1)
+        print('BackCalc: SVD             :  %.2f' % xsvd)
+        print('BackCalc: SVD1            :  %.2f' % xsvd1)
 
         one_record.append('%.2f' % orig)
         one_record.append('%.2f' % simple)
@@ -506,7 +506,7 @@ def do_one_tile(field,tile):
     best_file='Summary/%s_%s_bbb.txt' % (field,tile)
     all_back.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
-    print('Finished %s %s in %.1f s'  % (field,tile, timeit.default_timer()-time_start))
+    print('BackCalc: Finished %s %s in %.1f s'  % (field,tile, timeit.default_timer()-time_start))
     plot_fit_results(field,tile)
 
 
@@ -543,7 +543,7 @@ def steer(argv):
         #     i+=1
         #     nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('BackCalc: Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -560,7 +560,7 @@ def steer(argv):
             i+=1
 
     if len(tiles)==0:
-        print('The tiles to be processed must be listed after the field, unless -all is invoked')
+        print('BackCalc: The tiles to be processed must be listed after the field, unless -all is invoked')
         return
 
     open_log('%s.log' % field,reinitialize=False)

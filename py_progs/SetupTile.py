@@ -85,7 +85,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     if os.path.isfile(tab_file):
         det=ascii.read(tab_file)
     else:
-        print('Cannot find %s' % tab_file)
+        print('SetupTile: Cannot find %s' % tab_file)
         return
 
     mef_file='Summary/%s_mef.tab' % (field)
@@ -94,7 +94,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     if os.path.isfile(mef_file):
         mef=ascii.read(mef_file)
     else:
-        print('Cannot find %s' % mef_file)
+        print('SetupTile: Cannot find %s' % mef_file)
         return
 
 
@@ -102,7 +102,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
 
     
 
-    print('Looking in %s for CCD images with RA and DEC of %.5f %.5f and size of %.2f deg' % (field,ra_center,dec_center,size_deg))
+    print('SetupTile: Looking in %s for CCD images with RA and DEC of %.5f %.5f and size of %.2f deg' % (field,ra_center,dec_center,size_deg))
 
 
     dec_min=dec_center-0.5*size_deg
@@ -118,13 +118,13 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     x=x[x['Dec_min']<dec_max]
 
     if len(x)==0:
-            print('  Failed to find any images with Dec less than %.5f ' % dec_max)
-            return []
+        print('SetupTile:   Failed to find any images with Dec less than %.5f ' % dec_max)
+        return []
 
     x=x[x['Dec_max']>dec_min]
     if len(x)==0:
-            print('  Failed to find any images with Dec greater than %.5f ' % dec_min)
-            return []
+        print('SetupTile:   Failed to find any images with Dec greater than %.5f ' % dec_min)
+        return []
 
 
     
@@ -133,15 +133,14 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     
     x=x[x['RA_min']<ra_max]
     if len(x)==0:
-            print('  Failed to find any images with RA  less than %.5f ' % ra_max)
-            return []
+        print('SetupTile:   Failed to find any images with RA  less than %.5f ' % ra_max)
+        return []
 
 
-    # print(len(x))
     x=x[x['RA_max']>ra_min]
     if len(x)==0:
-            print('  Failed to find any images with RA  greater than %.5f ' % ra_min)
-            return []
+        print('SetupTile:   Failed to find any images with RA  greater than %.5f ' % ra_min)
+        return []
 
 
     
@@ -151,7 +150,6 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     x['Delta_Dec'].format='.2f'
     x['Delta_RA'].format='.2f'
 
-    # print('Found %d CCD extensions that satisfy the input criteria ' % len(x))
 
     xfiles=[]
     for one in x:
@@ -161,7 +159,7 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     x['Filename']=xfiles
     x['Field']=field
 
-    print('  Found %d relevant files in %s' % (len(x),field))
+    print('SetupTile:   Found %d relevant files in %s' % (len(x),field))
         
     
     return x['Field','Filename','Root','EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1','Delta_Dec','Delta_RA',
@@ -176,39 +174,41 @@ def populate_tile_dir(xtab,field,tile):
     data_dir='%s/%s/data' % (DATADIR,field)
 
     if os.path.isdir(data_dir) == False:
-        print('Error: %s does not appear to exist' % data_dir)
+        print('SetupTile: Error: %s does not appear to exist' % data_dir)
         print('Run PrepMef on this field first')
         raise IOError
 
     tile_dir='%s/%s/%s/' % (PREPDIR,field,tile)
 
     if os.path.isdir(tile_dir)==False:
-        print('Creating the Prep directory as %s' % tile_dir)
+        print('SetupTile: Creating the Prep directory as %s' % tile_dir)
         os.makedirs(tile_dir)
     else:
-        print('The Prep directory %s already exists' % tile_dir )
+        print('SetupTile: The Prep directory %s already exists' % tile_dir )
         xfiles=glob('%s/*fits*' % tile_dir)
         if len(xfiles):
-            print('Removing existing fits files or links and reinitializing')
+            print('SetupTile: Removing existing fits files or links and reinitializing')
             for one in xfiles:
                 os.remove(one)
 
     nerrors=0
+    nfound=0
     for one in xtab:
         one_dir='%s/%s/data' % (DATADIR,one['Field'])
         one_file=one['Filename']
         data_file='%s/%s' % (one_dir,one_file)
         tile_file='%s/%s' % (tile_dir,one_file)
         if os.path.isfile(data_file)==False:
-            print('Failed to find %s in %s ' % (one_file,data_dir))
+            print('SetupTile: Failed to find %s in %s (Was MefPrep run?)' % (one_file,data_dir))
             nerrors+=1
         else:
+            nfound+=1
             os.symlink(data_file,tile_file)
+    print('SetupTile: Successfully linked %d files from %s to %s' % (nfound, data_dir,tile_dir))
     if nerrors:
-        print('Failed to find %d of %d files in %s' % (nerrors,len(xtab),data_dir))
+        print('SetupTile: Failed to find %d of %d files in %s' % (nerrors,len(xtab),data_dir))
+        print('SetupTile: Normally this is because MefPrep was not run on all relevant Fields')
         raise IOError
-    else:
-        print('Successfully linked files from %s to %s' % (data_dir,tile_dir))
             
 
 def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_deg=0.67,s7=True,seeing_max=1000.,use_all_data=False):
@@ -224,26 +224,24 @@ def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         words=field.split('_')
         galaxy=words[0]
         xfiles=glob('Summary/%s*det.tab' % galaxy)
-        print('There are %d fields to survey' % len(xfiles))
+        print('SetupTile: There are %d fields to survey' % len(xfiles))
         fields=[]
         for one_file in xfiles:
             xx=one_file.replace('Summary/','')
             xx=xx.replace('_det.tab','')
             fields.append(xx)
-        print('hello Knox ',fields)
         z=[]
         for one in fields:
             one_result=find_files_to_prep(one,tile,ra,dec,size_deg)
             if len(one_result):
                 z.append(one_result)
-        print('hello Knox ',len(z))
         x=vstack(z)
             
     else:
         x=find_files_to_prep(field,tile,ra,dec,size_deg)
 
     if len(x)==0:
-        print('Error: no files found for field/tile  %s %s' % (field,tile))
+        print('SetupTile: Error: no files found for field/tile  %s %s' % (field,tile))
         raise IOError
 
     x.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
@@ -256,14 +254,13 @@ def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         delta_s7=len(foo)
         x=x[x['EXTNAME']!='S7']
     if seeing_max<100.:
-        print('Toasty inside:',len(x),seeing_max)
         foo=x[x['SEEING']>seeing_max]
         delta_seeing=len(foo)
         x=x[x['SEEING']<=seeing_max]
     if len(x)<original_length:
-        print('Eliminated %d s7 images and %d bad seeing images of %d that were possible' % (delta_s7,delta_seeing,original_length))
+        print('SetupTile: Eliminated %d s7 images and %d bad seeing images of %d that were possible' % (delta_s7,delta_seeing,original_length))
     else:
-        print('Using all %d images possible for this tile' % original_length)
+        print('SetupTile: Using all %d images possible for this tile' % original_length)
 
 
     x.meta['comments']=['RA %f' % ra, 'DEC %f' % dec]
@@ -273,7 +270,7 @@ def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         outfile='Summary/%s_%s.txt' % (field,tile)
         x.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
-        print('Failed to set up %s %s' % (field,tile))
+        print('SetupTile: Failed to set up %s %s' % (field,tile))
         raise IOError
 
     return outfile
@@ -298,8 +295,8 @@ def setup_tiles(ztab,s7,seeing_max,use_all_data,process_tab):
         try:
             outfile_name=get_tile_files(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'],s7,seeing_max,use_all_data)
         except IOError:
-            print('Error: Something is wrong, and must be sorted before continuing')
-            print('Try rerunning MefPrep.py -finish, and then repeat this step')
+            print('SetupTile: Error: Something is wrong, and must be sorted before continuing')
+            print('SetupTile: Try rerunning MefPrep.py -finish, and then repeat this step')
             return
 
         xtab=ascii.read(outfile_name)
@@ -311,7 +308,7 @@ def setup_tiles(ztab,s7,seeing_max,use_all_data,process_tab):
         try:
             populate_tile_dir(xtab,field,tile)
         except IOError:
-            print('Problem with ppulating tile dir for %s %s' % (field,tile))
+            print('SetupTile: Problem with populating tile dir for %s %s' % (field,tile))
 
     return
 
@@ -350,7 +347,7 @@ def steer(argv):
             i+=1
             seeing_max=eval(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s ' % argv[i])
+            print('SetupTile: Error: Unknown switch %s ' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -362,7 +359,7 @@ def steer(argv):
         i+=1
 
     if xall==False and len(tiles)==0:
-        print('Sorry: there seems to be nothing to do')
+        print('SetupTile: Sorry: there seems to be nothing to do')
         print('-all not set and no tiles to set up provided' )
         return
 
@@ -378,7 +375,7 @@ def steer(argv):
     elif os.path.isfile(kred+'/config/'+table):
         xtab=ascii.read(kred+'/config/'+table)
     else:
-        print('Error: Could not find tile config  %s in local directory or in kred/config' % table)
+        print('SetupTile: Error: Could not find tile config  %s in local directory or in kred/config' % table)
         return
 
     if os.path.isfile(process_table):
@@ -386,14 +383,14 @@ def steer(argv):
     elif os.path.isfile(kred+'/config/'+process_table):
         ptab=ascii.read(kred+'/config/'+process_table)
     else:
-        print('Error: Could not find image config %s in local director or in kred/config' % process_table)
+        print('SetupTile: Error: Could not find image config %s in local director or in kred/config' % process_table)
         return
 
 
     xtab=xtab[xtab['Field']==field]
 
     if len(xtab)==0:
-        print('Could not find field %s in %s' % (field,table))
+        print('SetupTile: Could not find field %s in %s' % (field,table))
         return 0
 
     if xall==False:
@@ -410,7 +407,7 @@ def steer(argv):
         xtiles=xtab
 
     if len(xtiles)==0:
-        print('Sorry: there seems to be nothing to do')
+        print('SetupTile: Sorry: there seems to be nothing to do')
         print('Looked for the following tiles: ',tiles)
         return
 

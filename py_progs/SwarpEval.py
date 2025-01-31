@@ -54,7 +54,7 @@ def display_fits_image(image_file, scale='linear', invert=False, vmin=None, vmax
     try:
         hdul = fits.open(image_file)
     except:
-        print('Could not open: ' % image_file)
+        print('SwarpEval: Could not open: ' % image_file)
 
 
     # Access the image data
@@ -120,7 +120,7 @@ def display_fits_image(image_file, scale='linear', invert=False, vmin=None, vmax
         try:
             plt.savefig(outfile)
         except:
-            print('Could not save to %s' % outfile)
+            print('SwarpEval: Could not save to %s' % outfile)
 
 # Example usage
 
@@ -155,7 +155,7 @@ def get_stats(xfiles):
         try:
             f=fits.open(one)
         except:
-            print('Error: get stats could not open: ',one)
+            print('SwarpEval: Error: get stats could not open: ',one)
             continue
         zmask=np.select([f[0].data!=0],[0],1)
         
@@ -180,10 +180,10 @@ def get_stats(xfiles):
 def make_plots(xdirectory='DECam_SWARP2',field='LMC_c01',tile='T01'):
 
     
-    print('Beginning %s %s' % (field,tile))
+    print('SwarpEval: Beginning %s %s' % (field,tile))
     files=get_images(xdirectory,field,tile)
     if len(files)==0:
-        print('No images were found for field %s tile %s in %s' % (field,tile,xdirectory))
+        print('SwarpEval: No images were found for field %s tile %s in %s' % (field,tile,xdirectory))
         return
 
     xtab=get_stats(files)
@@ -196,7 +196,7 @@ def make_plots(xdirectory='DECam_SWARP2',field='LMC_c01',tile='T01'):
         xmax=one['Median']+0.1*one['STD']
         xout='%s/%s_%s.png' % (xdir,one['Root'],tile)
         display_fits_image(one['Filename'], scale='linear', invert=False, vmin=xmin, vmax=xmax,outfile=xout)
-    print('Finished %s %s' % (field,tile))
+    print('SwarpEval: Finished %s %s' % (field,tile))
         
 
 def steer(argv):
@@ -222,7 +222,7 @@ def steer(argv):
         elif argv[i]=='-all':
             xall=True
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('SwarpEval: Error: Unknown switch %s' % argv[i])
             return
         elif xdir=='':
             xdir=argv[i]
@@ -242,11 +242,11 @@ def steer(argv):
 
     if os.path.isdir('%s/%s' % (xdir,field))==False:
         print(__doc__)
-        print('Check inputs: %s/%s does not appear to be a directory' % (xdir,field))
+        print('SwarpEval: Check inputs: %s/%s does not appear to be a directory' % (xdir,field))
         return
     if len(tiles)==0:
         print(__doc__)
-        print('Check inputs: No tiles requested',argv)
+        print('SwarpEval: Check inputs: No tiles requested',argv)
         return
 
 

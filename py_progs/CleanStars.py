@@ -140,19 +140,19 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
         zha=fits.open(ha)
         ha_exists=True
     except:
-        print('The   Ha file could not be openened: %s' % ha)
+        print('CleanStars: The   Ha file could not be openened: %s' % ha)
     
     try:
         zs2=fits.open(s2)
         s2_exists=True
     except:
-        print('The  SII file could not be openened: %s' % s2)
+        print('CleanStars: The  SII file could not be openened: %s' % s2)
          
     try:
         zr=fits.open(r)
         r_exists=True
     except:
-        print('The    R file could not be openened: %s' % r)    
+        print('CleanStars: The    R file could not be openened: %s' % r)    
         
     if ha_exists==False or s2_exists==False or r_exists==False:
         return
@@ -160,13 +160,13 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
 
     if ha_exists:
         mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('ha:  ',mean,median,std)
+        print('CleanStars: ha:  ',mean,median,std)
         zha[0].data-=median
 
     
     if s2_exists:
         mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('s2:  ',mean,median,std)
+        print('CleanStars: s2:  ',mean,median,std)
         zs2[0].data-=median
 
     if outroot=='':
@@ -222,35 +222,35 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         zha=fits.open(ha)
         ha_exists=True
     except:
-        print('The   Ha file could not be opened: %s' % ha)
+        print('CleanStars: The   Ha file could not be opened: %s' % ha)
     
     try:
         zs2=fits.open(s2)
         s2_exists=True
     except:
-        print('The  SII file could not be opened: %s' % s2)
+        print('CleanStars: The  SII file could not be opened: %s' % s2)
       
       
     try:
         zn708=fits.open(n708)
         n708_exists=True
     except:
-        print('The N708 file could not be opened: %s' % n708)
+        print('CleanStars: The N708 file could not be opened: %s' % n708)
         return
 
     if ha_exists:
         mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('ha:  ',mean,median,std)
+        print('CleanStars: ha:  ',mean,median,std)
         zha[0].data-=median
 
     
     if s2_exists:
         mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('s2:  ',mean,median,std)
+        print('CleanStars: s2:  ',mean,median,std)
         zs2[0].data-=median
 
     mean,median,std=sigma_clipped_stats(zn708[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-    print('n708: ',mean,median,std)
+    print('CleanStars: n708: ',mean,median,std)
     zn708[0].data-=median
 
     zn708[0].header['PROCTYPE']='LineSubtracted'
@@ -284,7 +284,7 @@ def doit(xdir='data',outdir='data'):
 
     files=glob('%s/*.fits' % xdir)
     if len(files)==0:
-        print("No files found for %s" % xdir)
+        print("CleanStars: No files found for %s" % xdir)
         return
 
     # Now the files are of the following form: LMC_c30_T01.N673.fits
@@ -325,7 +325,7 @@ def doit(xdir='data',outdir='data'):
         elif one['Image']=='N708':
             n708=one['Filename']
         else:
-            print('Unknown fits file: %s '% one['Filename'])
+            print('CleanStars: Unknown fits file: %s '% one['Filename'])
 
     print(ha,s2,r,n708)
 
@@ -333,12 +333,12 @@ def doit(xdir='data',outdir='data'):
     if r!='none':
         make_rband_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
-        print('No r band image found')
+        print('CleanStars: No r band image found')
 
     if n708!='none':
         make_n708_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
-        print('No N708 image found')
+        print('CleanStars: No N708 image found')
 
 
 

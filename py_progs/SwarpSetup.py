@@ -66,7 +66,7 @@ def get_sum_tab(field='LMC_c42',tile='T07'):
     try:
         xtab=ascii.read(xname)
     except:
-        print('Error: Could not find %s' % xname)
+        print('SwarpSetup: Error: Could not find %s' % xname)
         raise IOError
     return xtab
 
@@ -200,11 +200,11 @@ def create_swarp_command(field='LMC_c42',tile='T07',image='N673',defaults=xdefau
     230619 - Added code to allow commands to be created in the _b directory if bsub=True
     241005 - Added code to center on the config position as the default
     '''
-    print('\n### Creating swarp inputs for %s tile %s and image %s' % (field,tile,image))
+    print('\n###SwarpSetup:  Creating swarp inputs for %s tile %s and image %s' % (field,tile,image))
     x=get_sum_tab(field,tile)
     xx=x[x['Image']==image]
     if len(xx)==0:
-        print('There are no observations with filter %s')
+        print('SwarpSetup: There are no observations with filter %s')
         return
     
     
@@ -221,19 +221,19 @@ def create_swarp_command(field='LMC_c42',tile='T07',image='N673',defaults=xdefau
                 elif word[0]=='DEC':
                     dec=eval(word[1])
                 else:
-                    print('Unknown header line ',one)
+                    print('SwarpSetup: Unknown header line ',one)
         except:
-            print('No valid header to summary file')
+            print('SwarpSetup: No valid header to summary file')
 
     if ra==-99. or dec==-99.:
-        print('Using average position of images to set up SWARP ouput image')
+        print('SwarpSetup: Using average position of images to set up SWARP ouput image')
         ra=np.average(x['CENRA1'])
         dec=np.average(x['CENDEC1'])
     else:
-        print('Using configuration file RA and DEC to set up SWARP ouput image')
+        print('SwarpSetup: Using configuration file RA and DEC to set up SWARP ouput image')
 
 
-    print('The center of this tile is %.5f  %.5f' % (ra,dec))
+    print('SwarpSetup: The center of this tile is %.5f  %.5f' % (ra,dec))
 
 
 
@@ -273,7 +273,7 @@ def create_swarp_command(field='LMC_c42',tile='T07',image='N673',defaults=xdefau
     f.close()
     
     os.chmod('%s/%s.run' % (xdir,root),stat.S_IRWXU)
-    print('### Finished swarp inputs for %s tile %s and image %s\n' % (field,tile,image))
+    print('###SwarpSetup:  Finished swarp inputs for %s tile %s and image %s\n' % (field,tile,image))
     return   
     
     
@@ -290,7 +290,7 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
     xtab=get_sum_tab(field,tile)
 
     if len(xtab)==0:
-        print('Error: SwarpSetup.py: Nothing to swarp')
+        print('SwarpSetup: Error: SwarpSetup.py: Nothing to swarp')
         return
 
     # Homoogenize the inputs in a situation where _b has been added to the file name
@@ -333,7 +333,7 @@ def steer(argv):
         elif argv[i]=='-ave_pos':
             use_config=False
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch  %s' % argv[i])
+            print('SwarpSetup: Error: Unknwon switch  %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
