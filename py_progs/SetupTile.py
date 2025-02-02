@@ -27,23 +27,29 @@ Command line usage (if any):
         -S7 causes the S7 chip to be ignored
         -seeing_max causes any images with seing greater than the value given to be ignored.
         -use_all_data causes all of the data regardless of field to be included (as long
-            as that field has been Prepped.
+            as that field has been MefPrepped.  
 
 Description:  
 
     This program reads a tile definition file and an image definition file to set up
-    how to process expousures.  
+    how to process exposures.  
+
+    To find the files that are to used, the program reads the det.tab files created by MefSum.py
 
     It then searches for CCD images that should prepped to create fits files 
     to construct images in tiles of a field.  It writes the results to
     a table in the Summary directory
 
+    This file condtains only those files which can be processed further.  It excludes
+    image with a seeing that is larger than desired, and usuall excludes images from the
+    problematic S7 chip.  It only includes images that have been MefPrepped, so if
+    one uses the -use_all_data option first, one should make sure all of the relevant
+    images have been processed through this stage.  
+
     There is one table for tile in the field, e.g  LMC_c30_T16.txt
 
     The program searches for the tile definition file and the image definition file in the local directory
     and in the $KRED/config directory.
-
-    To find the files that are to used, the program reads the det.tab files created by MefSum.py
 
 
 Primary routines:
@@ -52,11 +58,13 @@ Primary routines:
 
 Notes:
     If the directory exists where one is going to place links to the
-    files that are to be prepped, sll the file(link)s are removed so
+    files that are to be prepped, all the file(link)s are removed so
     that only the files including in this run should be in the direcory
 
     The routine reads tables that are contained in the Summary directory
     to decide what images to include.
+
+
                                        
 History:
 
@@ -79,7 +87,14 @@ DATADIR='%s/DECam_CCD/' % (CWD)
 PREPDIR='%s/DECam_PREP/' % (CWD)
 
 
-def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.17,size_deg=.1):
+def find_overlapping_images(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.17,size_deg=.1):
+
+    '''
+    This routine finds all possible CCD images have pixels within the final image area. It
+    does not check them in any other way, and in particular does not eliminate images
+    that have not been processed by MefPrep.
+    '''
+
     
     tab_file='Summary/%s_det.tab' % (field)
     if os.path.isfile(tab_file):
@@ -165,6 +180,47 @@ def find_files_to_prep(field='LMC_c45',tile='T07',ra_center=81.1,dec_center=-66.
     return x['Field','Filename','Root','EXTNAME','CENRA1','CENDEC1','COR1RA1','COR1DEC1','COR2RA1','COR2DEC1','COR3RA1','COR3DEC1','COR4RA1','COR4DEC1','Delta_Dec','Delta_RA',
             'FILTER','EXPTIME','MAGZERO','SEEING']
 
+
+def locate_prepped_files(xtab,field,tile):
+    '''
+    Check whether the necessary files have been run through MefPrep
+    '''
+
+    data_dir='%s/%s/data' % (DATADIR,field)
+
+    if os.path.isdir(data_dir) == False:
+        print('SetupTile: Error: %s does not appear to exist' % data_dir)
+        print('Run PrepMef on this field first')
+        raise IOError
+
+    xtab['Prepped']='Unknown'
+    xlocation=[]
+
+    nerrors=0
+    nfound=0
+    for one in xtab:
+        one_dir='%s/%s/data' % (DATADIR,one['Field'])
+        one_file=one['Filename']
+        data_file='%s/%s' % (one_dir,one_file)
+        xlocation.append(data_file)
+        if os.path.isfile(data_file)==False:
+            one['Prepped']='No'
+            nerrors+=1
+        else:
+            one['Prepped']='Yes'
+            nfound+=1
+    print('SetupTile: Successfully found %d files in %s' % (nfound, data_dir))
+    if nerrors:
+        print('SetupTile: Failed to find %d of %d files in %s' % (nerrors,len(xtab),data_dir))
+        print('SetupTile: Normally this is because MefPrep was not run on all relevant Fields')
+
+    xtab['PrepFile']=xlocation
+    return xtab
+
+            
+
+
+
 def populate_tile_dir(xtab,field,tile):
     '''
     This just does the work of creating and populating the tile directory with links
@@ -224,7 +280,7 @@ def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
         words=field.split('_')
         galaxy=words[0]
         xfiles=glob('Summary/%s*det.tab' % galaxy)
-        print('SetupTile: There are %d fields to survey' % len(xfiles))
+        print('\n\nSetupTile: There are %d fields to survey' % len(xfiles))
         fields=[]
         for one_file in xfiles:
             xx=one_file.replace('Summary/','')
@@ -232,19 +288,32 @@ def get_tile_files(field='LMC_c42',tile='T07',ra=81.108313,dec=-66.177280,size_d
             fields.append(xx)
         z=[]
         for one in fields:
-            one_result=find_files_to_prep(one,tile,ra,dec,size_deg)
+            one_result=find_overlapping_images(one,tile,ra,dec,size_deg)
             if len(one_result):
+                one_result=locate_prepped_files(one_result,field,tile)
                 z.append(one_result)
         x=vstack(z)
             
     else:
-        x=find_files_to_prep(field,tile,ra,dec,size_deg)
+        x=find_overlapping_images(field,tile,ra,dec,size_deg)
+        if len(x):
+            x=locate_prepped_files(x,field,tile)
+
+
+
+    # Now eliminate files that were not prepped
+
+    nn=len(x)
+    x=x[x['Prepped']=='Yes']
+    print('\n\nSetupTile: Of %d images that overlapped the field, %d have been processed with MefPrep' % (nn,len(x)))
+
+
 
     if len(x)==0:
         print('SetupTile: Error: no files found for field/tile  %s %s' % (field,tile))
         raise IOError
 
-    x.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
+    #x.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
     original_length=len(x)
     delta_s7=0

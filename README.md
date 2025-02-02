@@ -128,9 +128,14 @@ background from all of the CCDS associated with a given
 exposure.  The default is to subtract the median value 
 of the mode for the individual detectors.
 
-
 Also, like MefSum.py one can run this on all of the fields
 with the -all switch.
+
+**If one plans to use the -use_all_data option in SetupTile, so to include
+all possible images to create a tile image, one must run
+MefPrep on all of the data first.  If one does not do this,
+then SetupTile and the remaining routines will still run, but the analyis
+will only include those images which have been processed by MefPrep**
 
 
 * SetupTile.py - This is intended to identify CCD images

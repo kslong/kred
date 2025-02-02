@@ -160,7 +160,7 @@ def diff_eval(xdelta,xback,return_diff=False):
     delta=np.array(delta)
     xsum=np.dot(delta,delta)
     xsum=np.sqrt(xsum)/len(delta)
-    print(xdelta)
+    # print(xdelta)
     if return_diff==True:
         return xsum,delta
     else:
