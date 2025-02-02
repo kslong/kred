@@ -172,14 +172,14 @@ def prep_one_tile(field='LMC_c42',tile='T07',redo=False):
         sumfile='Summary/%s_%s.txt' % (field,tile)
         x=ascii.read(sumfile)
     except:
-        print('Could not find %s' % sumfile)
+        print('BackPrep: Could not find %s' % sumfile)
         raise IOError
 
 
     
     indir='%s/%s/%s' % (PREPDIR,field,tile)
     if os.path.exists(indir)==False:
-        print('Could not find the directory' % indir)
+        print('BackPrep: Could not find the directory' % indir)
         raise IOError
 
 
@@ -189,9 +189,9 @@ def prep_one_tile(field='LMC_c42',tile='T07',redo=False):
     outdir='%s/%s/%s' % (SWARPDIR,field,tile)
     if os.path.exists(outdir)==False:
         os.makedirs(outdir)
-        print('The output directory did not exist, so it is being created')
+        print('BackPrep: The output directory did not exist, so it is being created')
     else:
-        print('The output directory exists')
+        print('BackPrep: The output directory exists')
 
     
     ra=np.average(x['CENRA1'])
@@ -221,7 +221,7 @@ def prep_one_tile(field='LMC_c42',tile='T07',redo=False):
     f.close()
     os.chmod(runfile,stat.S_IRWXU)
 
-    print('There are %d background files of %d for field %s and tile %s that need creating' % (n,len(x), field,tile))
+    print('BackPrep: There are %d background files of %d for field %s and tile %s that need creating' % (n,len(x), field,tile))
 
 
 
@@ -239,7 +239,7 @@ def run_back(field='LMC_c42',tile='T07'):
     try:
         os.chdir(run_dir)
     except:
-        print('Error: Could not cd to %s' % run_dir)
+        print('BackPrep: Error: Could not cd to %s' % run_dir)
         os.chdir(exec_dir)
 
     command='RunSwarp'
@@ -262,7 +262,7 @@ def run_back(field='LMC_c42',tile='T07'):
 
 
     current_time=timeit.default_timer()
-    print('\n***Completely done for tile %s in %.1f s\n' % (tile,current_time-xstart))
+    print('\n***BackPrep: Completely done for tile %s in %.1f s\n' % (tile,current_time-xstart))
 
 
     os.chdir(exec_dir)
@@ -303,7 +303,7 @@ def steer(argv):
             PREPDIR=os.path.abspath(argv[i])
             SWARPDIR='XXX/'
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('BackPrep: Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -312,9 +312,9 @@ def steer(argv):
         i+=1
 
     if xrun:
-        print('Preparing runs and executing')
+        print('BackPrep: Preparing runs and executing')
     else:
-        print('Preparing run, but NOT executing')
+        print('BackPrep: Preparing run, but NOT executing')
 
     if xall:
         # Assumme all directories with fits files should be searched
@@ -329,7 +329,7 @@ def steer(argv):
         tiles=np.unique(xdirs)
 
     if len(tiles)==0:
-        print('The tiles to be processed must be listed after the field, unless -all is invoked')
+        print('BackPrep: The tiles to be processed must be listed after the field, unless -all is invoked')
 
     open_log('%s.log' % field,reinitialize=False)
     number=[]

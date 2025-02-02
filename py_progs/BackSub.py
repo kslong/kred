@@ -25,13 +25,14 @@ Description:
 
     The routine reads the files in the DECam_Prep/field/tile 
     directory and writes the subtacted in imaages to
-    DECam_Prep/field/tile_b
+    DECam_Prep2/field/tile
 
 
 Primary routines:
 
 
 Notes:
+    The input tables  for this have names like  Summary/Field_Tile_bbb.txt
 
 History:
 
@@ -60,8 +61,22 @@ DATADIR='%s/DECam_PREP/' % (CWD)
 PREPDIR='%s/DECam_PREP2/' % (CWD)
 
 def do_one_file(filein,fileout,b):
+    '''
+    This simply subtracts a background from an image
+
+    250201 - For reasons that are unclear the current version of
+    astropy gave an error associated with PCOUNT at this
+    stage.  The value for an image should be 0, but was
+    a large number.  So I have forced a fix to this.
+    '''
     # print(filein,fileout,b)
     f=fits.open(filein)
+    # f.info()
+    # print(repr(f[1].header))
+    try:
+        f[1].header['PCOUNT']=0
+    except:
+        print('BackSub: Error: Could not set PCOUNT for %s' % (filein))
     f[1].data-=b
     f.writeto(fileout,overwrite=True)
     f.close()

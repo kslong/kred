@@ -73,6 +73,7 @@ from log import *
 import shutil
 from medianrange import *
 import timeit
+import gc
 
 ierror=False
 
@@ -239,12 +240,14 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
                 # print('succeeded')
                 records.append(one_record)
             else:
-                print('Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
+                print('BackStats: Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
 
         two.close()
+        del two
+        gc.collect()
         j+=1
     one.close()
-    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
+    print('BackStats: Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
     return records
 
 
@@ -256,7 +259,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
     try:
         x=ascii.read(sumfile)
     except:
-        print('Could not find overlap file %s ' % sumfile)
+        print('BackStats: Could not find overlap file %s ' % sumfile)
         raise IOError
 
 
@@ -265,14 +268,15 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
     imsumfile='Summary/%s_%s.txt' % (field,tile)
     try:
         imsum=ascii.read(imsumfile)
+        imsum=join(imsum,x['Filename','XEXPTIME'],join_type='left')
     except:
-        print('Could not read imsum file: %s' % imsum)
+        print('BackStats: Could not read imsum file: %s' % imsum)
         raise IOError
 
 
     indir='%s/%s/%s' % (BACKDIR,field,tile)
     if os.path.exists(indir)==False:
-        print('Could not find the directory %s with the data' % indir)
+        print('BackStats: Could not find the directory %s with the data' % indir)
         raise IOError
 
     
@@ -357,11 +361,11 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
 
     imsum.rename_column('Filename','file1')
 
-    ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
+    ztab=join(ztab,imsum['file1','Image','FILTER','EXPTIME','XEXPTIME'],join_type='left')
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s with %d lines' % (out_name,len(ztab)))
+    print('BackStats: Wrote %s with %d lines' % (out_name,len(ztab)))
     return ztab
 
 def steer(argv):
@@ -390,7 +394,7 @@ def steer(argv):
             i+=1
             nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('BackStats: Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -406,7 +410,7 @@ def steer(argv):
             i+=1
 
     if len(tiles)==0:
-        print('The tiles to be processed must be listed after the field, unless -all is invoked')
+        print('BackStats: The tiles to be processed must be listed after the field, unless -all is invoked')
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
         if calc_sigma_clipped:
@@ -431,7 +435,7 @@ def steer(argv):
     elif xremove:
         for one in tiles:
             xdir='%s/%s/%s' % (BACKDIR,field,one)
-            print('There were no errors reported, removing %s' % (xdir))
+            print('BackStats: There were no errors reported, removing %s' % (xdir))
             shutil.rmtree(xdir)
 
 

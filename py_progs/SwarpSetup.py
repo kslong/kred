@@ -66,145 +66,9 @@ def get_sum_tab(field='LMC_c42',tile='T07'):
     try:
         xtab=ascii.read(xname)
     except:
-        print('Error: Could not find %s' % xname)
+        print('SwarpSetup: Error: Could not find %s' % xname)
         raise IOError
     return xtab
-
-
-
-def summarize(field='LMC_c42',tile='T07'):
-    '''
-    Summarize the various fits files that are relevant to
-    a specific tile
-    '''
-
-
-    try:
-        x=get_sum_tab(field,tile)
-    except:
-        return []
-
-    # print(x.info)
-    # print(x.meta)
-    try:
-        header=x.meta['comments']
-    except: 
-        print('Error: SwarpSetup.py: Could not find metadata in Summary/%s_%s.txt' % (field,tile))
-        return []
-    # print(header)
-
-    ra=-99.
-    dec=-99.
-    try:
-        for one in header:
-            word=one.split()
-            if word[0]=='RA':
-                ra=eval(word[1])
-            elif word[0]=='DEC':
-                dec=eval(word[1])
-            else:
-                print('Unknown header line ',one)
-    except:
-        print('No valid header to summary file')
-
-    if ra==-99. or dec==-99.:
-        print('Using average position of images to set up SWARP ouput image')
-        ra=np.average(x['CENRA1'])
-        dec=np.average(x['CENDEC1'])
-    else:
-        print('Using configuration file RA and DEC to set up SWARP ouput image')
-
-
-    print('The center of this tile is %.5f  %.5f' % (ra,dec))
-
-
-    ha=x[x['FILTER']=='N662']
-    s2=x[x['FILTER']=='N673']
-    r=x[x['FILTER']=='r']
-    n708=x[x['FILTER']=='N708']    
-    print('Ha  images  : %3d' % len(ha))
-    print('SII images  : %3d' % len(s2))
-    print('R   images  : %3d' % len(r))
-    print('N708 images : %3d' % len(n708))
-    
-    print('\nHa')
-    if len(ha) >0:
-        times,counts=np.unique(ha['EXPTIME'],return_counts=True)
-
-        records=[times,counts]
-        xtab=Table(records,names=['EXPTIME','Number'])
-        xtab['FILTER']='N662'
-        ztab=xtab.copy()
-
-        i=0
-        while i<len(times):
-            print('   exp %8s  no %4d' % (times[i],counts[i]))
-            i+=1
-    else:
-        print('This tile contains no Ha images')
-
-    print('\nSII')
-
-    if len(s2)>0:
-        times,counts=np.unique(s2['EXPTIME'],return_counts=True)
-
-        records=[times,counts]
-        xtab=Table(records,names=['EXPTIME','Number'])
-        xtab['FILTER']='N673'
-        try:
-            ztab=vstack([ztab,xtab])
-        except:
-            ztab=xtab.copy()
-
-        i=0
-        while i<len(times):
-            print('   exp %8s  no %4d' % (times[i],counts[i]))
-            i+=1
-    else:
-        print('This tile contains no SII images')
-        
-    print('\nR')
-    if len(r)>0:
-        times,counts=np.unique(r['EXPTIME'],return_counts=True)
-
-        records=[times,counts]
-        xtab=Table(records,names=['EXPTIME','Number'])
-        xtab['FILTER']='r'
-        try:
-            ztab=vstack([ztab,xtab])
-        except:
-            ztab=xtab.copy()
-
-        i=0
-        while i<len(times):
-            print('   exp %8s  no %4d' % (times[i],counts[i]))
-            i+=1    
-    else:
-        print('This tile contains no R band images')
-        
-    print('\nN708')
-
-    if len(n708)>0:
-        times,counts=np.unique(n708['EXPTIME'],return_counts=True)
-
-        records=[times,counts]
-        xtab=Table(records,names=['EXPTIME','Number'])
-        if len(xtab)>0:
-            xtab['FILTER']='N708'
-        try:
-            ztab=vstack([ztab,xtab])
-        except:
-            ztab=xtab.copy()
-
-        i=0
-        while i<len(times):
-            print('   exp %8s  no %4d' % (times[i],counts[i]))
-            i+=1
-    else:
-        print('This tile contains no N708 images')
-
-    return ztab  
-
 
 
 def create_swarp_dir(field='LMC_c42',tile='T07',bsub=False):
@@ -328,7 +192,7 @@ NTHREADS               0               # Number of simultaneous threads for
 
 
 
-def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults=xdefault,bsub=False,use_config=True):
+def create_swarp_command(field='LMC_c42',tile='T07',image='N673',defaults=xdefault,bsub=False,use_config=True):
     '''
     Generate the inputs necessary to run swarp where exp corresponds to one
     or more exposure times for a particular filter and tile.  
@@ -336,15 +200,13 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     230619 - Added code to allow commands to be created in the _b directory if bsub=True
     241005 - Added code to center on the config position as the default
     '''
-    print('\n### Creating swarp inputs for %s tile %s and filter %s' % (field,tile,filt))
+    print('\n###SwarpSetup:  Creating swarp inputs for %s tile %s and image %s' % (field,tile,image))
     x=get_sum_tab(field,tile)
-    xx=x[x['FILTER']==filt]
+    xx=x[x['Image']==image]
     if len(xx)==0:
-        print('There are no observations with filter %s')
+        print('SwarpSetup: There are no observations with filter %s')
         return
     
-    if type (exp)== int:
-        exp=[exp]
     
     header=x.meta['comments']
 
@@ -359,64 +221,28 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
                 elif word[0]=='DEC':
                     dec=eval(word[1])
                 else:
-                    print('Unknown header line ',one)
+                    print('SwarpSetup: Unknown header line ',one)
         except:
-            print('No valid header to summary file')
+            print('SwarpSetup: No valid header to summary file')
 
     if ra==-99. or dec==-99.:
-        print('Using average position of images to set up SWARP ouput image')
+        print('SwarpSetup: Using average position of images to set up SWARP ouput image')
         ra=np.average(x['CENRA1'])
         dec=np.average(x['CENDEC1'])
     else:
-        print('Using configuration file RA and DEC to set up SWARP ouput image')
+        print('SwarpSetup: Using configuration file RA and DEC to set up SWARP ouput image')
 
 
-    print('The center of this tile is %.5f  %.5f' % (ra,dec))
+    print('SwarpSetup: The center of this tile is %.5f  %.5f' % (ra,dec))
 
 
 
-    i=0
-    while i<len(exp):
-        xxx=xx[xx['EXPTIME']==exp[i]]
-        if len(xxx)==0:
-            print('There are no observations with exposure %s' % exp[i])
-        else:
-            print('There are %d observations with exposure %d' % (len(xxx),exp[i]))
-        if i==0:
-            xxxx=xxx.copy()
 
-        else:
-            xxxx=vstack([xxxx,xxx])
-            
-        i+=1
-    
-    if len(xxxx)==0:
-        print('There were no files with exposure times given by ',exp)
-        return
-    else:
-        print('There will be %d files summed' % len(xxxx))
-        
-
-    xtile=tile
-
-    # if bsub==True:
-    #     xtile='%s_b' % tile
-
-
-    xdir=create_swarp_dir(field,xtile,bsub)
+    xdir=create_swarp_dir(field,tile,bsub)
     
     
-
-    i=0
-    exp_string=''
-    while i<len(exp):
-        xtime='.t%03d' %exp[i]   
-        exp_string+=xtime
-        i+=1
     
-    root='%s_%s.%s' % (field,tile,filt)  
-    root+=exp_string
-    # print('root ',root)    
+    root='%s_%s.%s' % (field,tile,image)  
     
     filelist='%s.in' % root
     name='%s/%s' % (xdir,filelist)
@@ -424,11 +250,11 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     # print('Filelist ',name)
     
     f=open(name,'w')
-    for one in xxxx:
+    for one in xx:
         if bsub:
-            xname='%s2/%s/%s/%s'% (PREPDIR,field,xtile,one['Filename'])
+            xname='%s2/%s/%s/%s'% (PREPDIR,field,tile,one['Filename'])
         else:
-            xname='%s/%s/%s/%s'% (PREPDIR,field,xtile,one['Filename'])
+            xname='%s/%s/%s/%s'% (PREPDIR,field,tile,one['Filename'])
 
         f.write('%s\n' % xname)
     f.close()
@@ -447,7 +273,7 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     f.close()
     
     os.chmod('%s/%s.run' % (xdir,root),stat.S_IRWXU)
-    print('### Finished swarp inputs for %s tile %s and filter %s\n' % (field,tile,filt))
+    print('###SwarpSetup:  Finished swarp inputs for %s tile %s and image %s\n' % (field,tile,image))
     return   
     
     
@@ -461,10 +287,10 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
     actually wants to use the background subtracted data
 
     '''
+    xtab=get_sum_tab(field,tile)
 
-    xtab=summarize(field,tile)
     if len(xtab)==0:
-        print('Error: SwarpSetup.py: Nothing to swarp')
+        print('SwarpSetup: Error: SwarpSetup.py: Nothing to swarp')
         return
 
     # Homoogenize the inputs in a situation where _b has been added to the file name
@@ -472,10 +298,11 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
         tile=tile.replace('_b','')
         bsub=True
 
-    #     raise IOError
 
-    for one in xtab:
-        create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults,bsub=bsub,use_config=use_config)
+    images=np.unique(xtab['Image'])
+
+    for one_image in images:
+        create_swarp_command(field=field,tile=tile,image=one_image,defaults=defaults,bsub=bsub,use_config=use_config)
     return
 
 
@@ -506,7 +333,7 @@ def steer(argv):
         elif argv[i]=='-ave_pos':
             use_config=False
         elif argv[i][0]=='-':
-            print('Error: Unknwon switch  %s' % argv[i])
+            print('SwarpSetup: Error: Unknwon switch  %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
