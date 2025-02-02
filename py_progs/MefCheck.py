@@ -7,20 +7,33 @@ Synopsis:
 
 Check whether one or more fits files have headers
 that conform to the fits standard, by looking at
-the warnings that astropy generaates
+the warnings that astropy generates and for certain
+keywrods in the header.
 
 
 Command line usage (if any):
 
-    usage: check.py filename
+    usage: MefCheck.py [-np 8] [-all]  Field ...
 
 Description:  
+
+    where 
+
+        -np 8 imples to run multiple threads, where each
+            thread processes one field 
+        -all implies to do all fields in the DECam_MEF 
+            directory
 
 Primary routines:
 
     doit
 
 Notes:
+
+    Normally, this will not generate any errors.  The
+    routine generates a table mef_qual.tab in the
+    Summary directory for each of the fields.
+
                                        
 History:
 
@@ -48,25 +61,20 @@ multiprocessing.set_start_method("spawn",force=True)
 MEFDIR='DECam_MEF/'
 
 
-
 # Function to raise a test warning
-def test(filename='c4d_190108_063145_ooi_N662_v1.fits.fz',outputfile='out.txt'):
-    x=fits.open(filename)
-    try:
-        #original_stdout=sys.stdout
-        #sys.stdout = open('/dev/null', 'w')
-        i=0
-        while i<len(x):
-            if i==0:
-                foo=x[i].header['EXPTIME']
-            else:
-                foo=x[i].header['EXTNAME']
-            i+=1
-        # x.info()
-        # print(x[0].header['EXPTIME'])
-        #sys.stdout=original_stdout
-    except AttributeError:
-        print('Got Attibutue Error')
+
+def test(filename='c4d_190108_063145_ooi_N662_v1.fits.fz', outputfile='out.txt'):
+    x = fits.open(filename, memmap=True)
+    for i, hdu in enumerate(x):
+        if i == 0:
+            for keyword in ['EXPTIME', 'SEEING','MAGZERO']:
+                if keyword not in hdu.header:
+                    warnings.warn(f"Missing keyword '{keyword}' in extension {i}", UserWarning)
+        else:
+            if 'EXTNAME' not in hdu.header:
+                warnings.warn(f"Missing keyword 'EXTNAME' in extension {i}", UserWarning)
+    x.close()
+
 
 
 # Function to catch and count warnings

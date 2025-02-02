@@ -21,7 +21,7 @@ Command line usage (if any):
         -h prints the documentation
         -np 3  causes the processing to be carried out with a a given no of threads
         -all causes all files in the MEF directories to be processed. This should
-        only be sued with cauthion since it will take considerable time, and so
+        only be used with caution since it will take considerable time, and so
         the user is asked to confirm this option.
         -det just runs the individual ccd portion of the process (this is diagnostic)
         -mef just runs the overall mef portions (this is diagnostic)
@@ -46,11 +46,12 @@ Notes:
 
     At present this does not check that a field has been processed
 
-    Here multiple processors are used only to handle multiple fields,
-    and so if one as for 4 threads, but only provides 3 fields
-    only 3 threads will be used.  (This is something that should
-    be changed, but requires a slightly different set of 
-    multiprocessing commands)
+    Here multiple processors are used only to handle individual files
+    so it makes sense to us multiple threads even if only one
+    field is being processed.,
+
+    Note that this does not read the  file produced by MefCheck, which is
+    really u
 
 
                                        
@@ -181,7 +182,7 @@ def get_mef_overview(field='LMC_c45'):
     keys=['OBJECT','FILTER','EXPTIME','MAGZERO','SEEING','OBSID']
     
     for one_file in files:
-        x=fits.open(one_file)
+        x=fits.open(one_file,memmap=True)
         record=[]
         name=one_file.split('/')
         name=name[-1]
@@ -201,18 +202,37 @@ def get_mef_overview(field='LMC_c45'):
     
     xtab=Table(records,names=tab_names)
     xtab['Field']=field
-    
-    # Next step is a cheat to improve translate numbers to numbers rather than strings
-    
-    
-    xtab.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+
+    good=[]
+    bad=[]
+    i=0
+    while i<len(xtab):
+        one_row=xtab[i]
+        if one_row['SEEING'].count('Unknown'):
+            bad.append(i)
+        elif one_row['MAGZERO'].count('Unknown'):
+            bad.append(i)
+        else:
+            good.append(i)
+        i+=1
+
+    print('XXX :',len(good),len(bad))
+
+    xgood=xtab[good]
+    xgood.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
     ztab=ascii.read('goo_%s.txt' %field)
     os.remove('goo_%s.txt' %field)
-    
     ztab.sort(['FILTER','EXPTIME'])
-
-
     ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+
+    if len(bad)>0:
+        xbad=xtab[bad]
+        print('Found %d bad mef files' % (len(bad)))
+        xbad.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+        ztab=ascii.read('goo_%s.txt' %field)
+        os.remove('goo_%s.txt' %field)
+        ztab.write('Summary/%s_mef_bad.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+
     
     
     return 

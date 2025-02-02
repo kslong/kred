@@ -2,7 +2,7 @@ FIELD=$1
 MefCheck.py $FIELD
 MefSum.py  -np 8 $FIELD
 MefPrep.py -np 8 $FIELD
-SetupTile.py -all $FIELD
+SetupTile.py -all -S7 $FIELD
 # SwarpSetup.py -all  $FIELD
 # Swarp.py -all $FIELD
 # SwarpEval.py -all DECam_SWARP $FIELD

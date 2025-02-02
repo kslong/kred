@@ -2,28 +2,25 @@
 # coding: utf-8
 
 '''
+Create inputs for combining images of the different filters in the field with Swarp
 
-Create inputs for Comineing images of the different filters in the field using swarp
-
-This can only be run after PrepFiles and SumFiles have benn run.    The routines here generate 
-inputs to run swarp which combines the individual CCD images into tile images.   This is normally
-carried out inside a Jupyter scripts.
-
-It is also possible to run swarp once the inputs have been generated.   This can be done
-either in a Jupyter script or from the command line.
-
+This rotutined can only be run after PrepFiles and SumFiles have benn run.    The routines here generate 
+inputs to run swarp which combines the individual CCD images into tile images.   
 To run swarp from the command line (one must be in the normal run directory) since
 a particular directory structure is assumed here)
 
-Usage:   SwarpSetup.py [-all] [-bsub] field [tiles]
+Usage:   SwarpSetup.py [-all] [-bsub] [-ave_pos field [tiles]
 
-where -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
-use the files ending in _sw.tab to set up run files
+where 
 
-and -bsub directs the routine to use data for which an addtioal backgound subtraction
-algorithm has been used.  In this case the Swarp commmands are written and to
-the DECam_SWARP2/field/tile directory and the data are taken from the DECAM_PREP2/field/tile
-directory
+    -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
+        use the files ending in _sw.tab to set up run files
+    -bsub directs the routine to use data for which an addtioal backgound subtraction
+        algorithm has been used.  In this case the Swarp commmands are written and to
+        the DECam_SWARP2/field/tile directory and the data are taken from the DECAM_PREP2/field/tile
+        directory
+    -ave_pos causes the output fits file to be centered on the average position of all of the
+        files which will be swarped
 
 
 If one wants to run only 1 or a few tiles then the command will be something like
@@ -32,9 +29,10 @@ SwarpSetup.py LMC_c42  T01 T02 T03
 
 Note: 
 
-    In a future version it would make sense to combin this with Swarp.py and 
-    to adopt a switch just to do the setup or just to run the routine.
-
+    The current default is to create input files for Swarp that are centered on
+    the position designated in the configuration file, unlike what was done
+    initially which was to center on the average position of all of the files
+    to be swarped. To restore the old behavior use the switch -ave_pos
 
 '''
 
@@ -84,10 +82,38 @@ def summarize(field='LMC_c42',tile='T07'):
     try:
         x=get_sum_tab(field,tile)
     except:
-        return -1, -1
+        return []
 
-    ra=np.average(x['CENRA1'])
-    dec=np.average(x['CENDEC1'])
+    # print(x.info)
+    # print(x.meta)
+    try:
+        header=x.meta['comments']
+    except: 
+        print('Error: SwarpSetup.py: Could not find metadata in Summary/%s_%s.txt' % (field,tile))
+        return []
+    # print(header)
+
+    ra=-99.
+    dec=-99.
+    try:
+        for one in header:
+            word=one.split()
+            if word[0]=='RA':
+                ra=eval(word[1])
+            elif word[0]=='DEC':
+                dec=eval(word[1])
+            else:
+                print('Unknown header line ',one)
+    except:
+        print('No valid header to summary file')
+
+    if ra==-99. or dec==-99.:
+        print('Using average position of images to set up SWARP ouput image')
+        ra=np.average(x['CENRA1'])
+        dec=np.average(x['CENDEC1'])
+    else:
+        print('Using configuration file RA and DEC to set up SWARP ouput image')
+
 
     print('The center of this tile is %.5f  %.5f' % (ra,dec))
 
@@ -302,12 +328,13 @@ NTHREADS               0               # Number of simultaneous threads for
 
 
 
-def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults=xdefault,bsub=False):
+def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults=xdefault,bsub=False,use_config=True):
     '''
     Generate the inputs necessary to run swarp where exp corresponds to one
     or more exposure times for a particular filter and tile.  
 
     230619 - Added code to allow commands to be created in the _b directory if bsub=True
+    241005 - Added code to center on the config position as the default
     '''
     print('\n### Creating swarp inputs for %s tile %s and filter %s' % (field,tile,filt))
     x=get_sum_tab(field,tile)
@@ -319,8 +346,34 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     if type (exp)== int:
         exp=[exp]
     
-    ra=np.average(x['CENRA1'])
-    dec=np.average(x['CENDEC1'])
+    header=x.meta['comments']
+
+    ra=-99.
+    dec=-99.
+    if use_config==True:
+        try:
+            for one in header:
+                word=one.split()
+                if word[0]=='RA':
+                    ra=eval(word[1])
+                elif word[0]=='DEC':
+                    dec=eval(word[1])
+                else:
+                    print('Unknown header line ',one)
+        except:
+            print('No valid header to summary file')
+
+    if ra==-99. or dec==-99.:
+        print('Using average position of images to set up SWARP ouput image')
+        ra=np.average(x['CENRA1'])
+        dec=np.average(x['CENDEC1'])
+    else:
+        print('Using configuration file RA and DEC to set up SWARP ouput image')
+
+
+    print('The center of this tile is %.5f  %.5f' % (ra,dec))
+
+
 
     i=0
     while i<len(exp):
@@ -398,7 +451,7 @@ def create_swarp_command(field='LMC_c42',tile='T07',filt='Ha',exp=[800],defaults
     return   
     
     
-def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,bsub=False):
+def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,bsub=False,use_config=True):
     '''
     Generate the standard set of commands for on tile, based on all of the separate
     exposure times that exist for the cell
@@ -410,21 +463,19 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
     '''
 
     xtab=summarize(field,tile)
+    if len(xtab)==0:
+        print('Error: SwarpSetup.py: Nothing to swarp')
+        return
 
     # Homoogenize the inputs in a situation where _b has been added to the file name
     if tile.count('_b'):
         tile=tile.replace('_b','')
         bsub=True
 
-    # tabfile='Summary/%s_%s.txt' % (field,tile)
-    # try:
-    #     xtab=ascii.read(tabfile)
-    # except:
-    #     print('Error: Could not read %s' % tabfile)
     #     raise IOError
 
     for one in xtab:
-        create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults,bsub=bsub)
+        create_swarp_command(field=field,tile=tile,filt=one['FILTER'] ,exp=[one['EXPTIME']],defaults=defaults,bsub=bsub,use_config=use_config)
     return
 
 
@@ -441,6 +492,7 @@ def steer(argv):
     xall=False
     redo=True
     bsub=False
+    use_config=True 
 
     i=1
     while i<len(argv):
@@ -451,6 +503,8 @@ def steer(argv):
             xall=True
         elif argv[i]=='-bsub':
             bsub=True
+        elif argv[i]=='-ave_pos':
+            use_config=False
         elif argv[i][0]=='-':
             print('Error: Unknwon switch  %s' % argv[i])
             return
@@ -475,7 +529,7 @@ def steer(argv):
 
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
-        create_commmands_for_one_tile(field,one,bsub=bsub)
+        create_commmands_for_one_tile(field,one,bsub=bsub,use_config=use_config)
         if bsub:
             log_message('SwarpSetup for %s %s for modified background images' % (field,one))
         else:
