@@ -151,6 +151,8 @@ def get_keyword(key,ext):
                 answer='N708'
             elif value.count('r DECam'):
                 answer='r'
+            elif value.count('g DECam'):
+                answer='g'
             else:
                 print('Could not identify filter from ',answer)
                 answer='Unknown'
@@ -218,12 +220,13 @@ def get_mef_overview(field='LMC_c45'):
 
     print('XXX :',len(good),len(bad))
 
-    xgood=xtab[good]
-    xgood.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
-    ztab=ascii.read('goo_%s.txt' %field)
-    os.remove('goo_%s.txt' %field)
-    ztab.sort(['FILTER','EXPTIME'])
-    ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+    if len(good)>0:
+        xgood=xtab[good]
+        xgood.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+        ztab=ascii.read('goo_%s.txt' %field)
+        os.remove('goo_%s.txt' %field)
+        ztab.sort(['FILTER','EXPTIME'])
+        ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
 
     if len(bad)>0:
         xbad=xtab[bad]
