@@ -57,7 +57,7 @@ PREPDIR=os.path.abspath('DECam_PREP')
 def get_sum_tab(field='LMC_c42',tile='T07'):
     '''
     Read a table that summarizes information about
-    the various files athat are used for a tile
+    the various files that are used for a tile
     
     The location of the table files is currently hardocaded
     '''
@@ -256,7 +256,10 @@ def create_swarp_command(field='LMC_c42',tile='T07',image='N673',defaults=xdefau
         else:
             xname='%s/%s/%s/%s'% (PREPDIR,field,tile,one['Filename'])
 
-        f.write('%s\n' % xname)
+        if os.path.isfile(xname):
+            f.write('%s\n' % xname)
+        else:
+            print('SwarpSetup: Warning: %s expected but not found' % xname)
     f.close()
     
     default_name='%s.default' % (root)
