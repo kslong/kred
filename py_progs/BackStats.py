@@ -241,8 +241,8 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
                 records.append(one_record)
             else:
                 print('BackStats: Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
-        else:
-            print('BackStats: Failed with %d non_zero < %s pixels for files %s and %s' % (nonzero,npix_min,file,xmatch_files[j]))
+        # else:
+        #     print('BackStats: Failed with %d non_zero < %s pixels for files %s and %s' % (nonzero,npix_min,file,xmatch_files[j]))
 
         two.close()
         del two
