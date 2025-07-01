@@ -86,7 +86,8 @@ def display_fits_image(image_file, scale='linear', invert=False, vmin=None, vmax
         scaled_data = -scaled_data
 
     # Create a figure and axes using wcsaxes
-    fig = plt.figure(1,figsize=(10, 10))  # Adjust the figure size as needed
+    fig = plt.figure(1)  
+    fig.set_size_inches(10,10,forward=True)
     fig.clf()
     ax = WCSAxes(fig, [0.1, 0.1, 0.8, 0.8], wcs=wcs_info, aspect='equal')  # Set the aspect ratio to 'equal'
     fig.add_axes(ax)
