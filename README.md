@@ -80,13 +80,13 @@ To process the data without attempting to improve over
 the background options in MefPrep, the programs should
 be run in the following order:
 
-* (MefCheck.py - This should not normally be necessary unless new
-files have been added to the main data reposiotyr. The routine 
-will check if there are problems with files being "good" fits files
-and chcck for information the headers in the individual
-Mef files.  It creates a table called \_mef\_qual.tab which indicates
-which Mef files are problematic, but is not used by any of the
-downstream programs.)
+* MefCheck.py - This routine should be run whenever files have 
+been added to the data repository. It performs some basic 
+checks on files in the repository to make sure that they can
+be read, and have needed header keywords. The routine also does some 
+simple checks to see whether repository is clean, in the sense
+of not containing duplicate files that could cause issues with
+the downstream procedures. 
 
 * MefSum.py - This summarizes the mef files in a field.
 If it does not already exist this program creates a directory 
@@ -95,15 +95,11 @@ tables that contain the summary information.  Any files that
 do not have the necessary keywords, e.g. MAGZERO, will be contained
 in a separate summary file, and not used in other programs.)
 
-
-Note that MefSum.py -all wil attempt to create a summary of all of the files
+Note that MefSum.py -all will a ttempt to create a summary of all of the files
 that one has in the DECam\_MEF directory.   This routine is parallelized;
-each thread handles an individual mef file.  (In a previous version,
-the routine was parallelized so that each thread handled a different field;
-the new version is faster for processing a single field, but not if
-you are processing a large number of fields.)
-The program does not
-check to see if certain Fields have already been analyzed, 
+each thread handles an individual mef file.  
+
+The program does not check to see if certain Fields have already been analyzed, 
 and so if one adds a single Field one should not use the -all option.
 
 Note - In the current version of the program the most important
@@ -113,6 +109,17 @@ standard deviation, which are also calculated are not the
 sigma clipped versions.  There is an option to create sigma
 clipped versions of the median, and mean, but this takes about
 a factor of 3 times longer to run.)
+
+This routine writes two files in the Summary directory for each "field"
+as defined in the DECam\_MEF directory
+
+Finally, the routine checks to see if the filter/exposure time combinations
+in the various files  appear in the instrument configuration file, and if not
+indicates what combinations do not appear there. (The instrument configuration
+file "DeMCELS\_images.txt indicates what filter combinations to include in various
+final output images and is normally found in the config directory of the kred 
+repository)
+
 
 * MefPrep.py - This routine rescales all of the images in 
 a field or fields, subtracts background if desired, and
@@ -138,11 +145,14 @@ then SetupTile and the remaining routines will still run, but the analyis
 will only include those images which have been processed by MefPrep**
 
 
+This routine writes to the DECam\_Prep directory
+
+
 * SetupTile.py - This is intended to identify CCD images
 that need to be processed.  It produces 
 tables in the Summary directory that identify what 
 CCDs need to be processed to produce images of a single 
-field. It also cretes directories DECam\_PREP/LMC\_c45/Tile01 etc
+field. It also creates directories DECam\_PREP/LMC\_c45/Tile01 etc
 that contain links to the appropriate files in the data directories.
 
 Note - This routine uses two configuration files:

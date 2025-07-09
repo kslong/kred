@@ -40,7 +40,7 @@ Description:
     to construct images in tiles of a field.  It writes the results to
     a table in the Summary directory
 
-    This file condtains only those files which can be processed further.  It excludes
+    This file contains only those files which can be processed further.  It excludes
     image with a seeing that is larger than desired, and usuall excludes images from the
     problematic S7 chip.  It only includes images that have been MefPrepped, so if
     one uses the -use_all_data option first, one should make sure all of the relevant
