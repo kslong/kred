@@ -6,7 +6,7 @@ snapshots of one or more sets of sources in
 a masterfile
 
 Usaage:
-    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] image.fits  mastertable
+    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] [-out outroot] image.fits  mastertable
 
     image.fits   a fitsfile, with the data in the PRIMARY header
     mastertable  a masterfile with postiions and sizes of objects in 
@@ -17,6 +17,9 @@ Usaage:
 
     If -size is provided, cutouts of the image will be made, with a size 
     in arcmin given by the number that follows the size command
+
+    -out is only relevant when a single image file is provided.  If provided the name it determines
+    the name of the output plot file
 
     The  fits images associated with each cutout will be placed in the ximage 
     directory
@@ -116,16 +119,19 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
         print(f"This image had {frac_default} > {frac_off} so ignoring")
         return
 
-    # Update WCS information for the output image
+    # Update WCS information for the output image.  Note that there may be some
+    # issues if the original file does not contain a cs matrix
     offset=-1
     new_center_ra, new_center_dec = wcs.all_pix2world(xmin + size_pixels/2+offset, ymin + size_pixels/2+offset, 0)
     wcs_output = wcs.deepcopy()
     wcs_output.wcs.crval = [new_center_ra, new_center_dec]
     wcs_output.wcs.crpix = [size_pixels/2, size_pixels/2]  # Update reference pixel coordinates
     wcs_output.wcs.cd = wcs.wcs.cd  # Copy CD matrix for rotation
+    if wcs_output.wcs.cd is None:
+        raise ValueError("WCS does not contain a CD matrix, which will cause problems later")
     
-    # Update FITS header with the new WCS information
-    header = wcs_output.to_header()
+    # Update FITS header with the new WCS information.  relax=Ture keeps wd approach.
+    header = wcs_output.to_header(relax=True)
     
     # Create a new FITS file with the extracted data and updated WCS
     hdu = fits.PrimaryHDU(output_data, header=header)
@@ -294,7 +300,7 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
 
 
 
-def make_one_image(filename,master,ymin,ymax):
+def make_one_image(filename,master,ymin,ymax,outroot=''):
     '''
     Create a plot of an image and overlay the retions
     from a master file on it.
@@ -302,8 +308,11 @@ def make_one_image(filename,master,ymin,ymax):
     print('Creating an image of one file with regions')
     xm=ascii.read(master)
     words=master.split('/')
-    outfile_name=words[-1].replace('.txt','')
-    outfile_name='%s.png' % outfile_name
+    if outroot=='':
+        outfile_name=words[-1].replace('.txt','')
+        outfile_name='%s.png' % outfile_name
+    else:
+        outfile_name='%s.png' % outroot
     display_fits_image(image_file=filename, scale='linear', ymin=ymin,ymax=ymax,invert=True,masterfile=master,outfile=outfile_name)
 
     return
@@ -350,6 +359,7 @@ def steer(argv):
     filename=''
     master=''
     size=-1
+    outroot=''
     ymin=None
     ymax=None
     xtype=None
@@ -371,6 +381,9 @@ def steer(argv):
         elif argv[i]=='-type':
             i+=1
             xtype=argv[i]
+        elif argv[i][:4]=='-out':
+            i+=1
+            outroot=argv[i]
         elif argv[i][0]=='-':
             print('Error: Cannot parse command line :',argv)
         elif filename=='':
@@ -390,7 +403,7 @@ def steer(argv):
         return
 
     if size<0:
-        make_one_image(filename,master,ymin,ymax)
+        make_one_image(filename,master,ymin,ymax,outroot)
     else:
         make_many_images(filename,xtype,master,size,ymin,ymax)
     return
