@@ -183,9 +183,9 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
 
 
     if redo==False:
-        print('MefProp: Beginning    %s in field %s with back_type %s (No reprocessing)' % (root,field,back_type))
+        print('MefPrep: Beginning    %s in field %s with back_type %s (No reprocessing)' % (root,field,back_type))
     else:
-        print('MefProp: Beginning    %s in field %s with back_type %s (Reprocessins is on)' % (root,field,back_type))
+        print('MefPrep: Beginning    %s in field %s with back_type %s (Reprocessins is on)' % (root,field,back_type))
     
     mef_file='%s/%s_mef.tab' % (SUMDIR,field)
     try:
@@ -193,7 +193,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
         mef=ascii.read(mef_file)
         mef=mef[mef['Root']==root]
     except:
-        print('MefProp: Error: Could not locate %s' % (mef_file))
+        print('MefPrep: Error: Could not locate %s' % (mef_file))
         return
     
     det_file='%s/%s_det.tab' % (SUMDIR,field)
@@ -201,7 +201,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
         det=ascii.read(det_file)
         det=det[det['Root']==root]
     except:
-        print('MefProp: Error: Could not locate %s' % (det_file))
+        print('MefPrep: Error: Could not locate %s' % (det_file))
         return
     
     time_start=timeit.default_timer()
@@ -217,7 +217,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     elif back_type=='min':
         back=np.min(det['Med'])
     else:
-        print('MefProp: Error: Unknown option for background subtraction %s' % (back_type))
+        print('MefPrep: Error: Unknown option for background subtraction %s' % (back_type))
         return
     
     # print(back)
@@ -226,7 +226,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     if outdir=='':
         outdir='%s/%s/data/' % (CCDDIR,field)
     if os.path.isdir(outdir)==False:
-        print('MefProp: Creating Prep Dir as :',outdir)
+        print('MefPrep: Creating Prep Dir as :',outdir)
         os.makedirs(outdir,exist_ok=True)
     
     mef_fits_file='DECam_MEF/%s/mef/%s.fits.fz' % (field,root)
@@ -241,7 +241,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
             ndone+=1
     
     elapsed = timeit.default_timer() - time_start
-    print('MefProp: Finished mef %s in %s - processed %d ext in %.1f s'  % (root,field,ndone,elapsed))
+    print('MefPrep: Finished mef %s in %s - processed %d ext in %.1f s'  % (root,field,ndone,elapsed))
     
     return
 
@@ -261,7 +261,7 @@ def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir=''):
     try:
         xtab=ascii.read(tab_name)
     except:
-        print('MefProp: Failed to read: %s' % tab_name)
+        print('MefPrep: Failed to read: %s' % tab_name)
         return
 
     xtab=xtab[xtab['Field']==field]
@@ -278,13 +278,13 @@ def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir=''):
     for one in xtab:
         if i % n == 0:
             elapsed = timeit.default_timer() - start_time
-            print('MefProp: Completed %4d of %4d files in %f s' % (i,nn,elapsed))
+            print('MefPrep: Completed %4d of %4d files in %f s' % (i,nn,elapsed))
 
         prep_one_mef(field=field,root=one['Root'],back_type=back_type,redo=redo,outdir=outdir)
         i+=1
         
     elapsed = timeit.default_timer() - start_time
-    print('MefProp: All done in %f s' % elapsed)    
+    print('MefPrep: All done in %f s' % elapsed)    
     return
 
 def get_no_jobs(jobs):
