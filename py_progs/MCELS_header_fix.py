@@ -30,6 +30,15 @@ Primary routines:
     doit
 
 Notes:
+
+    WARNING - while this does fix the actual problem one will likely still see warnings
+    apparently there are problems with the astroy wcs library.  To suppress these warnings
+    add to your code the following:
+
+
+    import warnings
+    from astropy.wcs import WCS, FITSFixedWarning
+    warnings.filterwarnings('ignore', category=FITSFixedWarning, message=".*datfix.*")
                                        
 History:
 
@@ -87,6 +96,7 @@ def fix_fits_header(filename):
                         hdr['DATE-OBS'] = t.to_value('iso', subfmt='date')
                         hdr['MJD-OBS'] = t.mjd
                         print(f"Converted DATE-OBS: '{original}' → '{t.value}', MJD-OBS = {t.mjd:.6f}")
+                        hdr.comments['DATE-OBS'] = 'Date (YYYY-MM-DD) of observation'
                         updated = True
                     except Exception as e:
                         print(f"Warning: Failed to parse converted DATE-OBS='{converted}': {e}")
@@ -127,6 +137,12 @@ def steer(argv):
         print('filename',filename)
         fix_fits_header(filename)
 
+    print('''WARNING: Updating your fits files with these routines should make 
+    them compliant with the fits standard, but you may still see warnings about
+    datfix which appears to be due to a bug in the astropy wcs library.  If this
+    happens after you have made these fixes to the MCELS data, you can add lines
+    to any python code to suppress them.  Seee the __doc__ above for details.
+    '''
 
 if __name__ == "__main__":
     if len(sys.argv)>1:
