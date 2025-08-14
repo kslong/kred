@@ -78,8 +78,10 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     
     # Convert size from arcminutes to pixels
     size_pixels = np.rint((size_arcmin / 60) / abs(wcs.wcs.cd[0, 0]))
+    size_pixels=np.abs(size_pixels)
     if size_pixels % 2 != 0:
         size_pixels+=1
+    print('XXX ',size_pixels)
     
     # Define the region to extract
     xmin = int(max(0, x - size_pixels/2))
@@ -101,6 +103,7 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
         return
     
     # Extract the region
+    print('XXX',ymin,ymax,xmin,xmax)
     extracted_data = hdul[0].data[ymin:ymax, xmin:xmax]
 
     
@@ -248,12 +251,21 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
     # Add colorbar
     fig.colorbar(im, cax=cax)
 
+    reg_info=False
+    if masterfile!='':
+        xmaster=ascii.read(masterfile)
+        # Check that master file has region info:
+        reg_info=False
+        colnames=xmaster.colnames
+        for one_col in colnames:
+            if one_col=='RegType':
+                reg_info=True
 
     ## Now add regions
 
-    if masterfile!='':
+    if reg_info==True:
         pixel_scale=np.abs(wcs_info.pixel_scale_matrix[0,0])*3600.
-        xmaster=ascii.read(masterfile)
+
         for one in xmaster:
             print('starting\n ',one)
             ra=float(one['RA'])
@@ -282,6 +294,8 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
                 ax.text(pix_coord[0], pix_coord[1] + 0.5* rmajor + 5, label, color='red', fontsize=12, ha='center')
             else:
                 print('Unkown region type: ', one['RegType'])
+    else:
+        print('No region info to add')
 
 
 
@@ -317,7 +331,7 @@ def make_one_image(filename,master,ymin,ymax,outroot=''):
 
     return
 
-def make_many_images(filename,xtype,master,size,ymin,ymax):
+def make_many_images(filename,master,xtype,size,ymin,ymax):
     '''
     Create cut-outs of an image, one for each source in a masterfile
     and overlay the regions from the master file on each sanpshot.
@@ -339,6 +353,38 @@ def make_many_images(filename,xtype,master,size,ymin,ymax):
             outfile_name='ximage/%s.%s.png' % (xsource_name,xtype)
 
         stamp=extract_region(xsource_name, xra, xdec, size_arcmin=size, input_fits=filename, outdir='xdata',default_value=0,frac_off=0.01)
+        display_fits_image(image_file=stamp, scale='linear', ymin=ymin,ymax=ymax,invert=True,masterfile=master,outfile=outfile_name)
+    
+    
+    print('Creating an image for each regions')
+    return
+
+
+
+def make_many_images2(master,xtype,size,ymin,ymax):
+    '''
+    Create cut-outs of an image, one for each line in a mastefile  
+    and overlay the regions from the master file on each sanpshot.
+    '''
+
+    xm=ascii.read(master)
+    print(xm)
+    if os.path.isdir('ximage')==False:
+        os.mkdir('ximage')
+    
+    for one in xm:
+        print('starting\n',one)
+        xsource_name='%s' % one['Source_name']
+        xra=float(one['RA'])
+        xdec=float(one['Dec'])
+        filename=one['filename']
+        if xtype==None:
+            outfile_name='ximage/%s.png' % xsource_name
+        else:
+            outfile_name='ximage/%s.%s.png' % (xsource_name,xtype)
+
+        stamp=extract_region(xsource_name, xra, xdec, size_arcmin=size, input_fits=filename, outdir='xdata',default_value=0,frac_off=0.01)
+        print('XXX ',stamp)
         display_fits_image(image_file=stamp, scale='linear', ymin=ymin,ymax=ymax,invert=True,masterfile=master,outfile=outfile_name)
     
     
@@ -386,7 +432,7 @@ def steer(argv):
             outroot=argv[i]
         elif argv[i][0]=='-':
             print('Error: Cannot parse command line :',argv)
-        elif filename=='':
+        elif filename=='' and argv[i].count('fits')>0:
             filename=argv[i]
         elif master=='':
             master=argv[i]
@@ -394,20 +440,36 @@ def steer(argv):
             print('Error: Too many arguments :', argv)
         i+=1
 
-    if os.path.isfile(filename)==False:
-        print('Error: Cannot find image file: %s' % filename)
-        return
     
-    if os.path.isfile(master)==False:
+    try:
+        xtab=ascii.read(master)
+        xmaster=True
+        xfilenames=False
+        for one_col in xtab.colnames:
+            if one_col.count('filename'):
+                xfilenames=True
+    except:
         print('Error: Cannot find master file: %s' % master)
         return
 
-    if size<0:
-        make_one_image(filename,master,ymin,ymax,outroot)
+    if os.path.isfile(filename):
+        fits_exists=True
     else:
-        make_many_images(filename,xtype,master,size,ymin,ymax)
-    return
+        fits_exists=False
 
+    if xfilenames==True and fits_exists==False:
+        # This is the case where we want to read the fits file from the master file
+        make_many_images2(master,xtype,size,ymin,ymax)
+        return
+    if fits_exists==True and size>0:
+        make_many_images(filename,master,xtype,size,ymin,ymax)
+        return
+    if fits_exists:
+        make_one_image(filename,master,ymin,ymax,outroot)
+        return
+
+    # If we have reached this point something is return
+    print('Error: The masterfile did not cantaing the fits files and none was provided, so exiting')
 
 
 
