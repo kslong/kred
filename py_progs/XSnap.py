@@ -9,11 +9,11 @@ Usaage:
     XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] [-out outroot] image.fits  mastertable
 
     image.fits   a fitsfile, with the data in the PRIMARY header
-    mastertable  a masterfile with postiions and sizes of objects in 
+    mastertable  a masterfile with positions and sizes of objects in 
         a standard format
 
     The routine has two basic modes, if -size is not provided, an plot of
-    the fist file will be made, and the regions will be ovelaid on the plot
+    the fits file will be made, and the regions will be ovelaid on the plot
 
     If -size is provided, cutouts of the image will be made, with a size 
     in arcmin given by the number that follows the size command
@@ -30,7 +30,7 @@ Usaage:
 
     In the absence of -min or -max, the images are autoscaled, if -xmin or -xmax
     are provided then one or the other of these values will replace
-    what the autoscled values would have been 
+    what the autoscaled values would have been 
 
 
 
@@ -462,6 +462,7 @@ def steer(argv):
         make_many_images2(master,xtype,size,ymin,ymax)
         return
     if fits_exists==True and size>0:
+        # This is the case where we have a single fits file, but a master file with regions indecated.
         make_many_images(filename,master,xtype,size,ymin,ymax)
         return
     if fits_exists:
