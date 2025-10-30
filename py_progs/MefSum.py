@@ -151,6 +151,8 @@ def get_keyword(key,ext):
                 answer='N708'
             elif value.count('N501'):
                 answer='N501'
+            elif value.count('N540'):
+                answer='N540'
             elif value.count('r DECam'):
                 answer='r'
             elif value.count('g DECam'):
