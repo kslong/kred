@@ -14,13 +14,13 @@ This is where any processing of the individal files is done that cannot be done 
 Prior to running PrepFiles one must have 
 
 * Downloaded the MEF and put them in the standard directory structure
-* Run MefSum on the apprate fields to create tables that contain the RA's and DECs of the corrners of CCDs
+* Run MefSum on the appropriate fields to create tables that contain the RA's and DECs of the corrners of CCDs
 
-Run this routine to rescale the images to the same maagnitude scale and to subtract
-and initial estimate background.  The default background is estimated from a 
-biased median (calculated with in the MefSum stage)  The default is to use the medain
-value of the medina backgrounds calculated in each of the CCDs for an individual 
-exposure.  One can modify this with the optsions indicated below
+Run this routine to rescale the images to the same magnitude scale and to subtract
+and initial estimate of the background.  The default background is estimated from a 
+biased median (calculated with in the MefSum stage)  The default is to use the median
+value in each of the CCDs for an individual 
+exposure.  One can modify this with the options indicated below
 
  
 
