@@ -11,15 +11,16 @@ out the initial processing steps to run PrepFiles on a set of data
 
 Command line usage (if any):
 
-    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] -ptab my_image.txt [-use_all_data] field tile1 tile2 ...
+    usage: SetupTile.py [-h] [-all] [-S7] [-seeing_max 1.3[ [-xtab myfile.txt] [-ptab my_image.txt] [-use_all_data] field tile1 tile2 ...
 
     where:
-        field is that name of a field, e.g LMC_c42
+        field is that name of a field, e.g LMC_c42. It is required
         tile1, tiles are the names of tiles as specified in the MC_tiles.txt file 
     and the optional prameters 
         -h prints this help 
-        -all  causes the program to create talbles containing the relevant
-            infomation for all of the tiles in a field
+        -all  causes the program to create talles containing the relevant
+            information for all of the tiles in a field.  This is DIFFERENT from some earlier routines where 
+            -all refers to all of the files
         -xtab myfile.txt causes the program to use a different tile defination file
         -ptab my_image.txt causes the program to use a different filter exposure table for creating images. This
             table allows one to combine images with different exposure times together for a filter.  If a filter
@@ -427,6 +428,11 @@ def steer(argv):
                 tiles.append(argv[i])
         i+=1
 
+    if field=='':
+        print('SetupTile: Sorry: there seems to be nothing to do')
+        print('SetupTile: A field must be provided in the command line')
+        return
+
     if xall==False and len(tiles)==0:
         print('SetupTile: Sorry: there seems to be nothing to do')
         print('-all not set and no tiles to set up provided' )
@@ -449,11 +455,14 @@ def steer(argv):
 
     if os.path.isfile(process_table):
         ptab=ascii.read(process_table)
+        print('Read local prcess_table')
     elif os.path.isfile(kred+'/config/'+process_table):
         ptab=ascii.read(kred+'/config/'+process_table)
+        print('Read process_table in kred/config directory')
     else:
         print('SetupTile: Error: Could not find image config %s in local director or in kred/config' % process_table)
         return
+
 
 
     xtab=xtab[xtab['Field']==field]
