@@ -65,6 +65,7 @@ def get_sum_tab(field='LMC_c42',tile='T07'):
     xname='Summary/%s_%s.txt' % (field,tile)
     try:
         xtab=ascii.read(xname)
+        print('SwarpSetup: Read %s' % xname)
     except:
         print('SwarpSetup: Error: Could not find %s' % xname)
         raise IOError
@@ -202,6 +203,9 @@ def create_swarp_command(field='LMC_c42',tile='T07',image='N673',defaults=xdefau
     '''
     print('\n###SwarpSetup:  Creating swarp inputs for %s tile %s and image %s' % (field,tile,image))
     x=get_sum_tab(field,tile)
+    print('create swarp comman.info)d')
+    xtab.info()
+
     xx=x[x['Image']==image]
     if len(xx)==0:
         print('SwarpSetup: There are no observations with filter %s')
@@ -302,6 +306,8 @@ def create_commmands_for_one_tile(field='LMC_c42',tile='T07',defaults=xdefault,b
         bsub=True
 
 
+    print('xtab.info')
+    xtab.info()
     images=np.unique(xtab['Image'])
 
     for one_image in images:
@@ -355,6 +361,10 @@ def steer(argv):
             xdirs.append(words[-2].replace('_b',''))
 
         tiles=np.unique(xdirs)
+        print('Knox ',xdirs)
+
+
+
 
 
     open_log('%s.log' % field,reinitialize=False)
