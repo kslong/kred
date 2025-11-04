@@ -72,6 +72,7 @@ Primary routines:
     doit
     make_rband_subtractions
     make_n708_subtractions
+    make_n540_subtractions
 
 Notes:
                                        
@@ -205,6 +206,53 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
     
     return
 
+def make_n540_subtractions(o3='data/LMC_c42_T07.N501.t800.fits', n540='data/LMC_c42_T07.N540.t300.fits',outroot='test3'):
+    '''
+    For subtraction of N540 from N501 and assume no emission line 
+    contamination, and since everything is scaled to the same level
+    we just do a straight subtraction.
+    '''
+    o3_exists=False
+    n540_exists=False
+
+    try:
+        zo3=fits.open(o3)
+        o3_exists=True
+    except:
+        print('CleanStars: The OIII file could not be opened: %s' % o3)
+
+    try:
+        zn540=fits.open(n540)
+        n540_exists=True
+    except:
+        print('CleanStars: The N540 file could not be opened: %s' % n540)
+        return
+
+    if o3_exists:
+        mean,median,std=sigma_clipped_stats(zo3[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+        print('CleanStars: oiii:  ',mean,median,std)
+        zo3[0].data-=median
+
+    mean,median,std=sigma_clipped_stats(zn540[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+    print('CleanStars: n540: ',mean,median,std)
+    zn540[0].data-=median
+
+    zn540[0].header['PROCTYPE']='LineSubtracted'
+    zn540.writeto(outroot+'.n540_sub.fits',overwrite=True)
+
+    if outroot=='':
+        word=o3.split('.')
+        outroot=word[0]
+        # Use the directory path/first_word as the root, which is the usual case
+
+
+    if o3_exists and n540_exists:
+        # zha[0].data-=zn708[0].data
+        zo3[0].header['PROCTYPE']='StarSubtracted'
+        zo3[0].header['SFILTER']=(zn540[0].header['FILTER'],'Filter of image used for star subtraction')
+        zo3[0].data-=zn540[0].data
+        zo3.writeto(outroot+'.o3_sub_n540.fits',overwrite=True)
+
 
 
 def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42_T07.N673.t800.fits',n708='data/LMC_c42_T07.N708.t400.fits',outroot='test2'):
@@ -307,7 +355,7 @@ def doit(xdir='data',outdir='data'):
 
 
 
-    r=ha=s2=n708='none'
+    r=ha=s2=n708=n540=o3='none'
     xtab=Table([qfile,qroot,qfilt],names=['Filename','Root','Image'])
     xtab.sort('Image')
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
@@ -320,14 +368,19 @@ def doit(xdir='data',outdir='data'):
         elif one['Image']=='N673':
             s2=one['Filename']
             zroot=one['Root']
+        elif one['Image']=='N501':
+            o3=one['Filename']
+            zroot=one['Root']
         elif one['Image']=='r':
             r=one['Filename']
         elif one['Image']=='N708':
             n708=one['Filename']
+        elif one['Image']=='N540':
+            n540=one['Filename']
         else:
             print('CleanStars: Unknown fits file: %s '% one['Filename'])
 
-    print(ha,s2,r,n708)
+    print(ha,s2,r,n708,o3,n540)
 
 
     if r!='none':
@@ -340,6 +393,10 @@ def doit(xdir='data',outdir='data'):
     else:
         print('CleanStars: No N708 image found')
 
+    if n540!='none':
+        make_n540_subtractions(o3,n540,outroot='%s/%s' % (outdir,zroot))
+    else:
+        print('CleanStars: No N540 image found')
 
 
 
