@@ -416,11 +416,12 @@ def check_exposures(field,instrument_file='DeMCELS_images.txt'):
     elif os.path.isfile(kred+'/config/'+instrument_file):
         xtab=ascii.read(kred+'/config/'+instrument_file)
     else:
-        print('SetupTile: Error: Could not find tile config  %s in local directory or in kred/config' % instrument_file)
+        print('MefSum: Error: Could not find tile config  %s in local directory or in kred/config' % instrument_file)
         return
 
+    print('Joining %s to %s' % (mef,instrument_file))
     qtab=join(mef_tab,xtab,join_type='left')
-    # qtab.info()
+    qtab.info()
 
     if np.ma.isMaskedArray(qtab['Image']):
         print('There are images which do not match anything in %s' % instrument_file)

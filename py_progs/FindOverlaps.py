@@ -222,7 +222,7 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
     print('\nFindOverlaps: Starting Field %s Tile %s' % (field,tile))
     
-    xfilters=['N662','N673','r','N708','N501']
+    xfilters=['N662','N673','r','N708','N501','N540']
 
     z=[]
     xlen=[]

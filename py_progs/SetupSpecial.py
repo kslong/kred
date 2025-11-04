@@ -75,6 +75,7 @@ from glob import glob
 
 from astropy.io import ascii
 from log import *
+from SetupTile import locate_prepped_files
 
 CWD=os.getcwd()
 DATADIR='%s/DECam_CCD/' % (CWD)
@@ -170,10 +171,12 @@ def find_files_to_prep(field='LMC_c45',ra_center=81.1,dec_center=-66.17,size_deg
 
 
 
-def setup_one_tile(field=['LMC_c42'],xmaster='snr',tile='foo',ra=81.108313,dec=-66.177280,size_deg=0.67):
+def setup_one_tile(field=['LMC_c42'],xmaster='snr',tile='foo',ra=81.108313,dec=-66.177280,size_deg=0.67,process_table=''):
     
 
-    print('Field a',field)
+    print('setup_one_tile:  Field: ',field)
+    print('setup_one_tile: master: ', xmaster)
+    print('setup_one_tile:   tile: ',tile)
 
     if len(field)==0:
         det_files=glob('Summary/*det.tab')
@@ -198,7 +201,14 @@ def setup_one_tile(field=['LMC_c42'],xmaster='snr',tile='foo',ra=81.108313,dec=-
             xx=find_files_to_prep(one,ra,dec,size_deg)
             x=vstack([x,xx])
             print(x)
-        
+       
+
+    x=locate_prepped_files(x,xmaster,tile)
+
+    print('process_table\n',process_table)
+
+    x=join(process_table,x,join_type='left')
+    x=x[~x['Filename'].mask]
 
     if i>0:
         x.meta['comments']=['RA %f' % ra, 'DEC %f' % dec]
@@ -267,7 +277,7 @@ def setup_tiles(xtab):
         setup_one_tile(one['Field'],one['Tile'],one['RA'],one['Dec'],one['Size'])
 
 
-def setup_objects(source_names,table_name,fields,xdir):
+def setup_objects(source_names,table_name,fields,xdir,process_table):
     '''
     '''
 
@@ -293,7 +303,7 @@ def setup_objects(source_names,table_name,fields,xdir):
         except:
             xsize=0.3
 
-        setup_one_tile(field=fields,xmaster=xdir,tile=name,ra=xra,dec=xdec,size_deg=xsize)
+        setup_one_tile(field=fields,xmaster=xdir,tile=name,ra=xra,dec=xdec,size_deg=xsize,process_table=process_table)
 
 
 
@@ -316,6 +326,7 @@ def steer(argv):
     xfields=[]
     xobjects=[]
     top_dir=''
+    process_table=''
 
     i=1
 
@@ -328,6 +339,9 @@ def steer(argv):
         elif argv[i]=='-field':
             i+=1
             xfields.append(argv[i])
+        elif argv[i]=='-ptab':
+            i+=1
+            process_table=argv[i]
         elif argv[i][0]=='-':
             print('Error: Unknown switch %s ' % argv[i])
             return
@@ -355,7 +369,19 @@ def steer(argv):
     else:
         print('Error: Could not find %s in local director or in kred/config' % table)
         return
+    
+    if process_table=='':
+        process_table='DeMCELS_images.txt'
 
+    if os.path.isfile(process_table):
+        ptab=ascii.read(process_table)
+        print('Read local process_table')
+    elif os.path.isfile(kred+'/config/'+process_table):
+        ptab=ascii.read(kred+'/config/'+process_table)
+        print('Read process_table in kred/config directory')
+    else:
+        print('SetupTile: Error: Could not find image config %s in local director or in kred/config' % process_table)
+        return
 
 
 
@@ -395,7 +421,7 @@ def steer(argv):
 
 
 
-    setup_objects(source_names=xobjects,table_name=table,fields=xfields,xdir=top_dir)
+    setup_objects(source_names=xobjects,table_name=table,fields=xfields,xdir=top_dir, process_table=ptab)
 
     # fields=np.unique(xtiles['Field'])
     # for one in fields:
