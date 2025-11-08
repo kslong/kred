@@ -287,11 +287,11 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
         print('Error: get_gaia: No objects were retrieved')
         return []
 
-    # print(r.info())
+    print(r.info())
 
     r.rename_column('ra','RA')
     r.rename_column('dec','Dec')
-    r.rename_column('SOURCE_ID','Source_name')
+    r.rename_column('source_id','Source_name')
     r.rename_column('phot_g_mean_mag','G')
     r.rename_column('phot_bp_mean_mag','B')
     r.rename_column('phot_rp_mean_mag','R')
