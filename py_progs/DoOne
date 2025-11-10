@@ -2,10 +2,17 @@ FIELD=$1
 MefCheck.py $FIELD
 MefSum.py  -np 8 $FIELD
 MefPrep.py -np 8 $FIELD
-SetupTile.py -all -S7 $FIELD
+# Line below uses all available data 
+SetupTile.py -all -use_all_data -S7 $FIELD
+# With command below one would only use the data from the original exposure sequence
+# SetupTile.py -all -use_all_data -S7 $FIELD
+
+# Optional commands if one wants to do processing with out solving for the background
 # SwarpSetup.py -all  $FIELD
 # Swarp.py -all $FIELD
 # SwarpEval.py -all DECam_SWARP $FIELD
+
+# Commands for standard processing where backgrounds have been matched
 FindOverlaps.py -all $FIELD
 BackPrep.py -all -run $FIELD
 BackStats.py -all -np 8 -rm $FIELD

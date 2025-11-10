@@ -72,6 +72,7 @@ Primary routines:
     doit
     make_rband_subtractions
     make_n708_subtractions
+    make_n540_subtractions
 
 Notes:
                                        
@@ -140,19 +141,19 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
         zha=fits.open(ha)
         ha_exists=True
     except:
-        print('The   Ha file could not be openened: %s' % ha)
+        print('CleanStars: The   Ha file could not be openened: %s' % ha)
     
     try:
         zs2=fits.open(s2)
         s2_exists=True
     except:
-        print('The  SII file could not be openened: %s' % s2)
+        print('CleanStars: The  SII file could not be openened: %s' % s2)
          
     try:
         zr=fits.open(r)
         r_exists=True
     except:
-        print('The    R file could not be openened: %s' % r)    
+        print('CleanStars: The    R file could not be openened: %s' % r)    
         
     if ha_exists==False or s2_exists==False or r_exists==False:
         return
@@ -160,13 +161,13 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
 
     if ha_exists:
         mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('ha:  ',mean,median,std)
+        print('CleanStars: ha:  ',mean,median,std)
         zha[0].data-=median
 
     
     if s2_exists:
         mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('s2:  ',mean,median,std)
+        print('CleanStars: s2:  ',mean,median,std)
         zs2[0].data-=median
 
     if outroot=='':
@@ -205,6 +206,53 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
     
     return
 
+def make_n540_subtractions(o3='data/LMC_c42_T07.N501.t800.fits', n540='data/LMC_c42_T07.N540.t300.fits',outroot='test3'):
+    '''
+    For subtraction of N540 from N501 and assume no emission line 
+    contamination, and since everything is scaled to the same level
+    we just do a straight subtraction.
+    '''
+    o3_exists=False
+    n540_exists=False
+
+    try:
+        zo3=fits.open(o3)
+        o3_exists=True
+    except:
+        print('CleanStars: The OIII file could not be opened: %s' % o3)
+
+    try:
+        zn540=fits.open(n540)
+        n540_exists=True
+    except:
+        print('CleanStars: The N540 file could not be opened: %s' % n540)
+        return
+
+    if o3_exists:
+        mean,median,std=sigma_clipped_stats(zo3[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+        print('CleanStars: oiii:  ',mean,median,std)
+        zo3[0].data-=median
+
+    mean,median,std=sigma_clipped_stats(zn540[0].data,sigma_lower=2,sigma_upper=1,grow=3)
+    print('CleanStars: n540: ',mean,median,std)
+    zn540[0].data-=median
+
+    zn540[0].header['PROCTYPE']='LineSubtracted'
+    zn540.writeto(outroot+'.n540_sub.fits',overwrite=True)
+
+    if outroot=='':
+        word=o3.split('.')
+        outroot=word[0]
+        # Use the directory path/first_word as the root, which is the usual case
+
+
+    if o3_exists and n540_exists:
+        # zha[0].data-=zn708[0].data
+        zo3[0].header['PROCTYPE']='StarSubtracted'
+        zo3[0].header['SFILTER']=(zn540[0].header['FILTER'],'Filter of image used for star subtraction')
+        zo3[0].data-=zn540[0].data
+        zo3.writeto(outroot+'.o3_sub_n540.fits',overwrite=True)
+
 
 
 def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42_T07.N673.t800.fits',n708='data/LMC_c42_T07.N708.t400.fits',outroot='test2'):
@@ -222,35 +270,35 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         zha=fits.open(ha)
         ha_exists=True
     except:
-        print('The   Ha file could not be opened: %s' % ha)
+        print('CleanStars: The   Ha file could not be opened: %s' % ha)
     
     try:
         zs2=fits.open(s2)
         s2_exists=True
     except:
-        print('The  SII file could not be opened: %s' % s2)
+        print('CleanStars: The  SII file could not be opened: %s' % s2)
       
       
     try:
         zn708=fits.open(n708)
         n708_exists=True
     except:
-        print('The N708 file could not be opened: %s' % n708)
+        print('CleanStars: The N708 file could not be opened: %s' % n708)
         return
 
     if ha_exists:
         mean,median,std=sigma_clipped_stats(zha[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('ha:  ',mean,median,std)
+        print('CleanStars: ha:  ',mean,median,std)
         zha[0].data-=median
 
     
     if s2_exists:
         mean,median,std=sigma_clipped_stats(zs2[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-        print('s2:  ',mean,median,std)
+        print('CleanStars: s2:  ',mean,median,std)
         zs2[0].data-=median
 
     mean,median,std=sigma_clipped_stats(zn708[0].data,sigma_lower=2,sigma_upper=1,grow=3)
-    print('n708: ',mean,median,std)
+    print('CleanStars: n708: ',mean,median,std)
     zn708[0].data-=median
 
     zn708[0].header['PROCTYPE']='LineSubtracted'
@@ -284,66 +332,71 @@ def doit(xdir='data',outdir='data'):
 
     files=glob('%s/*.fits' % xdir)
     if len(files)==0:
-        print("No files found for %s" % xdir)
+        print("CleanStars: No files found for %s" % xdir)
         return
 
+    # Now the files are of the following form: LMC_c30_T01.N673.fits
     print(files)
     records=[]
     qfile=[]
     qroot=[]
     qfilt=[]
-    qexp=[]
     for one in files:
         word=one.split('/')
         filename=word[-1]
         word=filename.split('.')
         root=word[0]
         xfilt=word[1]
-        xexp=int(word[2].replace('t',''))
-        record=[one,root,xfilt,xexp]
+        record=[one,root,xfilt]
         records.append(record)
         qfile.append(one)
         qroot.append(root)
         qfilt.append(xfilt)
-        qexp.append(xexp)
 
 
 
-    r=ha=s2=n708='none'
-    # print(records)
-    # xtab=Table(records,names=['Filename','Root','Filter','Exptime'])
-    xtab=Table([qfile,qroot,qfilt,qexp],names=['Filename','Root','Filter','Exptime'])
-    xtab.sort('Exptime')
+    r=ha=s2=n708=n540=o3='none'
+    xtab=Table([qfile,qroot,qfilt],names=['Filename','Root','Image'])
+    xtab.sort('Image')
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
     print(xtab)
     zroot='test'
     for one in xtab:
-        if one['Filter']=='N662':
+        if one['Image']=='N662':
             ha=one['Filename']
             zroot=one['Root']
-        elif one['Filter']=='N673':
+        elif one['Image']=='N673':
             s2=one['Filename']
             zroot=one['Root']
-        elif one['Filter']=='r':
+        elif one['Image']=='N501':
+            o3=one['Filename']
+            zroot=one['Root']
+        elif one['Image']=='r':
             r=one['Filename']
-        elif one['Filter']=='N708':
+        elif one['Image']=='N708':
             n708=one['Filename']
+        elif one['Image']=='N540':
+            n540=one['Filename']
         else:
-            print('Unknown fits file: %s '% one['Filename'])
+            print('CleanStars: Unknown fits file: %s '% one['Filename'])
 
-    print(ha,s2,r,n708)
+    print(ha,s2,r,n708,o3,n540)
 
 
     if r!='none':
         make_rband_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
-        print('No r band image found')
+        print('CleanStars: No r band image found')
 
     if n708!='none':
         make_n708_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
-        print('No N708 image found')
+        print('CleanStars: No N708 image found')
 
+    if n540!='none':
+        make_n540_subtractions(o3,n540,outroot='%s/%s' % (outdir,zroot))
+    else:
+        print('CleanStars: No N540 image found')
 
 
 

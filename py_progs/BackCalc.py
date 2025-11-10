@@ -61,13 +61,13 @@ def plot_fit_results(field,tile,summary_dir='',zlim=20):
     try:
         offset=ascii.read(ofile)
     except:
-        print('Could not read %s' % ofile)
+        print('BackCalc: Could not read %s' % ofile)
         return
     
     try:
         back=ascii.read(bfile)
     except:
-        print('Could not read %s' % bfile)
+        print('BackCalc: Could not read %s' % bfile)
         return
     
     back.rename_column('file','file1')
@@ -160,7 +160,7 @@ def diff_eval(xdelta,xback,return_diff=False):
     delta=np.array(delta)
     xsum=np.dot(delta,delta)
     xsum=np.sqrt(xsum)/len(delta)
-    print(xdelta)
+    # print(xdelta)
     if return_diff==True:
         return xsum,delta
     else:
@@ -228,7 +228,7 @@ def monte(xdelta,files):
             xbest=z.copy()
             chi_best=chi
         i+=1
-    print('chi: min %.2f  max %.2f ave %.2f std %.2f' % 
+    print('BackCalc: chi: min %.2f  max %.2f ave %.2f std %.2f' % 
           (np.min(xchi),np.max(xchi),np.average(xchi),np.std(xchi)))
     return xbest
         
@@ -243,7 +243,7 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
     global svd_u, svd_w, svd_vt, svd_b
 
     if new==False:
-        print('Using an earlier SVD inversion, just changing threshold')
+        print('BackCalc: Using an earlier SVD inversion, just changing threshold')
 
     else:
 
@@ -280,20 +280,20 @@ def svdskyfit(xcross,threshold=0.1, new=True, verbose=True):
         svd_b = (wt*delta).sum(axis=1)
 
         if verbose:
-            print(f"determinant of A {np.linalg.det(a):.4}")
-            print(f"product of diagonal {np.prod(np.diag(a)):.4}")
+            print(f"BackCalc: determinant of A {np.linalg.det(a):.4}")
+            print(f"BackCalc: product of diagonal {np.prod(np.diag(a)):.4}")
         assert (a == np.transpose(a)).all()
 
         # Compute the SVD
         svd_u, svd_w, svd_vt = np.linalg.svd(a, full_matrices=False, compute_uv=True, hermitian=True)
         if verbose:
-            print(f"Largest SV {svd_w[0]}")
-            print("10 smallest SVs:", svd_w[-10:])
+            print(f"BackCalc: Largest SV {svd_w[0]}")
+            print("BackCalc: 10 smallest SVs:", svd_w[-10:])
 
     # Edit the singular values and solve for sky offsets
     winvert = (svd_w>=threshold)/(svd_w + (svd_w < threshold))
     if verbose:
-        print(f"{(svd_w<threshold).sum()} SVs removed by threshold {threshold}")
+        print(f"BackCalc: {(svd_w<threshold).sum()} SVs removed by threshold {threshold}")
     bkgd = (svd_vt.T @ np.diag(winvert) @ svd_u.T) @ svd_b
     return bkgd
 
@@ -312,7 +312,7 @@ def do_svd(xcross,bfile,threshold=0.1,new=True,verbose=False):
     return xbfile
 
 
-def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
+def create_inputs(infile='data/LMC_c45_T07_xxx.txt',ximage='N673'):
     '''
     Create the inputs needed to fit different backgrounds for a single filter and
     exposure time.
@@ -321,14 +321,13 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
     try:
         x=ascii.read(infile)
     except:
-        print('Could not read %s' % infile)
+        print('BackCalc: Could not read %s' % infile)
         raise IOError
     # print(x.info)
     
-    y=x[x['FILTER']==xfilter]
-    print('Found %d xmatches with %s' % (len(y),xfilter))
+    y=x[x['Image']==ximage]
+    print('BackCalc: Found %d xmatches with %s' % (len(y),ximage))
     
-    y=y[y['EXPTIME']==exptime]
     
     # print(y.info)
     
@@ -339,10 +338,10 @@ def create_inputs(infile='data/LMC_c45_T07_xxx.txt',xfilter='Ha',exptime=800):
     y=y[y['npix']!=-999]
     
     if len(y)==0:
-        print('There are no xmatches to work with')
+        print('BackCalc: There are no xmatches to work with')
         raise IOError
     else:
-        print('Found %d xmatches with exposure %f' % (len(y),exptime))
+        print('BackCalc: Found %d xmatches with image %s' % (len(y),ximage))
     
     x1=np.array(y['file1'])
     x2=np.array(y['file2'])
@@ -413,94 +412,93 @@ def do_one_tile(field,tile):
     try:
         x=ascii.read(infile)
     except:
-        print('Could not read %s with all of the stats' % infile)
+        print('BackCalc: Could not read %s with all of the stats' % infile)
         return 
 
 
-    xfilt=np.unique(x['FILTER'])
+    ximage=np.unique(x['Image'])
 
     records=[]
 
     all_back=[]
 
-    for one_filter in xfilt:
-        xx=x[x['FILTER']==one_filter]
+    for one_image in ximage:
+        xx=x[x['Image']==one_image]
         xexp=np.unique(xx['EXPTIME'])
-        for one_exp in xexp:
-            one_record=[one_filter,one_exp]
-            btab,y_all=create_inputs(infile,one_filter,one_exp)
-            bfile=infile.replace('xxx.txt','bbb_%s_%d.txt' % (one_filter,one_exp))
-            # btab.write(bfile,format='ascii.fixed_width_two_line',overwrite=True)
-            xfile=infile.replace('xxx.txt','xxx_%s_%d.txt' % (one_filter,one_exp))
+            #xxxx
+        one_record=[one_image]
+        btab,y_all=create_inputs(infile,one_image)
+        bfile=infile.replace('xxx.txt','bbb_%s.txt' % (one_image))
+        # btab.write(bfile,format='ascii.fixed_width_two_line',overwrite=True)
+        xfile=infile.replace('xxx.txt','xxx_%s.txt' % (one_image))
 
-            print('Field %s  Tile %s Filter %s Exptime %d ' % (field,tile,one_filter,one_exp))
+        print('BackCalc: Field %s  Tile %s Image %s ' % (field,tile,one_image))
 
-            orig=diff_eval(y_all,btab)
+        orig=diff_eval(y_all,btab)
 
-            btab['b']=btab['b_init']
-            simple=diff_eval(y_all,btab)
+        btab['b']=btab['b_init']
+        simple=diff_eval(y_all,btab)
 
-            best_offset=btab.copy()
-            best_val=simple
-            # print('simple')
+        best_offset=btab.copy()
+        best_val=simple
+        # print('simple')
 
-            # xbest=monte(y_all,btab)
-            # xmonte=diff_eval(y_all,xbest)
+        # xbest=monte(y_all,btab)
+        # xmonte=diff_eval(y_all,xbest)
 
-            # if xmonte<best_val:
-            #     # print('monte')
-            #     best_offset=xbest.copy()
-            #     best_val=xmonte
+        # if xmonte<best_val:
+        #     # print('monte')
+        #     best_offset=xbest.copy()
+        #     best_val=xmonte
 
 
-            svd=do_svd(y_all,btab)
-            xsvd=diff_eval(y_all,svd)
+        svd=do_svd(y_all,btab)
+        xsvd=diff_eval(y_all,svd)
 
-            if xsvd<best_val:
-                # print('svd')
-                best_offset=svd.copy()
-                best_val=xsvd
+        if xsvd<best_val:
+            # print('svd')
+            best_offset=svd.copy()
+            best_val=xsvd
 
 
             # This uses the earlier SVD inversion, so be careful.)
-            svd=do_svd(y_all,btab,0.01,new=False)
-            xsvd1=diff_eval(y_all,svd)
-            if xsvd1<best_val:
-                # print('svd1')
-                best_offset=svd.copy()
-                best_val=xsvd1
+        svd=do_svd(y_all,btab,0.01,new=False)
+        xsvd1=diff_eval(y_all,svd)
+        if xsvd1<best_val:
+            # print('svd1')
+            best_offset=svd.copy()
+            best_val=xsvd1
 
 
-            y_all.write(xfile,format='ascii.fixed_width_two_line',overwrite=True)
+        y_all.write(xfile,format='ascii.fixed_width_two_line',overwrite=True)
 
-            print('Original b=0:     %.2f' % orig)
-            print('Simple  b=b_init:  %.2f' % simple)
-            # print('Monte           :  %.2f' % xmonte)
-            print('SVD             :  %.2f' % xsvd)
-            print('SVD1            :  %.2f' % xsvd1)
+        print('BackCalc: Original b=0:     %.2f' % orig)
+        print('BackCalc: Simple  b=b_init:  %.2f' % simple)
+        # print('Monte           :  %.2f' % xmonte)
+        print('BackCalc: SVD             :  %.2f' % xsvd)
+        print('BackCalc: SVD1            :  %.2f' % xsvd1)
 
-            one_record.append('%.2f' % orig)
-            one_record.append('%.2f' % simple)
-            # one_record.append('%.2f' % xmonte)
-            one_record.append('%.2f' % xsvd)
-            one_record.append('%.2f' % xsvd1)
+        one_record.append('%.2f' % orig)
+        one_record.append('%.2f' % simple)
+        # one_record.append('%.2f' % xmonte)
+        one_record.append('%.2f' % xsvd)
+        one_record.append('%.2f' % xsvd1)
 
-            best_offset['b'].format='.3f'
-            best_offset['Field']=field
-            best_offset['Tile']=tile
-            best_offset['FILTER']=one_filter
-            best_offset['EXPTIME']=one_exp
-            best_file='Summary/%s_%s_bbb_%s_%d.txt' % (field,tile,one_filter,one_exp)
-            best_offset.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
-
+        best_offset['b'].format='.3f'
+        best_offset['Field']=field
+        best_offset['Tile']=tile
+        best_offset['Image']=one_image  
+        best_file='Summary/%s_%s_bbb_%s.txt' % (field,tile,one_image)
+        best_offset.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
 
-            all_back.append(best_offset)
-            records.append(one_record)
+
+        all_back.append(best_offset)
+        records.append(one_record)
+        #xxxx
 
     records=np.array(records)
-    # xout=Table(records,names=['FILTER','EXPTIME','None','Simple','Path','SVD','SVD1'])
-    xout=Table(records,names=['FILTER','EXPTIME','None','Simple','SVD','SVD1'])
+    xout=Table(records,names=['Image','None','Simple','SVD','SVD1'])
     xout.write('test.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
     all_back=vstack(all_back)
@@ -508,7 +506,7 @@ def do_one_tile(field,tile):
     best_file='Summary/%s_%s_bbb.txt' % (field,tile)
     all_back.write(best_file,format='ascii.fixed_width_two_line',overwrite=True)
 
-    print('Finished %s %s in %.1f s'  % (field,tile, timeit.default_timer()-time_start))
+    print('BackCalc: Finished %s %s in %.1f s'  % (field,tile, timeit.default_timer()-time_start))
     plot_fit_results(field,tile)
 
 
@@ -545,7 +543,7 @@ def steer(argv):
         #     i+=1
         #     nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('BackCalc: Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -562,7 +560,7 @@ def steer(argv):
             i+=1
 
     if len(tiles)==0:
-        print('The tiles to be processed must be listed after the field, unless -all is invoked')
+        print('BackCalc: The tiles to be processed must be listed after the field, unless -all is invoked')
         return
 
     open_log('%s.log' % field,reinitialize=False)

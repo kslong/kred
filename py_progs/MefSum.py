@@ -67,7 +67,7 @@ import os
 from astropy.io import fits, ascii
 from glob import glob
 from astropy.stats import sigma_clipped_stats
-from astropy.table import Table,vstack
+from astropy.table import Table,vstack,join
 from astropy.wcs import WCS
 import numpy as np
 import timeit
@@ -149,8 +149,14 @@ def get_keyword(key,ext):
                 answer='N673'
             elif value.count('N708'):
                 answer='N708'
+            elif value.count('N501'):
+                answer='N501'
+            elif value.count('N540'):
+                answer='N540'
             elif value.count('r DECam'):
                 answer='r'
+            elif value.count('g DECam'):
+                answer='g'
             else:
                 print('Could not identify filter from ',answer)
                 answer='Unknown'
@@ -216,14 +222,15 @@ def get_mef_overview(field='LMC_c45'):
             good.append(i)
         i+=1
 
-    print('XXX :',len(good),len(bad))
+    print('There are %d files with all the necessary keywords  and there are %d files that will not be processed' % (len(good),len(bad)))
 
-    xgood=xtab[good]
-    xgood.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
-    ztab=ascii.read('goo_%s.txt' %field)
-    os.remove('goo_%s.txt' %field)
-    ztab.sort(['FILTER','EXPTIME'])
-    ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+    if len(good)>0:
+        xgood=xtab[good]
+        xgood.write('goo_%s.txt' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+        ztab=ascii.read('goo_%s.txt' %field)
+        os.remove('goo_%s.txt' %field)
+        ztab.sort(['FILTER','EXPTIME'])
+        ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
 
     if len(bad)>0:
         xbad=xtab[bad]
@@ -388,6 +395,48 @@ def do_one(field='LMC_c45',nproc=1,do_mef=True,do_det=True,calc_sigma_clipped=Fa
         return
 
 
+
+def check_exposures(field,instrument_file='DeMCELS_images.txt'):
+    '''
+    Check that the exposures are contained in the instrument file
+    '''
+
+    print('\nChecking field %s against the instument table in %s' % (field,instrument_file))
+
+    mef='Summary/%s_mef.tab' % field
+    try:
+        mef_tab=ascii.read(mef)
+    except:
+        print('Error: check_exposures: could not read ',mef)
+        return
+
+    kred=os.getenv('KRED')
+    if os.path.isfile(instrument_file):
+        xtab=ascii.read(instrument_file)
+    elif os.path.isfile(kred+'/config/'+instrument_file):
+        xtab=ascii.read(kred+'/config/'+instrument_file)
+    else:
+        print('MefSum: Error: Could not find tile config  %s in local directory or in kred/config' % instrument_file)
+        return
+
+    print('Joining %s to %s' % (mef,instrument_file))
+    qtab=join(mef_tab,xtab,join_type='left')
+    qtab.info()
+
+    if np.ma.isMaskedArray(qtab['Image']):
+        print('There are images which do not match anything in %s' % instrument_file)
+        qtab['Image'] = qtab['Image'].filled('None')
+        ztab=qtab[qtab['Image']=='None']
+        print(ztab)
+    else:
+        print('All of the images are accounted for in %s' % instrument_file)
+
+
+
+
+
+
+
 def steer(argv):
     '''
     This is just a steering routine, 
@@ -469,6 +518,12 @@ def steer(argv):
     elapsed = timeit.default_timer() - start_time
 
     print('Processed %d fields with %d threads in %.1f s or %.1f s per field' % (len(fields), nproc,elapsed,elapsed/len(fields)))
+
+
+    print('Now checking exposures against instrument table)')
+    for one_field in fields:
+        check_exposures(one_field)
+
 
 
 

@@ -14,13 +14,13 @@ This is where any processing of the individal files is done that cannot be done 
 Prior to running PrepFiles one must have 
 
 * Downloaded the MEF and put them in the standard directory structure
-* Run MefSum on the apprate fields to create tables that contain the RA's and DECs of the corrners of CCDs
+* Run MefSum on the appropriate fields to create tables that contain the RA's and DECs of the corrners of CCDs
 
-Run this routine to rescale the images to the same maagnitude scale and to subtract
-and initial estimate background.  The default background is estimated from a 
-biased median (calculated with in the MefSum stage)  The default is to use the medain
-value of the medina backgrounds calculated in each of the CCDs for an individual 
-exposure.  One can modify this with the optsions indicated below
+Run this routine to rescale the images to the same magnitude scale and to subtract
+and initial estimate of the background.  The default background is estimated from a 
+biased median (calculated with in the MefSum stage)  The default is to use the median
+value in each of the CCDs for an individual 
+exposure.  One can modify this with the options indicated below
 
  
 
@@ -116,7 +116,6 @@ def prep_one_det(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.f
     new_file=words[-1]
     outfile='%s/%s' %(prepdir,new_file)
     outfile=outfile.replace('.fits.fz','_%s.fits' % (ext))
-    # print(outfile)
 
     if redo==False and os.path.isfile(outfile):
         return outfile
@@ -184,9 +183,9 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
 
 
     if redo==False:
-        print('Beginning    %s in field %s with back_type %s (No reprocessing)' % (root,field,back_type))
+        print('MefPrep: Beginning    %s in field %s with back_type %s (No reprocessing)' % (root,field,back_type))
     else:
-        print('Beginning    %s in field %s with back_type %s (Reprocessins is on)' % (root,field,back_type))
+        print('MefPrep: Beginning    %s in field %s with back_type %s (Reprocessins is on)' % (root,field,back_type))
     
     mef_file='%s/%s_mef.tab' % (SUMDIR,field)
     try:
@@ -194,7 +193,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
         mef=ascii.read(mef_file)
         mef=mef[mef['Root']==root]
     except:
-        print('Error: Could not locate %s' % (mef_file))
+        print('MefPrep: Error: Could not locate %s' % (mef_file))
         return
     
     det_file='%s/%s_det.tab' % (SUMDIR,field)
@@ -202,7 +201,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
         det=ascii.read(det_file)
         det=det[det['Root']==root]
     except:
-        print('Error: Could not locate %s' % (det_file))
+        print('MefPrep: Error: Could not locate %s' % (det_file))
         return
     
     time_start=timeit.default_timer()
@@ -218,7 +217,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     elif back_type=='min':
         back=np.min(det['Med'])
     else:
-        print('Error: Unknown option for background subtraction %s' % (back_type))
+        print('MefPrep: Error: Unknown option for background subtraction %s' % (back_type))
         return
     
     # print(back)
@@ -227,7 +226,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     if outdir=='':
         outdir='%s/%s/data/' % (CCDDIR,field)
     if os.path.isdir(outdir)==False:
-        print('Creating Prep Dir as :',outdir)
+        print('MefPrep: Creating Prep Dir as :',outdir)
         os.makedirs(outdir,exist_ok=True)
     
     mef_fits_file='DECam_MEF/%s/mef/%s.fits.fz' % (field,root)
@@ -242,7 +241,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
             ndone+=1
     
     elapsed = timeit.default_timer() - time_start
-    print('Finished mef %s in %s - processed %d ext in %.1f s'  % (root,field,ndone,elapsed))
+    print('MefPrep: Finished mef %s in %s - processed %d ext in %.1f s'  % (root,field,ndone,elapsed))
     
     return
 
@@ -262,7 +261,7 @@ def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir=''):
     try:
         xtab=ascii.read(tab_name)
     except:
-        print('Failed to read: %s' % tab_name)
+        print('MefPrep: Failed to read: %s' % tab_name)
         return
 
     xtab=xtab[xtab['Field']==field]
@@ -279,13 +278,13 @@ def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir=''):
     for one in xtab:
         if i % n == 0:
             elapsed = timeit.default_timer() - start_time
-            print('Completed %4d of %4d files in %f s' % (i,nn,elapsed))
+            print('MefPrep: Completed %4d of %4d files in %f s' % (i,nn,elapsed))
 
         prep_one_mef(field=field,root=one['Root'],back_type=back_type,redo=redo,outdir=outdir)
         i+=1
         
     elapsed = timeit.default_timer() - start_time
-    print('All done in %f s' % elapsed)    
+    print('MefPrep: All done in %f s' % elapsed)    
     return
 
 def get_no_jobs(jobs):

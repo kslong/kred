@@ -71,14 +71,14 @@ def add_header_keywords(root,run_dir='./',field='',tile=''):
         xhdr=fits.open(hdr_file)
         hdr=xhdr['PRIMARY'].header
     except:
-        print('Failed to open %s' % hdr_file)
+        print('Swarp: Failed to open %s' % hdr_file)
         return
 
     try:
         swarp=fits.open(swarp_file,mode='update')
         shdr=swarp['PRIMARY'].header
     except:
-        print('Failed to open %s' % swarp_file)
+        print('Swarp: Failed to open %s' % swarp_file)
         return
 
     xobject=field
@@ -148,13 +148,13 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
     nfiles=len(run_files)
     n=1
     for one in run_files:
-        print('\n***Beginning %s (%d of %d)' % (one,n,nfiles))
+        print('\n***Swarp: Beginning %s (%d of %d)' % (one,n,nfiles))
         outfile=one.replace('.run','.txt')
         command=one
         xout=subprocess.run(command,shell=True,capture_output=True)
         current_time=timeit.default_timer()
 
-        print('***Writing last portion of swarp outputs\n')
+        print('***Swarp: Writing last portion of swarp outputs\n')
 
         z=open(outfile,'w')
         zz=xout.stderr.decode()
@@ -170,13 +170,13 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
         for xline in xlines[-10:]:
             print(xline)
 
-        print('***Finished writing end of outputs')
+        print('***Swarp: Finished writing end of outputs')
 
         # Note that when this routine is run we are in the actual directory where Swarp is tun
         xroot=one.replace('.run','')
         add_header_keywords(xroot,'',field,tile)
 
-        print('***Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
+        print('***Swarp: Finished %s (%d of %d) in %.1f s\n' % (one,n,nfiles,current_time-start_time))
         start_time=current_time
 
 
@@ -184,7 +184,7 @@ def run_swarp(field='LMC_c42',tile='T07',bsub=False):
 
 
     xcurrent_time=timeit.default_timer()
-    print('\n***Completely done for tile %s in %.1f s\n' % (tile,xcurrent_time-xstart))
+    print('\n***Swarp: Completely done for tile %s in %.1f s\n' % (tile,xcurrent_time-xstart))
 
 
     os.chdir(exec_dir)
@@ -216,7 +216,7 @@ def steer(argv):
         elif argv[i]=='-finish':
             redo=False
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('Swarp: Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]

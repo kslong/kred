@@ -13,7 +13,7 @@ keywrods in the header.
 
 Command line usage (if any):
 
-    usage: MefCheck.py [-np 8] [-all]  Field ...
+    usage: MefCheck.py [-np 8] [-all]  -dup_only Field ...
 
 Description:  
 
@@ -23,6 +23,8 @@ Description:
             thread processes one field 
         -all implies to do all fields in the DECam_MEF 
             directory
+        -dup_only just check for duplicate files in the MEF 
+            directory structure
 
 Primary routines:
 
@@ -48,7 +50,7 @@ import os
 
 from astropy.io import fits, ascii
 from glob import glob
-from astropy.table import Table,vstack
+from astropy.table import Table,vstack,join
 import numpy as np
 import timeit
 import time
@@ -154,11 +156,43 @@ def do_one_field(field='LMC_c45'):
         # close_log()
         return
 
+def check_for_duplicates():
+    '''
+    Check to see if the directory structure is clean in
+    the sense that there is only one version of the same
+    file in the directory structure
+    '''
+
+    fits_files = glob('%s/**/*.fits*' % MEFDIR, recursive=True)
+    print('Found %d files in check for duplicates' % len(fits_files))
+    filenames=[]
+    for one in fits_files:
+        name=one.split('/')[-1]
+        name=name.replace('.fz','')
+        name=name.replace('.gz','')
+        name=name.replace('.fits','')
+        filenames.append(name)
+    xtab=Table([filenames,fits_files],names=['Filename','Path'])
+    names,counts=np.unique(xtab['Filename'],return_counts=True)
+    ytab=Table([names,counts],names=['Filename','Count'])
+    ftab=ytab[ytab['Count']>1]
+    if len(ftab)==0:
+        print('Verified there are no duplicate files in the MEF directories')
+        return
+    print('***WARNING:  Unfortunately, there are %d duplicate files in the MEF directory structure')
+    xjoin=join(ftab,xtab,join_type='left')
+    xjoin.sort(['Filename','Path'])
+    print (xjoin)
+    print('***WARNING:  Duplicate files will compromise use -all choice if one wants to create images from mulitple MEF directories (the -all option in SetupTile')
+    return 
+
+
+
 
 
 def steer(argv):
     '''
-    This is just a sterring routine, 
+    This is just a steering routine, 
     and at present is not very useful,
     '''
 
@@ -175,6 +209,7 @@ def steer(argv):
     fields=[]
 
     xall=False
+    dup_only=False
 
 
     i=1
@@ -184,6 +219,8 @@ def steer(argv):
             return
         elif argv[i]=='-all':
             xall=True
+        elif argv[i]=='-dup_only':
+            dup_only=True
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
@@ -193,6 +230,11 @@ def steer(argv):
         else:
             fields.append(argv[i])
         i+=1
+
+    check_for_duplicates()
+    if dup_only:
+        print('Only checked for duplicates; if you want a more complete check, do not set the -dup_only flag')
+        return
 
     if os.path.isdir('./Summary')==False:
         os.mkdir('./Summary')
@@ -239,6 +281,7 @@ def steer(argv):
     elapsed = timeit.default_timer() - start_time
 
     print('Processed %d fields with %d threads in %.1f s or %.1f s per field' % (len(fields), nproc,elapsed,elapsed/len(fields)))
+
 
 
 

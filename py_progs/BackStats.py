@@ -63,6 +63,7 @@ History:
 
 import sys
 import os
+import psutil
 from glob import glob
 from astropy.io import fits, ascii
 from astropy.table import Table, join
@@ -73,8 +74,13 @@ from log import *
 import shutil
 from medianrange import *
 import timeit
+import gc
+import time
 
 ierror=False
+
+# import warnings
+# warnings.filterwarnings('error', category=SyntaxWarning)
 
 
 def halfsamplemode(inputData, axis=None):
@@ -170,7 +176,7 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
     including the mode, mean,median and std 
     in the overlap region
     '''
-    # print('Starting %s  with %d matches' % (file,len(xmatch_files)))
+    # print('Starting %s  with %d matches' % (file,len(xmatch_files)),flush=True)
     global ierror
 
     one=fits.open('%s/%s' % (indir,file))
@@ -179,7 +185,7 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
     j=0
     while j<len(xmatch_files):
         one_record=[]
-        # print('starting %d %s' % (j,xmatch_files[j]))
+        # print('Diag: starting %d %s' % (j,xmatch_files[j]),flush=True)
         two=fits.open('%s/%s' % (indir,xmatch_files[j]))
         try:
             overlap=np.select([one[0].data*two[0].data!=0],[1],default=0)
@@ -236,15 +242,19 @@ def calculate_one(file,xmatch_files,indir,calc_sigma_clipped=False,npix_min=100)
 
             if ok:
                 one_record=one_record+[xmode]
-                # print('succeeded')
+                # print('Diag: Succeeded for files %s and %s' % (file,xmatch_files[j]),flush=True)
                 records.append(one_record)
             else:
-                print('Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]))
+                print('BackStats: Failed with (NaNs for) files %s and %s' % (file,xmatch_files[j]),flush=True)
+        # else:
+        #     print('BackStats: Failed with %d non_zero < %s pixels for files %s and %s' % (nonzero,npix_min,file,xmatch_files[j]))
 
         two.close()
+        del two
+        gc.collect()
         j+=1
     one.close()
-    print('Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
+    print('BackStats: Finished %3d x-matches for  %s/%s ' % (len(records),indir,file),flush=True)
     return records
 
 
@@ -256,7 +266,7 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
     try:
         x=ascii.read(sumfile)
     except:
-        print('Could not find overlap file %s ' % sumfile)
+        print('BackStats: Could not find overlap file %s ' % sumfile)
         raise IOError
 
 
@@ -265,14 +275,15 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
     imsumfile='Summary/%s_%s.txt' % (field,tile)
     try:
         imsum=ascii.read(imsumfile)
+        imsum=join(imsum,x['Filename','XEXPTIME'],join_type='left')
     except:
-        print('Could not read imsum file: %s' % imsum)
+        print('BackStats: Could not read imsum file: %s' % imsum)
         raise IOError
 
 
     indir='%s/%s/%s' % (BACKDIR,field,tile)
     if os.path.exists(indir)==False:
-        print('Could not find the directory %s with the data' % indir)
+        print('BackStats: Could not find the directory %s with the data' % indir)
         raise IOError
 
     
@@ -294,20 +305,29 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
         while i<len(all_inputs):
             xrecords=calculate_one(all_inputs[i][0],all_inputs[i][1],all_inputs[i][2],all_inputs[i][3])
             records=records+xrecords
+            print('Debug: calculate_one complete (%d) for %s len %d' % (i, all_inputs[i][0],len(xrecords)))
             i+=1
     else:
         with Pool(nproc) as p:
             zrecords=p.starmap(calculate_one,all_inputs)
         records=[]
+        print('Debug: finished starmap',flush=True)
         for one in zrecords:
             records=records+one
 
+    log_message('Backstats: calculate_one is complete for all files in %s %s' % (field,tile))
     xrecords=np.array(records)
     
     xtab=Table(xrecords,names=['file1','file2','npix','mean','med','std','mean_clipped','med_clipped','std_clipped','skew','kurt','Delta'])
+
+    os.sync()
+
     # Next lines are a cheat to get the formats to be sensible
+    print('Debug: xtab with %d lines is complete' % len(xtab),flush=True)
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
+    time.sleep(1.0)
     xtab=ascii.read('foo.txt')
+    print('Debug: read back foo.txt with %d lines' % (len(xtab)),flush=True)
 
     # Now rescale to account for pixel size
     scale_factor=(0.2631*0.2631)/(2.*2.)
@@ -321,24 +341,62 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
         xtab['std_clipped']*=scale_factor
     xtab['Delta']*=scale_factor
 
-    colnames=xtab.colnames
-    i=0
-    while i<len(colnames):
-        z=xtab[colnames[i]]
-        xxx=[]
-        xfloat=True
-        for one_value in z:
-            try:
-                xxx.append(eval(one_value))
-            except:
-                xfloat=False
-        if xfloat==True:
-            xtab.remove_column(colnames[i])
-            xtab[colnames[i]]=xxx
-        i+=1
+    print('Debug: rescaled' ,flush=True)
+
+    # colnames=xtab.colnames
+    # i=0
+    # while i<len(colnames):
+    #     z=xtab[colnames[i]]
+    #     xxx=[]
+    #     xfloat=True
+    #     for one_value in z:
+    #         try:
+    #             xxx.append(eval(one_value))
+    #         except:
+    #             xfloat=False
+    #     if xfloat==True:
+    #         xtab.remove_column(colnames[i])
+    #        xtab[colnames[i]]=xxx
+    #    i+=1
+
+    xtab.info()
+
+    colnames = xtab.colnames.copy()
+
+    for colname in colnames:
+        col = xtab[colname]
+    
+        # Skip if already numeric
+        if col.dtype.kind in 'biufc':
+            continue
+    
+        print(f'Debug: Processing column {colname}...', flush=True)
+    
+        try:
+            # Use astropy's built-in conversion - much safer than eval()
         
+            # Try to convert to float
+            numeric_col = col.astype(float)
+        
+            # Replace the column
+            xtab.remove_column(colname)
+            xtab[colname] = numeric_col
+            print(f'Debug:   Converted {colname} to float', flush=True)
+        
+        except (ValueError, TypeError):
+            # Keep as string if conversion fails
+            print(f'Debug:   Kept {colname} as string', flush=True)
+            continue
+
+    print('Debug: column conversion complete', flush=True)        
+
+    print('Debug: removed columns' ,flush=True)
 
     ztab=xtab[colnames]
+
+    print('Debug: created ztab' ,flush=True)
+
+
     ztab['mean'].format='.3f'
     ztab['mean'].format='.3f'
     ztab['med'].format='.3f'
@@ -352,16 +410,64 @@ def do_one_tile(field='LMC_c42',tile='T07',nproc=1,calc_sigma_clipped=False):
 
 
 
+    print('Debug: assembled ztab',flush=True)
 
     # Now attach the filter and exposure time to this
+    # The code below is to try to deal with a memory leak problme in astropy join
 
     imsum.rename_column('Filename','file1')
+    
+    gc.collect()
+    print('Debug: analyzing tables before join', flush=True)
 
-    ztab=join(ztab,imsum['file1','FILTER','EXPTIME'],join_type='left')
+    # Check table sizes and memory usage
+    print(f'Debug: ztab: {len(ztab)} rows, {len(ztab.colnames)} columns')
+    print(f'Debug: imsum subset: {len(imsum)} rows, 5 columns')
+
+    #Check for indices (still the #1 crash cause)
+    print(f'Debug: ztab indices: {len(ztab.indices) if hasattr(ztab, "indices") else 0}')
+    print(f'Debug: imsum indices: {len(imsum.indices) if hasattr(imsum, "indices") else 0}')
+
+    # Check column names and types
+    print(f'Debug: ztab columns: {ztab.colnames}')
+    imsum_subset = imsum['file1','Image','FILTER','EXPTIME','XEXPTIME']
+    print(f'Debug: imsum subset columns: {imsum_subset.colnames}')
+
+    # CRITICAL: Check for common columns (join keys)
+    common_cols = set(ztab.colnames) & set(imsum_subset.colnames)
+    print(f'Debug: Common columns for join: {common_cols}')
+
+    if not common_cols:
+        print('ERROR: No common columns found - join will fail!')
+    else:
+        # Check data types of join columns
+        for col in common_cols:
+            print(f'Debug:   {col}: ztab dtype={ztab[col].dtype}, imsum dtype={imsum_subset[col].dtype}')
+
+    # Check memory usage
+    process = psutil.Process(os.getpid())
+    mem_mb = process.memory_info().rss / 1024**2
+    print(f'Debug: Current memory usage: {mem_mb:.1f} MB')
+
+    gc.collect()
+
+    ztab.info()
+    imsum.info()
+    print('Debug: before join', flush=True)
+
+    # print('Debug: before join',flush=True)
+
+    ztab_result=join(ztab,imsum['file1','Image','FILTER','EXPTIME','XEXPTIME'],join_type='left')
+    del ztab
+    ztab=ztab_result
+    del ztab_result
+    gc.collect()
+
+    print('Debug: joined ztab',flush=True)
 
     out_name='Summary/%s_%s_xxx.txt' % (field,tile)
     ztab.write(out_name,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s with %d lines' % (out_name,len(ztab)))
+    print('Debug: Wrote %s with %d lines' % (out_name,len(ztab)))
     return ztab
 
 def steer(argv):
@@ -390,7 +496,7 @@ def steer(argv):
             i+=1
             nproc=int(argv[i])
         elif argv[i][0]=='-':
-            print('Error: Unknown switch %s' % argv[i])
+            print('BackStats: Error: Unknown switch %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -406,7 +512,7 @@ def steer(argv):
             i+=1
 
     if len(tiles)==0:
-        print('The tiles to be processed must be listed after the field, unless -all is invoked')
+        print('BackStats: The tiles to be processed must be listed after the field, unless -all is invoked')
     open_log('%s.log' % field,reinitialize=False)
     for one in tiles:
         if calc_sigma_clipped:
@@ -431,7 +537,7 @@ def steer(argv):
     elif xremove:
         for one in tiles:
             xdir='%s/%s/%s' % (BACKDIR,field,one)
-            print('There were no errors reported, removing %s' % (xdir))
+            print('BackStats: There were no errors reported, removing %s' % (xdir))
             shutil.rmtree(xdir)
 
 

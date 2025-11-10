@@ -80,13 +80,13 @@ To process the data without attempting to improve over
 the background options in MefPrep, the programs should
 be run in the following order:
 
-* (MefCheck.py - This should not normally be necessary unless new
-files have been added to the main data reposiotyr. The routine 
-will check if there are problems with files being "good" fits files
-and chcck for information the headers in the individual
-Mef files.  It creates a table called \_mef\_qual.tab which indicates
-which Mef files are problematic, but is not used by any of the
-downstream programs.)
+* MefCheck.py - This routine should be run whenever files have 
+been added to the data repository. It performs some basic 
+checks on files in the repository to make sure that they can
+be read, and have needed header keywords. The routine also does some 
+simple checks to see whether repository is clean, in the sense
+of not containing duplicate files that could cause issues with
+the downstream procedures. 
 
 * MefSum.py - This summarizes the mef files in a field.
 If it does not already exist this program creates a directory 
@@ -95,15 +95,11 @@ tables that contain the summary information.  Any files that
 do not have the necessary keywords, e.g. MAGZERO, will be contained
 in a separate summary file, and not used in other programs.)
 
-
-Note that MefSum.py -all wil attempt to create a summary of all of the files
+Note that MefSum.py -all will a ttempt to create a summary of all of the files
 that one has in the DECam\_MEF directory.   This routine is parallelized;
-each thread handles an individual mef file.  (In a previous version,
-the routine was parallelized so that each thread handled a different field;
-the new version is faster for processing a single field, but not if
-you are processing a large number of fields.)
-The program does not
-check to see if certain Fields have already been analyzed, 
+each thread handles an individual mef file.  
+
+The program does not check to see if certain Fields have already been analyzed, 
 and so if one adds a single Field one should not use the -all option.
 
 Note - In the current version of the program the most important
@@ -113,6 +109,17 @@ standard deviation, which are also calculated are not the
 sigma clipped versions.  There is an option to create sigma
 clipped versions of the median, and mean, but this takes about
 a factor of 3 times longer to run.)
+
+This routine writes two files in the Summary directory for each "field"
+as defined in the DECam\_MEF directory
+
+Finally, the routine checks to see if the filter/exposure time combinations
+in the various files  appear in the instrument configuration file, and if not
+indicates what combinations do not appear there. (The instrument configuration
+file "DeMCELS\_images.txt indicates what filter combinations to include in various
+final output images and is normally found in the config directory of the kred 
+repository)
+
 
 * MefPrep.py - This routine rescales all of the images in 
 a field or fields, subtracts background if desired, and
@@ -128,19 +135,32 @@ background from all of the CCDS associated with a given
 exposure.  The default is to subtract the median value 
 of the mode for the individual detectors.
 
-
 Also, like MefSum.py one can run this on all of the fields
 with the -all switch.
+
+**If one plans to use the -use_all_data option in SetupTile, so to include
+all possible images to create a tile image, one must run
+MefPrep on all of the data first.  If one does not do this,
+then SetupTile and the remaining routines will still run, but the analyis
+will only include those images which have been processed by MefPrep**
+
+
+This routine writes to the DECam\_Prep directory
 
 
 * SetupTile.py - This is intended to identify CCD images
 that need to be processed.  It produces 
 tables in the Summary directory that identify what 
 CCDs need to be processed to produce images of a single 
-field. It also cretes directories DECam\_PREP/LMC\_c45/Tile01 etc
+field. It also creates directories DECam\_PREP/LMC\_c45/Tile01 etc
 that contain links to the appropriate files in the data directories.
 
-Note - This routine uses the config file.  If one wanted to create 
+Note - This routine uses two configuration files:
+
+The default version of the files are stored in the config directory.
+
+* MC\_tiles.txt is the configuration file that defines the tile centers and the tile geometries for 
+the standard processing.  If one wanted to create 
 data that was for a different region, then one would need to point 
 this to a different configuration file.  Note though, that at
 present each field is separate.
@@ -153,6 +173,12 @@ and if so to use them.
 
 One can use this approach to create images of regions not defined by the 
 original exposures sequences, e.g of a particular region on the sky.
+
+* DeMCELS\_images.txt is a file that defines what exposures to combine into the
+final output images.  It is intended to handle the situation where one is trying
+to combine images that have the same filter but slightly different expousre times.
+Filters and exposures that will be processed must be listed in this table.  MOre than
+one EXPTIME can be combined to create a final Image.
 
 
 * SwarpSetup.py - This creates directories inputs (the.run and .default files)
@@ -334,6 +360,10 @@ tiles in a field
 * PhotCompare.py is a routine that identifies stars in the DECam images, does simple aperture 
 photometry on them, and then compares the derived magnitudes to magnitudes of GAIA stars in
 the field.
+
+* ColarTest.py is a routine that does forced photometry on the continuum subtracted emission
+line images and makes plot that show GAIA stars that are under-subtracted or over-subtraced 
+as a function of G-R color.
 
 * ZeroPoint.py is a routine that takes a subset of the objects identified with PhotCompare.py and 
 retrieves the low resolution GAIA spectra, and calculates the conversion between DN for the 

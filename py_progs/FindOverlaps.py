@@ -21,11 +21,11 @@ Command line usage (if any):
 Description:  
 
     Find the images that ovelap that have the same
-    filter and the same exposure time in one or more tiles
+    filter.
 
-    The routine assumes (for now) that we will not try
-    to combine images with different exposure times,
-    though this condition could be dropped
+    The routine calculates overlaps of the same filter,
+    regardless of the exposure times.
+
 
     The overlaps are found based on the RA, DEC corrners 
     of the immages.
@@ -60,6 +60,8 @@ Notes:
 History:
 
 230524 ksl Coding begun
+250128 ksl Modified the code so that both exposure times are recorded. Choosing
+    what exposure times to match background to occurs later.
 
 '''
 
@@ -76,6 +78,10 @@ def get_files(field,tile,xfilter='Ha'):
     '''
     Idenfify all of the files associated
     with a specific filter in a tile
+
+    Note: 
+    This reads the Field_Tile.txt files in the
+    Summary directory
     '''
 
 
@@ -83,14 +89,14 @@ def get_files(field,tile,xfilter='Ha'):
     try:
         imsum=ascii.read(imsum_file)
     except:
-        print('Error: could not locate %s' % imsum_file)
+        print('FindOverlaps: Error: could not locate %s' % imsum_file)
         raise IOError
 
 
     xtab=imsum[imsum['FILTER']==xfilter]
 
     if len(xtab)==False:
-        print('No appropriate files were found for %s' % xfilter)
+        print('FindOverlaps: No appropriate files were found for %s' % xfilter)
         return []
 
     return xtab
@@ -115,7 +121,7 @@ def get_overlap(row,xxtab):
     try: 
         xtab=xxtab[row+1:]
     except:
-        print('Got to end')
+        print('FindOverlaps: Got to end')
         return []
     dec_max=np.max([one_row['COR1DEC1'],one_row['COR2DEC1'],one_row['COR3DEC1'],one_row['COR4DEC1']],axis=0)
     dec_min=np.min([one_row['COR1DEC1'],one_row['COR2DEC1'],one_row['COR3DEC1'],one_row['COR4DEC1']],axis=0)
@@ -125,7 +131,7 @@ def get_overlap(row,xxtab):
     xtab['Dec_max'] = np.max([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
     xtab['Dec_min'] = np.min([xtab['COR1DEC1'],xtab['COR2DEC1'],xtab['COR3DEC1'],xtab['COR4DEC1']],axis=0)
 
-    xtab=xtab[xtab['EXPTIME']==one_row['EXPTIME']]
+    xtab=xtab[xtab['Image']==one_row['Image']]
     if len(xtab)==0:
         # print('Failed to find any images with the same exposre time ' % one_row['EXPTIME'])
             return []
@@ -189,8 +195,9 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
     while i<imax:
         z=get_overlap(i,xtab)
         if len(z)>0:
-            xout=z['Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
+            xout=z['Image','Filename','FILTER','EXPTIME','delta','delta_ra','delta_dec']
             xout['XFilename']=xtab['Filename'][i]
+            xout['XEXPTIME']=xtab['EXPTIME'][i]
             if len(xx)==0:
                 xx=xout.copy()
             else:
@@ -202,7 +209,7 @@ def do_one_filter(field='LMC_c45',tile='T07',xfilter='Ha'):
         log_message('Error: FindOverlaps: Found no overlaps for  %s %s %s' % (field,tile,xfilter))
         return []
 
-    xx.sort(['EXPTIME','delta']) 
+    xx.sort(['Image','EXPTIME','delta']) 
 
     # outfile='Summary/%s_%s_%s_overlap.txt' % (field,tile,xfilter)
     # xx.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
@@ -213,9 +220,9 @@ def do_one_tile(field='LMC_c45',tile='T07'):
     Find the overlaps for all of the filters in one tile
     '''
 
-    print('\nStarting Field %s Tile %s' % (field,tile))
+    print('\nFindOverlaps: Starting Field %s Tile %s' % (field,tile))
     
-    xfilters=['N662','N673','r','N708']
+    xfilters=['N662','N673','r','N708','N501','N540']
 
     z=[]
     xlen=[]
@@ -228,13 +235,14 @@ def do_one_tile(field='LMC_c45',tile='T07'):
 
     i=0
     while i<len(xfilters):
-        print('For %5s there are %5d overlaps' % (xfilters[i],xlen[i]))
+        print('FindOverlaps: For %5s there are %5d overlaps' % (xfilters[i],xlen[i]))
         i+=1
 
 
     outfile='Summary/%s_%s_overlap.txt' % (field,tile)
+    all_overlaps.meta.clear()
     all_overlaps.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s\n' % outfile)
+    print('FindOverlaps: Wrote %s\n' % outfile)
 
 
 
@@ -258,7 +266,7 @@ def steer(argv):
         elif argv[i]=='-all':
             xall=True
         elif argv[i][0]=='-':
-            print('Error: Unknown switch  %s' % argv[i])
+            print('FindOverlaps: Error: Unknown switch  %s' % argv[i])
             return
         elif field=='':
             field=argv[i]
@@ -274,7 +282,7 @@ def steer(argv):
             i+=1
 
     if field=='':
-        print('Error: FindOverlaps: No field provided:',argv)
+        print('FindOverlaps: Error: FindOverlaps: No field provided:',argv)
         return
     else:
         open_log('%s.log' % field)
