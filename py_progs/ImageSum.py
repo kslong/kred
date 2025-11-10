@@ -209,6 +209,10 @@ def table_create(xdir='DECam_SUB2',outname=''):
     xtab['Dec'].format='.5f'
     xtab['width'].format='.2f'
     xtab['height'].format='.2f'
+
+    if outname==None:
+        return xtab
+
     if outname=='':
         qdir=xdir.replace('/','-')
         outname='Image_Sum_%s.txt' % qdir
