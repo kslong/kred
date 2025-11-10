@@ -361,6 +361,10 @@ tiles in a field
 photometry on them, and then compares the derived magnitudes to magnitudes of GAIA stars in
 the field.
 
+* ColarTest.py is a routine that does forced photometry on the continuum subtracted emission
+line images and makes plot that show GAIA stars that are under-subtracted or over-subtraced 
+as a function of G-R color.
+
 * ZeroPoint.py is a routine that takes a subset of the objects identified with PhotCompare.py and 
 retrieves the low resolution GAIA spectra, and calculates the conversion between DN for the 
 Ha and [SII] filters to flux in ergs/s.
