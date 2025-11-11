@@ -71,9 +71,9 @@ def color_compare(cont_image,subtracted_image,forced=False):
     gaia_file=PhotCompare.get_gaia(ra, dec, size_deg,outroot='',nmax=-1)
     # So at this point I have the Gaifile
 
-    cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,'test')
+    cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,'')
     print(cont_phot)
-    sub_phot=PhotCompare.do_forced_photometry(subtracted_image,gaia_file,'xtest')
+    sub_phot=PhotCompare.do_forced_photometry(subtracted_image,gaia_file,'')
     print(sub_phot)
     return cont_phot,sub_phot,gaia_file
 
