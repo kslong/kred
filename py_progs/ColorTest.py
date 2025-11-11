@@ -151,7 +151,11 @@ def find_cont(filenames):
 
 def doit(continuum_file='DECam_SWARP2/LMC_c35/T06/LMC_c35_T06.r.fits',subtracted_file='DECam_SUB2/LMC_c35/T06/LMC_c35_T06.ha_sub_r.fits'):
 
-    cont_phot,sub_phot,gaia_file=color_compare(continuum_file,subtracted_file)
+    try:
+        cont_phot,sub_phot,gaia_file=color_compare(continuum_file,subtracted_file)
+    except ValueError:
+        print('Unsucessful for theis combination: %s %s' % (continuum_file,subtracted_file))
+        return
     cont=ascii.read(cont_phot)
     sub=ascii.read(sub_phot)
     gaia=ascii.read(gaia_file)
@@ -167,7 +171,7 @@ def doit(continuum_file='DECam_SWARP2/LMC_c35/T06/LMC_c35_T06.r.fits',subtracted
     title='GAIA Color/Flux Comparison: %s and %s' % (base_sub,base_cont)
     plot_both(gaia,final,title)
     os.makedirs('Figs_color',exist_ok=True)
-    plt.savefig('Figs_Color/%s.png' % base_sub)
+    plt.savefig('Figs_color/%s.png' % base_sub)
     return
 
 

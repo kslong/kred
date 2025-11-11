@@ -59,8 +59,8 @@ Description:
     LMC_c42_T07.r_sub.fits        - pure r-band image after emission lines are subtracted       
     LMC_c42_T07.ha_s2_sub.fits    - the emission line portion of the r-band image 
 
-    LMC_c42_T07.ha_sub_n708.fits  - pure ha image based on subtrcting the n708 image
-    LMC_c42_T07.s2_sub_n708.fits  - pure ha image based on subtrcting the n708 image
+    LMC_c42_T07.ha_sub_N708.fits  - pure ha image based on subtrcting the n708 image
+    LMC_c42_T07.s2_sub_N708.fits  - pure ha image based on subtrcting the n708 image
     LMC_c42_T07.n708_sub.fits     - n708 image (after subtracting a biased median) 
 
 
@@ -302,7 +302,7 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
     zn708[0].data-=median
 
     zn708[0].header['PROCTYPE']='LineSubtracted'
-    zn708.writeto(outroot+'.n708_sub.fits',overwrite=True) 
+    zn708.writeto(outroot+'.N708_sub.fits',overwrite=True) 
     
     if outroot=='':
         word=ha.split('.')
@@ -315,14 +315,14 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         zha[0].header['PROCTYPE']='StarSubtracted'
         zha[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zha[0].data-=zn708[0].data
-        zha.writeto(outroot+'.ha_sub_n708.fits',overwrite=True)
+        zha.writeto(outroot+'.ha_sub_N708.fits',overwrite=True)
 
     if s2_exists and n708_exists:
         # zs2[0].data-=zn708[0].data
         zs2[0].header['PROCTYPE']='StarSubtracted'
         zs2[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zs2[0].data-=zn708[0].data
-        zs2.writeto(outroot+'.s2_sub_n708.fits',overwrite=True)
+        zs2.writeto(outroot+'.s2_sub_N708.fits',overwrite=True)
         
 
 def doit(xdir='data',outdir='data'):

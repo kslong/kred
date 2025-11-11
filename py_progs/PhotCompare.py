@@ -383,11 +383,15 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
         print('Error: get_gaia: No objects were retrieved')
         return []
 
-    # print(r.info())
+    print(r.info())
 
     r.rename_column('ra','RA')
     r.rename_column('dec','Dec')
-    r.rename_column('source_id','Source_name')
+    try:
+        r.rename_column('source_id','Source_name')
+    except:
+        r.rename_column('SOURCE_ID','Source_name')
+
     r.rename_column('phot_g_mean_mag','G')
     r.rename_column('phot_bp_mean_mag','B')
     r.rename_column('phot_rp_mean_mag','R')
@@ -797,7 +801,7 @@ def get_size(filename='LMC_c48_T08.r.t060.fits'):
         x=fits.open(filename)
     except:
         print('Could not open %s' % filename)
-        return 
+        raise ValueError
     
     wcs = WCS(x[0].header)
          
@@ -857,7 +861,8 @@ def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,outr
         x=fits.open(filename)
     except:
         print('Could not open %s' % filename)
-        return
+        raise ValueError
+        
 
     if gaia_cat_file!='' and os.path.isfile(gaia_cat_file)==True:
         gaia_file=gaia_cat_file
@@ -888,8 +893,8 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
         try:
             x=fits.open(filename)
         except:
-            print('Could not open %s' % filename)
-            return
+            print('do_many: Could not open %s' % filename)
+            raise ValueError
         ra,dec,size=get_size(filename)
         xra.append(ra)
         xdec.append(dec)
