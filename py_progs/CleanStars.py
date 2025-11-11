@@ -251,7 +251,7 @@ def make_n540_subtractions(o3='data/LMC_c42_T07.N501.t800.fits', n540='data/LMC_
         zo3[0].header['PROCTYPE']='StarSubtracted'
         zo3[0].header['SFILTER']=(zn540[0].header['FILTER'],'Filter of image used for star subtraction')
         zo3[0].data-=zn540[0].data
-        zo3.writeto(outroot+'.o3_sub_n540.fits',overwrite=True)
+        zo3.writeto(outroot+'.o3_sub_N540.fits',overwrite=True)
 
 
 
