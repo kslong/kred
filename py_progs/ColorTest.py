@@ -180,7 +180,11 @@ def do_dir(xdir='DECam_SUB2/LMC_c37/T07',nrow_max=-1):
     Sort out how to call doit based on the directories
     '''
 
-    xtab=ImageSum.table_create(xdir,outname=None)
+    try:
+        xtab=ImageSum.table_create(xdir,outname=None)
+    except IOError as e:
+        print(f'Error:do_dir: {e}')
+        return
     # The two or ultimated 3 types of images we will have will all be indentied becasue the image bytpe will have a name including sub_
     select=[]
     for i in range(len(xtab)):
@@ -196,8 +200,9 @@ def do_dir(xdir='DECam_SUB2/LMC_c37/T07',nrow_max=-1):
         name=name.replace('SUB','SWARP')
         name=name.replace('ha_sub_r','r')
         name=name.replace('s2_sub_r','r')
-        name=name.replace('ha_sub_n708','n708')
-        name=name.replace('s2_sub_n708','n708')
+        name=name.replace('ha_sub_N708','N708')
+        name=name.replace('s2_sub_N708','N708')
+        name=name.replace('o3_sub_N540','N540')
         names.append(name)
     xsub['cont_file']=names
     print(xsub)

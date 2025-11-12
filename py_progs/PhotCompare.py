@@ -357,7 +357,7 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
     Get data from the Gaia photometric catalog
     '''
     if outroot=='':
-        outroot='%.1f_%.1f' % (ra,dec)
+        outroot='%05.1f_%05.1f' % (ra,dec)
     
     os.makedirs('Gaia',exist_ok=True)
     outfile='Gaia/Gaia.%s.txt' % outroot
@@ -383,7 +383,7 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
         print('Error: get_gaia: No objects were retrieved')
         return []
 
-    print(r.info())
+    # print(r.info())
 
     r.rename_column('ra','RA')
     r.rename_column('dec','Dec')

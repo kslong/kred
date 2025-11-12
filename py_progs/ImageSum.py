@@ -182,6 +182,9 @@ def print_header_image_info(header, description="FITS Header"):
 
 def table_create(xdir='DECam_SUB2',outname=''):
     files=glob('%s/**/*.fits' % xdir,recursive=True)
+    if len(files)==0:
+        raise IOError("No files found for %s" % xdir)
+
     source=[]
     xtype=[]
     ra=[]
@@ -191,10 +194,19 @@ def table_create(xdir='DECam_SUB2',outname=''):
     for one_file in files:
         name=one_file.split('/')[-1]
         word=name.split('.')
-        xtype.append(word[-2])
         header = fits.getheader(one_file, ext=0)
         source.append(header['Object'])
-        info=get_image_center_and_size_from_header(header)
+        try:
+            info=get_image_center_and_size_from_header(header)
+            info=get_image_center_and_size_from_header(header)
+            xtype.append(word[-2])
+        except:
+            # This is likely and individual ccd image
+            header = fits.getheader(one_file, ext=1)
+            info=get_image_center_and_size_from_header(header)
+            fiddle=word[-2]
+            fiddle=fiddle.split('_')
+            xtype.append('%s-%s' % (fiddle[-3],fiddle[-1]))
         ra.append(info['center_ra'])
         dec.append(info['center_dec'])
         width.append(info['width_deg'])
