@@ -119,6 +119,7 @@ import time
 from http.client import IncompleteRead
 
 from kred import ImageSum
+from kred import GaiaCat
 
 def random_rows(tab, nrows, seed=None):
     """
@@ -179,334 +180,6 @@ def unique_rows_within_tol(tab, tol=0.01):
         unique_indices.append(i)
 
     return tab[unique_indices]
-
-
-def get_no_jobs(jobs):
-    '''
-    Check how many jobs are running
-    '''
-    njobs=0
-    for one in jobs:
-        if one.is_alive():
-            njobs+=1
-    return njobs
-
-
-
-
-def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
-    """
-    Load or download and load from cache the spectrum of a gaia star, converted to erg/s/cm^2/A
-
-    Note that I have 'appropiated' this from the lvm drp
-    """
-    # create cache dir if it does not exist
-    pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
-
-    if path.exists(GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv") is True:
-        print('Star is in cache')
-        # read the tables from our cache
-        gaiaflux = Table.read(
-            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv", format="csv"
-        )
-        gaiawave = Table.read(
-            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + "_sampling.csv", format="csv"
-        )
-    else:
-        print('Star is must be retrieved')
-        # need to download from Gaia archive
-        CSV_URL = (
-            "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"
-            + str(gaiaID)
-            + "&format=CSV&DATA_STRUCTURE=RAW"
-        )
-        FILE = GAIA_CACHE_DIR + "/XP_" + str(gaiaID) + "_RAW.csv"
-
-        with requests.get(CSV_URL, stream=True) as r:
-            r.raise_for_status()
-            if len(r.content) < 2:
-                return []
-            with open(FILE, "w") as f:
-                f.write(r.content.decode("utf-8"))
-
-        # convert coefficients to sampled spectrum
-        _, _ = calibrate(
-            FILE,
-            output_path=GAIA_CACHE_DIR,
-            output_file="gaia_spec_" + str(gaiaID),
-            output_format="csv",
-        )
-        # read the flux and wavelength tables
-        gaiaflux = Table.read(
-            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + ".csv", format="csv"
-        )
-        gaiawave = Table.read(
-            GAIA_CACHE_DIR + "/gaia_spec_" + str(gaiaID) + "_sampling.csv", format="csv"
-        )
-
-    # make numpy arrays from whatever weird objects the Gaia stuff creates
-    wave = np.fromstring(gaiawave["pos"][0][1:-1], sep=",") * 10  # in Angstrom
-    flux = (
-        1e4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")
-    )  # W/s/nm -> in erg/s/cm^2/A
-
-    results=Table([wave,flux],names=['WAVE','FLUX'])
-    return results     
-
-
-def get_gaia_mag27_flux(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
-    '''
-     Get the giaa flux of a star at a particular wavelength and calculate thoe
-     total flux assuming in the bandpass from this if it were the same star
-     at mag27`.  
-
-     Note:
-     Added 240503. This is one possible way of calculating 
-    '''
-    xtab=get_gaia_spec(xid)
-    if len(xtab)==0:
-        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
-        return None
-    # xtab.info()
-    # print(xtab)
-    i=0
-    while xtab['WAVE'][i] < wavelength and i<len(xtab):
-        i+=1
-    #print(xtab['WAVE'][i])
-    frac=(wavelength-xtab['WAVE'][i-1])/(xtab['WAVE'][i]-xtab['WAVE'][i-1])
-    # print(frac)
-    flux=(1-frac) * xtab['FLUX'][i-1]+frac*xtab['FLUX'][i]
-    # print(flux)
-    flux27=flux*10**(-0.4*(27-gmag))*dlambda
-    return flux27
-
-def get_gaia_mag27_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
-    '''
-     Get the averge gaia flux of a star in a partcular wavelength band
-
-     Note:
-     Added 240503 - This is a variant of the routine above
-    '''
-    xtab=get_gaia_spec(xid)
-    if len(xtab)==0:
-        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
-        return None
-    # xtab.info()
-    # print(xtab)
-    wmax=wavelength+dlambda/2.
-    wmin=wavelength-dlambda/2
-    z=xtab[xtab['WAVE'] < wmax]
-    z=z[z['WAVE']>wmin]
-    flux=np.average(z['FLUX'])
-    flux27=flux*10**(-0.4*(27-gmag))*dlambda
-    return flux27
-                         
-                   
-                   
-
-
-def get_gaia_flux(xid=4658604348568208768):
-    '''
-    Get the flux for a Gaia star as observed through the various filters
-
-    240503 - I am not convince this is useful for anything, as this is
-    not normalized an way, and it is unrelated to the flux calibraiton
-    memo.
-    '''
-    xtab=get_gaia_spec(xid)
-    if len(xtab)==0:
-        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
-        return
-
-    test_dir=os.path.dirname(__file__)
-    print('test2',test_dir)
-
-
-    data_dir=os.path.dirname(__file__).replace('py_progs','data')
-
-    print('test',data_dir)
-
-    xfilt=ascii.read('%s/%s' % (data_dir,'n662.txt'))
-    xtab['HA_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
-                                       left=0, right=0)
-
-
-    xfilt=ascii.read('%s/%s' % (data_dir,'n673.txt'))
-    xtab['S2_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
-                                       left=0, right=0)
-    xfilt=ascii.read('%s/%s' % (data_dir,'r.txt'))
-    xtab['R_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
-                                       left=0, right=0)
-
-
-    xfilt=ascii.read('%s/%s' % (data_dir,'n708.txt'))
-    xtab['N708_TRANS']= np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'],
-                                       left=0, right=0)
-
-    xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
-
-    dw=20.
-
-    r_flux=np.dot(xtab['FLUX'],xtab['R_TRANS'])*dw
-    ha_flux=np.dot(xtab['FLUX'],xtab['HA_TRANS'])*dw
-    s2_flux=np.dot(xtab['FLUX'],xtab['S2_TRANS'])*dw
-    n708_flux=np.dot(xtab['FLUX'],xtab['N708_TRANS'])*dw
-
-    return ha_flux,s2_flux,r_flux,n708_flux
-
-
-def get_gaia_new(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
-             outroot='', nmax=-1, redo=False, max_retries=3, retry_delay=5):
-    '''
-    Get data from the Gaia photometric catalog with retry logic for network errors.
-
-    Parameters
-    ----------
-    ra : float
-        Right ascension in degrees
-    dec : float
-        Declination in degrees
-    rad_deg : float
-        Search radius in degrees
-    outroot : str
-        Output root path (defaults to 'RA_Dec' format)
-    nmax : int
-        Maximum number of rows (-1 for no limit)
-    redo : bool
-        Whether to redo the query even if file exists
-    max_retries : int
-        Maximum number of retry attempts for network errors (default: 3)
-    retry_delay : float
-        Delay in seconds between retries (default: 5)
-
-    Returns
-    -------
-    outfile : str or list
-        Path to output file, or empty list if no objects retrieved
-    '''
-    if outroot == '':
-        outroot = '%05.1f_%05.1f' % (ra, dec)
-
-    os.makedirs('Gaia', exist_ok=True)
-    outfile = 'Gaia/Gaia.%s.txt' % outroot
-
-    if redo == False and os.path.isfile(outfile) == True:
-        print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
-        return outfile
-
-    print('get_gaia: Getting data for RA Dec of  %.5f %.5f and size of %.2f' % (ra, dec, rad_deg))
-
-    Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
-    coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
-
-    # Retry loop for handling IncompleteRead errors
-    r = None
-    for attempt in range(max_retries):
-        try:
-            if attempt > 0:
-                print(f'get_gaia: Retry attempt {attempt + 1}/{max_retries}...')
-
-            j = Gaia.cone_search_async(coord, radius=u.Quantity(rad_deg, u.deg))
-            r = j.get_results()
-
-            # If we get here, the query succeeded
-            break
-
-        except IncompleteRead as e:
-            print(f'get_gaia: IncompleteRead error on attempt {attempt + 1}: {e}')
-            if attempt < max_retries - 1:
-                print(f'get_gaia: Retrying in {retry_delay} seconds...')
-                time.sleep(retry_delay)
-            else:
-                print('get_gaia: Max retries reached. Query failed.')
-                raise
-
-        except Exception as e:
-            print(f'get_gaia: Unexpected error on attempt {attempt + 1}: {type(e).__name__}: {e}')
-            if attempt < max_retries - 1:
-                print(f'get_gaia: Retrying in {retry_delay} seconds...')
-                time.sleep(retry_delay)
-            else:
-                print('get_gaia: Max retries reached. Query failed.')
-                raise
-
-    if r is None or len(r) == 0:
-        print('Error: get_gaia: No objects were retrieved')
-        return []
-
-    # Process and rename columns
-    r.rename_column('ra', 'RA')
-    r.rename_column('dec', 'Dec')
-    try:
-        r.rename_column('source_id', 'Source_name')
-    except:
-        r.rename_column('SOURCE_ID', 'Source_name')
-    r.rename_column('phot_g_mean_mag', 'G')
-    r.rename_column('phot_bp_mean_mag', 'B')
-    r.rename_column('phot_rp_mean_mag', 'R')
-    r.rename_column('teff_gspphot', 'teff')
-    r.rename_column('logg_gspphot', 'log_g')
-    r.rename_column('distance_gspphot', 'D')
-
-    r['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D'].write(
-        outfile, format='ascii.fixed_width_two_line', overwrite=True
-    )
-
-    print('Wrote %s with %d objects' % (outfile, len(r)))
-    return outfile
-
-def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
-    '''
-    Get data from the Gaia photometric catalog
-    '''
-    if outroot=='':
-        outroot='%06.2f_%06.2f' % (ra,dec)
-    
-    os.makedirs('Gaia',exist_ok=True)
-    outfile='Gaia/Gaia.%s.txt' % outroot
-
-    if redo==False and os.path.isfile(outfile)==True:
-        print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
-        return outfile
-    
-    print('get_gaia: Getting data for RA Dec of  %.5f %.5f and size of %.2f' % (ra,dec,rad_deg))
-
-    
-
-    Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
-
-    coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
-
-    j = Gaia.cone_search_async(coord, radius=u.Quantity(rad_deg, u.deg))
-
-
-    r = j.get_results()
-    
-    if len(r)==0:
-        print('Error: get_gaia: No objects were retrieved')
-        return []
-
-    # print(r.info())
-
-    r.rename_column('ra','RA')
-    r.rename_column('dec','Dec')
-    try:
-        r.rename_column('source_id','Source_name')
-    except:
-        r.rename_column('SOURCE_ID','Source_name')
-
-    r.rename_column('phot_g_mean_mag','G')
-    r.rename_column('phot_bp_mean_mag','B')
-    r.rename_column('phot_rp_mean_mag','R')
-    r.rename_column('teff_gspphot','teff')
-    r.rename_column('logg_gspphot','log_g')
-    r.rename_column('distance_gspphot','D')
-    
-    r['Source_name','RA','Dec','B','G','R','teff','log_g','D'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s with %d objects' %(outfile,len(r)))
-    return outfile
-
-
 
 
 def do_fig(xtab,outroot):
@@ -1023,7 +696,7 @@ def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,nrow
     else:
         # print('Making new GaiaCat file')
         ra,dec,size_deg=get_size(filename)
-        gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+        gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot,nmax=-1)
 
 
     do_xphot(filename,gaia_file,forced,nrows_max,outroot)
@@ -1060,7 +733,7 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
 
     gaia_files=[]
     for one in zpos:
-        gaia_file=get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
+        gaia_file=GaiaCat.get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
         gaia_files.append(gaia_file)
     zpos['gaia_file']=gaia_files
 
@@ -1069,7 +742,7 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
     # At this point all of the gaia files that we need should exist
 
     for one in xpos:
-        gaia_file=get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
+        gaia_file=GaiaCat.get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
         do_xphot(one['filename'],gaia_file,forced,nrows_max,outroot)
 
 
