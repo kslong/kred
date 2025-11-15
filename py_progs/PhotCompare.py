@@ -114,6 +114,10 @@ from scipy.spatial import KDTree
 import numpy as np
 from astropy.table import Table
 
+
+import time
+from http.client import IncompleteRead
+
 from kred import ImageSum
 
 def random_rows(tab, nrows, seed=None):
@@ -351,13 +355,112 @@ def get_gaia_flux(xid=4658604348568208768):
     return ha_flux,s2_flux,r_flux,n708_flux
 
 
+def get_gaia_new(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
+             outroot='', nmax=-1, redo=False, max_retries=3, retry_delay=5):
+    '''
+    Get data from the Gaia photometric catalog with retry logic for network errors.
+
+    Parameters
+    ----------
+    ra : float
+        Right ascension in degrees
+    dec : float
+        Declination in degrees
+    rad_deg : float
+        Search radius in degrees
+    outroot : str
+        Output root path (defaults to 'RA_Dec' format)
+    nmax : int
+        Maximum number of rows (-1 for no limit)
+    redo : bool
+        Whether to redo the query even if file exists
+    max_retries : int
+        Maximum number of retry attempts for network errors (default: 3)
+    retry_delay : float
+        Delay in seconds between retries (default: 5)
+
+    Returns
+    -------
+    outfile : str or list
+        Path to output file, or empty list if no objects retrieved
+    '''
+    if outroot == '':
+        outroot = '%05.1f_%05.1f' % (ra, dec)
+
+    os.makedirs('Gaia', exist_ok=True)
+    outfile = 'Gaia/Gaia.%s.txt' % outroot
+
+    if redo == False and os.path.isfile(outfile) == True:
+        print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
+        return outfile
+
+    print('get_gaia: Getting data for RA Dec of  %.5f %.5f and size of %.2f' % (ra, dec, rad_deg))
+
+    Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
+    coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
+
+    # Retry loop for handling IncompleteRead errors
+    r = None
+    for attempt in range(max_retries):
+        try:
+            if attempt > 0:
+                print(f'get_gaia: Retry attempt {attempt + 1}/{max_retries}...')
+
+            j = Gaia.cone_search_async(coord, radius=u.Quantity(rad_deg, u.deg))
+            r = j.get_results()
+
+            # If we get here, the query succeeded
+            break
+
+        except IncompleteRead as e:
+            print(f'get_gaia: IncompleteRead error on attempt {attempt + 1}: {e}')
+            if attempt < max_retries - 1:
+                print(f'get_gaia: Retrying in {retry_delay} seconds...')
+                time.sleep(retry_delay)
+            else:
+                print('get_gaia: Max retries reached. Query failed.')
+                raise
+
+        except Exception as e:
+            print(f'get_gaia: Unexpected error on attempt {attempt + 1}: {type(e).__name__}: {e}')
+            if attempt < max_retries - 1:
+                print(f'get_gaia: Retrying in {retry_delay} seconds...')
+                time.sleep(retry_delay)
+            else:
+                print('get_gaia: Max retries reached. Query failed.')
+                raise
+
+    if r is None or len(r) == 0:
+        print('Error: get_gaia: No objects were retrieved')
+        return []
+
+    # Process and rename columns
+    r.rename_column('ra', 'RA')
+    r.rename_column('dec', 'Dec')
+    try:
+        r.rename_column('source_id', 'Source_name')
+    except:
+        r.rename_column('SOURCE_ID', 'Source_name')
+    r.rename_column('phot_g_mean_mag', 'G')
+    r.rename_column('phot_bp_mean_mag', 'B')
+    r.rename_column('phot_rp_mean_mag', 'R')
+    r.rename_column('teff_gspphot', 'teff')
+    r.rename_column('logg_gspphot', 'log_g')
+    r.rename_column('distance_gspphot', 'D')
+
+    r['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D'].write(
+        outfile, format='ascii.fixed_width_two_line', overwrite=True
+    )
+
+    print('Wrote %s with %d objects' % (outfile, len(r)))
+    return outfile
 
 def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
     '''
     Get data from the Gaia photometric catalog
     '''
     if outroot=='':
-        outroot='%05.1f_%05.1f' % (ra,dec)
+        outroot='%06.2f_%06.2f' % (ra,dec)
     
     os.makedirs('Gaia',exist_ok=True)
     outfile='Gaia/Gaia.%s.txt' % outroot
@@ -530,7 +633,23 @@ def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     return outname
 
 
-def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',outroot=''):
+def locate_first_image_extension(xx):
+    '''
+    where xx is an already open fits file
+
+    This is to deal with the fact that for the CCD images, we often have the imge in extenstion 1
+
+    '''
+
+    i=0
+    while i<len(xx):
+        if isinstance(xx[i], (fits.PrimaryHDU, fits.ImageHDU, fits.CompImageHDU)) and xx[i].data is not None:
+            return i
+        i+=1
+    return -1
+
+
+def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',nrows_max=-1,outroot=''):
     '''
     Do photometry based on ra and decs
     '''
@@ -541,11 +660,22 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
         print('Error: get_photometry: could not open %s' % filename)
         return 'Error'
 
-        
-    image_wcs=WCS(x[0].header)
-    image=x[0].data
 
+    image_ext=locate_first_image_extension(x)
+    if image_ext<0:
+        raise IOError('No Image extension in %s' % filename)
+
+
+
+        
+    image_wcs=WCS(x[image_ext].header)
+    image=x[image_ext].data
     image-=np.median(image)
+    NAXIS1=x[image_ext].header['NAXIS1']
+    NAXIS2=x[image_ext].header['NAXIS2']
+
+
+
     xexptime=x['PRIMARY'].header['EXPTIME']
     try:
         xfilter=x['PRIMARY'].header['FILTER']
@@ -564,6 +694,20 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
     sources['xcentroid'], sources['ycentroid'] = image_wcs.world_to_pixel(coords)
 
+    mask = (
+    (sources['xcentroid'] >= 0) &
+    (sources['xcentroid'] <  NAXIS1) &
+    (sources['ycentroid'] >= 0) &
+    (sources['ycentroid'] <  NAXIS2)
+    )
+
+    sources=sources[mask]
+    npossible=len(sources)
+
+    if nrows_max>0 and len(sources)>nrows_max:
+        sources=random_rows(sources, nrows=nrows_max, seed=None)
+
+    print('Forced photometry of %d of %d possible sources' % (len(sources),npossible))
 
     tab_dir='./TabPhot'
 
@@ -633,6 +777,11 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
 
 def do_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',outroot=''):
+    '''
+    Locate and measure fluxes from source in an image
+    '''
+
+
     
     try:
         x=fits.open(filename)
@@ -641,8 +790,14 @@ def do_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',o
         return 'Error'
 
         
-    image_wcs=WCS(x[0].header)
-    image=x[0].data
+
+    image_ext=locate_first_image_extension(x)
+    if x<0:
+        raise IOError('No Image extension in %s' % filename)
+
+    image_wcs=WCS(x[image_ext].header)
+    image=x[image_ext].data
+
     # print(np.median(image))
 
     image-=np.median(image)
@@ -824,15 +979,13 @@ def get_size(filename='LMC_c48_T08.r.t060.fits'):
     dec=center_ra_dec.dec.deg
     return ra,dec,size_deg
 
-def do_xphot(filename,gaia_file,forced,outroot):
+def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
     
 
     if forced:
-        print('Forced photometry')
         object_file=gaia_file
-        phot_file=do_forced_photometry(filename,object_file,outroot)
+        phot_file=do_forced_photometry(filename,object_file,nrows_max,outroot)
     else:
-        print('Unforced photometry')
         object_file=get_objects_from_image(filename,outroot)
         phot_file=do_photometry(filename,object_file,outroot)
 
@@ -853,7 +1006,7 @@ def do_xphot(filename,gaia_file,forced,outroot):
     
 
 
-def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,outroot=''):
+def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,nrows_max=-1,outroot=''):
     '''
     Compare photometry in an image to photometry from Gaia
     '''
@@ -873,13 +1026,13 @@ def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,outr
         gaia_file=get_gaia(ra, dec, size_deg,outroot,nmax=-1)
 
 
-    do_xphot(filename,gaia_file,forced,outroot)
+    do_xphot(filename,gaia_file,forced,nrows_max,outroot)
 
     return
 
 
 
-def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,nrow_max=10000,outroot=''):
+def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,nrows_max=10000,outroot=''):
     '''
     Compare photometry in an image to photometry from Gaia
     '''
@@ -915,23 +1068,15 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
 
     # At this point all of the gaia files that we need should exist
 
-    for one_filename in xpos['filename']:
-        print("Starting photometry for %s" % (one_filename))
+    for one in xpos:
         gaia_file=get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
-        if nrow_max>0:
-            xxx=ascii.read(gaia_file)
-            if len(xxx)>nrow_max:
-                xxx=random_rows(xxx, nrows=nrow_max, seed=None)
-                gaia_file='tmp.txt'
-                xxx.write(gaia_file,format='ascii.fixed_width_two_line',overwrite=True)
-
-        do_xphot(one_filename,gaia_file,forced,outroot)
+        do_xphot(one['filename'],gaia_file,forced,nrows_max,outroot)
 
 
     return
 
 
-def do_dir(xdir='DECam_SWARP2/LMC_c37/T16',nrow_max=30000,forced=True):
+def do_dir(xdir='DECam_SWARP2/LMC_c37/T16',nrows_max=30000,forced=True):
     '''
     Process all of the images in a directory, and its 
     subdirecories
@@ -940,7 +1085,7 @@ def do_dir(xdir='DECam_SWARP2/LMC_c37/T16',nrow_max=30000,forced=True):
     xtab=ImageSum.table_create(xdir,outname=None)
     print('Starting %d files' %  len(xtab))
 
-    do_many(xtab['filename'],gaia_cat_file='',forced=forced,nrow_max=nrow_max)
+    do_many(xtab['filename'],gaia_cat_file='',forced=forced,nrows_max=nrows_max)
 
     return
 
@@ -954,7 +1099,7 @@ def steer(argv):
 
     gaia_cat_file=''
     forced=True
-    nrow_max=30000
+    nrows_max=30000
     files=[]
     xdir=''
     
@@ -972,7 +1117,7 @@ def steer(argv):
             xdir=argv[i]
         elif argv[i]=='-nmax':
             i+=1
-            nrow_max=int(argv[i])
+            nrows_max=int(argv[i])
         elif argv[i]=='-gcat':
             i+=1
             gaia_cat_file=argv[i]
@@ -985,12 +1130,12 @@ def steer(argv):
 
 
     if xdir!='':
-        do_dir(xdir=xdir,nrow_max=nrow_max,forced=forced)
+        do_dir(xdir=xdir,nrows_max=nrows_max,forced=forced)
         return
 
     for one in files:
         print('Processing %s' % one)
-        do_one(one,gaia_cat_file,forced)
+        do_one(one,gaia_cat_file,forced,nrows_max)
         return
 
 
