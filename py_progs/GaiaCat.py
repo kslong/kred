@@ -180,16 +180,6 @@ def unique_rows_within_tol(tab, tol=0.01):
     return tab[unique_indices]
 
 
-def get_no_jobs(jobs):
-    '''
-    Check how many jobs are running
-    '''
-    njobs=0
-    for one in jobs:
-        if one.is_alive():
-            njobs+=1
-    return njobs
-
 
 
 
@@ -354,10 +344,12 @@ def get_gaia_flux(xid=4658604348568208768):
     return ha_flux,s2_flux,r_flux,n708_flux
 
 
-def get_gaia_new(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
+def get_gaia_from_archive_new(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
              outroot='', nmax=-1, redo=False, max_retries=3, retry_delay=5):
     '''
     Get data from the Gaia photometric catalog with retry logic for network errors.
+
+    THIS IS UNTESTED, AND IS ONLY NEEDED IF WE NEED MORE DATA FROM ESA
 
     Parameters
     ----------
@@ -454,7 +446,7 @@ def get_gaia_new(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
     print('Wrote %s with %d objects' % (outfile, len(r)))
     return outfile
 
-def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
+def get_gaia_from_archive(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
     '''
     Get data from the Gaia photometric catalog
     '''
@@ -504,6 +496,67 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot=
     r['Source_name','RA','Dec','B','G','R','teff','log_g','D'].write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' %(outfile,len(r)))
     return outfile
+
+
+def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, size_deg=0.3,outroot='',filename='Gaia_MagClouds.fits'):
+    '''
+    Retrieve entries from a table containg informations about stars that are in the Gaia catolog.
+
+
+    Notes:
+    Unlike some other routines the file that is retrieved is 'square' in RA and Dec.
+
+
+    '''
+
+    # first locate the file
+    
+    if os.path.isfile(filename):
+        xfilename=filename
+    elif os.path.isfile('%s/%s' % ('Gaia',filename)):
+        xfilename='%s/%s' % ('Gaia',filename)
+    else:
+        KRED = os.environ.get("KRED")
+        if KRED is not None:
+            if os.path.isfile('%s/%s/%s' % (KRED,'xdata',filename)):
+                xfilename='%s/%s/%s' % (KRED,'xdata',filename)
+            else:
+                raise IOError('Could not locate %s' % filename)
+        else:
+              raise IOError('Enviroment variable KRED is not set')
+
+    if xfilename.count('fits'):
+        xtab=Table.read(xfilename)
+    else:
+        xtab=ascii.read(xfilename)
+
+    dec_min=dec-0.5*size_deg
+    dec_max=dec+0.5*size_deg
+    xscale=np.cos(dec/57.29578)
+    factor=0.5*size_deg/xscale
+    ra_min=ra-factor
+    ra_max=ra+factor
+
+    mask=((ra_min < xtab['RA']) & (xtab['RA']< ra_max) &  (dec_min < xtab['RA']) &  (xtab['RA'] < ra_max))
+
+    ftab=xtab[mask]
+
+    if outroot=='':
+        outroot='%06.2f_%06.2f' % (ra,dec)
+    
+    os.makedirs('Gaia',exist_ok=True)
+    outfile='Gaia/Gaia.%s.fits' % outroot
+
+    ftab.write(outfile,format='fits',overwrite=True)
+
+    return outfile
+    
+
+
+
+
+
+
 
 
 

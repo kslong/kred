@@ -61,6 +61,7 @@ from astropy.table import join
 import matplotlib.cm as cm
 import PhotCompare
 from kred import ImageSum
+from kred import GaiaCat
 
 
 
@@ -68,12 +69,12 @@ def color_compare(cont_image,subtracted_image,forced=False):
 
     print('Making new GaiCat file')
     ra,dec,size_deg=PhotCompare.get_size(cont_image)
-    gaia_file=PhotCompare.get_gaia(ra, dec, size_deg,outroot='',nmax=-1)
+    gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot='')
     # So at this point I have the Gaifile
 
-    cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,'')
+    cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,-1,'')
     print(cont_phot)
-    sub_phot=PhotCompare.do_forced_photometry(subtracted_image,gaia_file,'')
+    sub_phot=PhotCompare.do_forced_photometry(subtracted_image,gaia_file,-1,'')
     print(sub_phot)
     return cont_phot,sub_phot,gaia_file
 
@@ -156,9 +157,13 @@ def doit(continuum_file='DECam_SWARP2/LMC_c35/T06/LMC_c35_T06.r.fits',subtracted
     except ValueError:
         print('Unsucessful for theis combination: %s %s' % (continuum_file,subtracted_file))
         return
-    cont=ascii.read(cont_phot)
-    sub=ascii.read(sub_phot)
-    gaia=ascii.read(gaia_file)
+
+    cont=PhotCompare.read_table(cont_phot)
+    sub=PhotCompare.read_table(sub_phot)
+    gaia=PhotCompare.read_table(gaia_file)
+    # cont=ascii.read(cont_phot)
+    # sub=ascii.read(sub_phot)
+    # gaia=ascii.read(gaia_file)
     gaia['id']=np.arange(len(gaia))+1
     gaia['G-R']=gaia['G']-gaia['R']
 

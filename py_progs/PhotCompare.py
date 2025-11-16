@@ -121,6 +121,26 @@ from http.client import IncompleteRead
 from kred import ImageSum
 from kred import GaiaCat
 
+
+def read_table(filename):
+    '''
+    This is a generic routine to try to read a table
+    in fits or ascii format.  It is intended to accommodate 
+    several different types of formats.
+    '''
+
+    if not os.path.isfile(filename):
+        raise IOError ('read_table: %s does not appear to exist' % filename)
+
+    try:
+        xtable=Table.read(filename)
+    except:
+        try:
+            xtable=ascii.read(filename)
+        except:
+            raise IOError('read_table: %s exist, but could not be read' % filename)
+    return xtable
+
 def random_rows(tab, nrows, seed=None):
     """
     Randomly select rows from an Astropy Table without duplicates.
@@ -358,11 +378,14 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
         print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
 
 
-    try:
-        sources=ascii.read(object_file)
-    except:
-        print('Error: do_photometry: could not read object file %s' % object_file)
-        return 'Error'
+    sources=read_table(object_file)
+
+
+    # try:
+    #     sources=ascii.read(object_file)
+    # except:
+    #     print('Error: do_photometry: could not read object file %s' % object_file)
+    #     return 'Error'
 
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
     sources['xcentroid'], sources['ycentroid'] = image_wcs.world_to_pixel(coords)
@@ -449,7 +472,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
 
 
-def do_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',outroot=''):
+def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     '''
     Locate and measure fluxes from source in an image
     '''
@@ -556,17 +579,26 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     240527 - this is a new version which useds KDTree
     '''
     # Read the two Astropy tables
-    try:
-        table1 = Table.read(table1_path,format='ascii.fixed_width_two_line')
-    except:
-        print('Error: find_closest_objects: could not read %s' % table1_path)
-        return []
+
+    table1=read_table(table1_path)
+    table2=read_table(table2_path)
+    # try:
+    #     if table1_path.count('fits'):
+    #         table1=Table.read(table1_path)
+    #     else:
+    #         table1 = Table.read(table1_path,format='ascii.fixed_width_two_line')
+    # except:
+    #     print('Error: find_closest_objects: could not read %s' % table1_path)
+    #     return []
     
-    try:
-        table2 = Table.read(table2_path,format='ascii.fixed_width_two_line')
-    except:
-        print('Error: find_closest_objects: could not read %s' % table2_path)
-        return []
+    # try:
+    #     if table2_path.count('fits'):
+    #         table2=Table.read(table2_path)
+    #     else:
+    #         table2 = Table.read(table2_path,format='ascii.fixed_width_two_line')
+    # # except:
+    #     print('Error: find_closest_objects: could not read %s' % table2_path)
+    #     return []
 
     print('get_closest_objects: Beginning x-match of %s and %s' % (table1_path,table2_path))
     
@@ -667,7 +699,7 @@ def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
     
     closest_objects_table = find_closest_objects(gaia_file, phot_file)
     if len(closest_objects_table)==0:
-        print('Errror: There are no objects that were xmatched')
+        print('Error: There are no objects that were xmatched')
         return
     
     if outroot=='':
@@ -733,18 +765,18 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
 
     gaia_files=[]
     for one in zpos:
-        gaia_file=GaiaCat.get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
+        gaia_file=GaiaCat.get_gaia(one['RA'], one['Dec'], one['Size'],outroot='')
         gaia_files.append(gaia_file)
     zpos['gaia_file']=gaia_files
 
     print('Finished getting gaia tables for %d files' % len(zpos))
 
+    xpos=join(xpos,zpos['RA','Dec','Size','gaia_file'],join_type='left')
+
     # At this point all of the gaia files that we need should exist
 
     for one in xpos:
-        gaia_file=GaiaCat.get_gaia(one['RA'], one['Dec'], one['Size'],outroot='',nmax=-1)
-        do_xphot(one['filename'],gaia_file,forced,nrows_max,outroot)
-
+        do_xphot(one['filename'],one['gaia_file'],forced,nrows_max,outroot)
 
     return
 
