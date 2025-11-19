@@ -537,7 +537,9 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, size_deg=0.3,outroot
     ra_min=ra-factor
     ra_max=ra+factor
 
-    mask=((ra_min < xtab['RA']) & (xtab['RA']< ra_max) &  (dec_min < xtab['RA']) &  (xtab['RA'] < ra_max))
+    # print('XX get_gaia', ra_min,ra_max,dec_min,dec_max)
+
+    mask=((ra_min < xtab['RA']) & (xtab['RA']< ra_max) &  (dec_min < xtab['Dec']) &  (xtab['Dec'] < dec_max))
 
     ftab=xtab[mask]
 
@@ -603,10 +605,12 @@ def steer(argv):
         do_dir(xdir=xdir,nrows_max=nrows_max,forced=forced)
         return
 
+    print(files)
+
     for one in files:
         print('Processing %s' % one)
         do_one(one,gaia_cat_file,forced,nrows_max)
-        return
+    return
 
 
            

@@ -195,22 +195,28 @@ def table_create(xdir='DECam_SUB2',outname=''):
         name=one_file.split('/')[-1]
         word=name.split('.')
         header = fits.getheader(one_file, ext=0)
-        source.append(header['Object'])
+        xsource=header['Object']
         try:
             info=get_image_center_and_size_from_header(header)
-            info=get_image_center_and_size_from_header(header)
-            xtype.append(word[-2])
+            xxtype=word[-2]
         except:
             # This is likely and individual ccd image
-            header = fits.getheader(one_file, ext=1)
-            info=get_image_center_and_size_from_header(header)
-            fiddle=word[-2]
-            fiddle=fiddle.split('_')
-            xtype.append('%s-%s' % (fiddle[-3],fiddle[-1]))
+            try:
+                header = fits.getheader(one_file, ext=1)
+                info=get_image_center_and_size_from_header(header)
+                fiddle=word[-2]
+                fiddle=fiddle.split('_')
+                xxtype='%s-%s' % (fiddle[-3],fiddle[-1])
+            except:
+                print('Error: Could not handle %s' % one_file)
+                continue
+
+        source.append(xsource)
         ra.append(info['center_ra'])
         dec.append(info['center_dec'])
         width.append(info['width_deg'])
         height.append(info['height_deg'])
+        xtype.append(xxtype)
 
     dec=np.array(dec)
     height=np.array(height)

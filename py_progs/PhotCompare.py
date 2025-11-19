@@ -113,7 +113,8 @@ from gaiaxpy import calibrate
 from scipy.spatial import KDTree
 import numpy as np
 from astropy.table import Table
-
+from astropy.wcs import NoConvergence
+from astropy.wcs._wcs import InvalidCoordinateError
 
 import time
 from http.client import IncompleteRead
@@ -298,8 +299,14 @@ def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         words=filename.split('/')
         outroot=words[-1].replace('.fits','')
         
-    image_wcs=WCS(x[0].header)
-    image=x[0].data
+    # Allow for the data to be in the first of second image
+    if x[0].data is not None:
+        image_wcs=WCS(x[0].header)
+        image=x[0].data
+    elif x[1].data is not None:
+        image_wcs=WCS(x[1].header)
+        image=x[1].data
+
     # print(np.median(image))
 
     image-=np.median(image)
@@ -344,7 +351,7 @@ def locate_first_image_extension(xx):
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',nrows_max=-1,outroot=''):
     '''
-    Do photometry based on ra and decs
+    Do forced photometry based on ra and decs, where the object file contains a set of source positions
     '''
     
     try:
@@ -359,6 +366,8 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
         raise IOError('No Image extension in %s' % filename)
 
 
+    # ra,dec,size_deg=get_size(filename)
+    # print('calculated ',ra,dec,size_deg)
 
         
     image_wcs=WCS(x[image_ext].header)
@@ -366,7 +375,6 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     image-=np.median(image)
     NAXIS1=x[image_ext].header['NAXIS1']
     NAXIS2=x[image_ext].header['NAXIS2']
-
 
 
     xexptime=x['PRIMARY'].header['EXPTIME']
@@ -381,23 +389,49 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     sources=read_table(object_file)
 
 
-    # try:
-    #     sources=ascii.read(object_file)
-    # except:
-    #     print('Error: do_photometry: could not read object file %s' % object_file)
-    #     return 'Error'
-
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
-    sources['xcentroid'], sources['ycentroid'] = image_wcs.world_to_pixel(coords)
+
+    # print('There are %d sources' % len(sources))
+    # print('The range in ra and dec is  :', np.min(sources['RA']),np.max(sources['RA']),np.min(sources['Dec']),np.max(sources['Dec']))
+    # print('The range in ra and dec is  :', np.median(sources['RA']),np.average(sources['RA']),np.median(sources['Dec']),np.average(sources['Dec']))
+
+
+
+    # Initialize with NaNs
+    sources['xcentroid'] = np.nan
+    sources['ycentroid'] = np.nan
+
+    try:
+        x, y = image_wcs.world_to_pixel(coords)
+        sources['xcentroid'] = x
+        sources['ycentroid'] = y
+    except (NoConvergence, InvalidCoordinateError) as e:
+        if isinstance(e, NoConvergence):
+            sources['xcentroid'] = e.best_solution[0]
+            sources['ycentroid'] = e.best_solution[1]
+            print(f"Warning: {len(e.divergent)} coordinates failed to converge")
+        else:
+            print(f"Warning: Severe coordinate transformation error - skipping bad coordinates")
+            # Set all to NaN, mask will filter them out
 
     mask = (
-    (sources['xcentroid'] >= 0) &
-    (sources['xcentroid'] <  NAXIS1) &
-    (sources['ycentroid'] >= 0) &
-    (sources['ycentroid'] <  NAXIS2)
+        np.isfinite(sources['xcentroid']) &
+        np.isfinite(sources['ycentroid']) &
+        (sources['xcentroid'] >= 0) &
+        (sources['xcentroid'] < NAXIS1) &
+        (sources['ycentroid'] >= 0) &
+        (sources['ycentroid'] < NAXIS2)
     )
 
-    sources=sources[mask]
+    sources = sources[mask]
+    print(f"Kept {np.sum(mask)} sources on detector out of {len(mask)}")
+
+    center_coord = image_wcs.pixel_to_world(NAXIS1/2, NAXIS2/2)
+    # print(f"Calculated center: RA={center_coord.ra.deg:.6f}, Dec={center_coord.dec.deg:.6f}")
+    # print(f"CRVAL from header: RA={image_wcs.wcs.crval[0]:.6f}, Dec={image_wcs.wcs.crval[1]:.6f}")
+    # print(f"CRPIX from header: {image_wcs.wcs.crpix}")
+
+
     npossible=len(sources)
 
     if nrows_max>0 and len(sources)>nrows_max:
@@ -459,7 +493,6 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
 
     
-    # print(phot_table)  
     outfile='%s/%s_phot.txt' % (tab_dir,outroot)
     phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote %s with %d objects' % (outfile,len(phot_table)))
@@ -582,23 +615,6 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
 
     table1=read_table(table1_path)
     table2=read_table(table2_path)
-    # try:
-    #     if table1_path.count('fits'):
-    #         table1=Table.read(table1_path)
-    #     else:
-    #         table1 = Table.read(table1_path,format='ascii.fixed_width_two_line')
-    # except:
-    #     print('Error: find_closest_objects: could not read %s' % table1_path)
-    #     return []
-    
-    # try:
-    #     if table2_path.count('fits'):
-    #         table2=Table.read(table2_path)
-    #     else:
-    #         table2 = Table.read(table2_path,format='ascii.fixed_width_two_line')
-    # # except:
-    #     print('Error: find_closest_objects: could not read %s' % table2_path)
-    #     return []
 
     print('get_closest_objects: Beginning x-match of %s and %s' % (table1_path,table2_path))
     
@@ -660,21 +676,29 @@ def get_size(filename='LMC_c48_T08.r.t060.fits'):
     try:
         x=fits.open(filename)
     except:
-        print('Could not open %s' % filename)
-        raise ValueError
-    
-    wcs = WCS(x[0].header)
-         
-     # Get the shape of the image
-    naxis1 = x[0].header['NAXIS1']
-    naxis2 = x[0].header['NAXIS2']
-        
+        print('get_size: Could not open %s' % filename)
+        raise IOError('get_size: Could not open %s' % filename)
+
+    try:
+        wcs = WCS(x[0].header)
+        # Get the shape of the image
+        naxis1 = x[0].header['NAXIS1']
+        naxis2 = x[0].header['NAXIS2']
+    except:
+        try:
+            wcs = WCS(x[1].header)
+            # Get the shape of the image
+            naxis1 = x[1].header['NAXIS1']
+            naxis2 = x[1].header['NAXIS2']
+        except:
+            raise IOError('get_size: Could not get info for %s' % filename)
+
     # Calculate the pixel coordinates of the center
     center_pixel = (naxis1 / 2, naxis2 / 2)
-        
+
     # Convert pixel coordinates to RA and Dec
     center_ra_dec = wcs.pixel_to_world(center_pixel[0], center_pixel[1])
-        
+
     # Calculate the size of the image in degrees
     # The size is determined by the diagonal distance from the center to the corner of the image
     corner_pixel = (0, 0)
@@ -683,6 +707,7 @@ def get_size(filename='LMC_c48_T08.r.t060.fits'):
     ra=center_ra_dec.ra.deg
     dec=center_ra_dec.dec.deg
     return ra,dec,size_deg
+
 
 def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
     
@@ -695,7 +720,6 @@ def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
         phot_file=do_photometry(filename,object_file,outroot)
 
 
-    # phot_file=get_photometry(filename,outroot)
     
     closest_objects_table = find_closest_objects(gaia_file, phot_file)
     if len(closest_objects_table)==0:
@@ -714,7 +738,11 @@ def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
 def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,nrows_max=-1,outroot=''):
     '''
     Compare photometry in an image to photometry from Gaia
+
     '''
+
+
+
     try:
         x=fits.open(filename)
     except:
@@ -726,9 +754,10 @@ def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,nrow
         gaia_file=gaia_cat_file
         print('Using existing GaiaCat file: %s' % gaia_cat_file)
     else:
-        # print('Making new GaiaCat file')
         ra,dec,size_deg=get_size(filename)
-        gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot,nmax=-1)
+        print('Making new GaiaCat file - %.2f %.2f %.2f' % (ra,dec,size_deg))
+        print('do_one - RA, Dec, size: ',ra,dec,size_deg)
+        gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot)
 
 
     do_xphot(filename,gaia_file,forced,nrows_max,outroot)
@@ -752,7 +781,7 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
             x=fits.open(filename)
         except:
             print('do_many: Could not open %s' % filename)
-            raise ValueError
+            raise IOError
         ra,dec,size=get_size(filename)
         xra.append(ra)
         xdec.append(dec)
@@ -838,10 +867,16 @@ def steer(argv):
         do_dir(xdir=xdir,nrows_max=nrows_max,forced=forced)
         return
 
+
+
+    i=1
     for one in files:
-        print('Processing %s' % one)
+        print('\nProcessing %s (%d/%d' % (one,i,len(files)))
         do_one(one,gaia_cat_file,forced,nrows_max)
-        return
+        i+=1
+
+
+    return
 
 
 

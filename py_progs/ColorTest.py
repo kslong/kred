@@ -68,7 +68,12 @@ from kred import GaiaCat
 def color_compare(cont_image,subtracted_image,forced=False):
 
     print('Making new GaiCat file')
-    ra,dec,size_deg=PhotCompare.get_size(cont_image)
+    try:
+        ra,dec,size_deg=PhotCompare.get_size(cont_image)
+    except IOError as e:
+        print(f'Error:color_compare: {e}')
+        return
+
     gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot='')
     # So at this point I have the Gaifile
 
@@ -82,8 +87,9 @@ def color_compare(cont_image,subtracted_image,forced=False):
 
 
 def plot_both(gaia,final,title=''):
+    plt.close(3)
     plt.figure(3,(12,6))
-    plt.clf()
+    # plt.clf()
     plt.subplot(1,2,1)
     # plt.plot(gaia['G']-gaia['R'],gaia['R'],'.',alpha=0.01)
     sc=plt.scatter(gaia['G']-gaia['R'],gaia['R'],c=gaia['G']-gaia['R'],marker='.',cmap='plasma',vmin=-1,vmax=1,alpha=0.01)
@@ -154,7 +160,7 @@ def doit(continuum_file='DECam_SWARP2/LMC_c35/T06/LMC_c35_T06.r.fits',subtracted
 
     try:
         cont_phot,sub_phot,gaia_file=color_compare(continuum_file,subtracted_file)
-    except ValueError:
+    except:
         print('Unsucessful for theis combination: %s %s' % (continuum_file,subtracted_file))
         return
 
@@ -254,7 +260,7 @@ def steer(argv):
         do_dir(xdir=xdir,nrow_max=nrow_max)
         return
 
-    cont_files=find_cont(filenames)
+    cont_files=find_cont(filens)
     xtab=Table([files,cont_files],names=['filename','cont_file'])
     for one_row in xtab:
         doit(continuum_file=one_row['cont_file'],subtracted_file=one_row['filename'])
