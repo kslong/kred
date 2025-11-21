@@ -130,6 +130,8 @@ def read_table(filename):
     several different types of formats.
     '''
 
+    print('XXXX - filename ',filename)
+
     if not os.path.isfile(filename):
         raise IOError ('read_table: %s does not appear to exist' % filename)
 
@@ -168,7 +170,7 @@ def random_rows(tab, nrows, seed=None):
     indices = rng.choice(len(tab), size=nrows, replace=False)
     return tab[indices]
 
-def unique_rows_within_tol(tab, tol=0.01):
+def old_unique_rows_within_tol(tab, tol=0.01):
     """
     Return unique rows from an Astropy table based on approximate
     equality of RA, Dec, and Size within a given tolerance (in degrees).
@@ -202,6 +204,66 @@ def unique_rows_within_tol(tab, tol=0.01):
 
     return tab[unique_indices]
 
+
+
+def unique_rows_within_tol(tab, tol=0.01):
+    """
+    Return unique rows from an Astropy table based on approximate
+    equality of RA, Dec, and Size within a given tolerance (in degrees).
+
+    Parameters
+    ----------
+    tab : astropy.table.Table
+        Table containing columns 'RA', 'Dec', and 'Size' (in degrees).
+    tol : float, optional
+        Matching tolerance in degrees. Default is 0.01°.
+
+    Returns
+    -------
+    unique_tab : astropy.table.Table
+        New table containing one representative row per unique group.
+    mapping : np.ndarray
+        Array of length len(tab) where mapping[i] gives the index in
+        unique_tab that row i of the original table maps to.
+    """
+    # Stack RA, Dec, Size into a NumPy array
+    data = np.vstack([tab['RA'], tab['Dec'], tab['Size']]).T
+
+    # Initialize list of unique rows and mapping array
+    unique_indices = []
+    mapping = np.full(len(data), -1, dtype=int)
+    used = np.zeros(len(data), dtype=bool)
+
+    for i in range(len(data)):
+        if used[i]:
+            continue
+
+        # Find all rows within tolerance of row i
+        diff = np.abs(data - data[i])
+        mask = np.all(diff < tol, axis=1)
+
+        # Mark them as used and map them to the current unique group
+        used[mask] = True
+        group_idx = len(unique_indices)
+        mapping[mask] = group_idx
+
+        # Add representative row
+        unique_indices.append(i)
+
+    return tab[unique_indices], mapping
+
+
+# Example usage:
+# unique_tab, mapping = unique_rows_within_tol(my_table, tol=0.01)
+#
+# To get back to original table rows:
+# for i, row in enumerate(my_table):
+#     unique_idx = mapping[i]
+#     print(f"Row {i} maps to unique row {unique_idx}")
+#
+# To find all original rows that map to a specific unique row:
+# unique_row_idx = 5
+# original_indices = np.where(mapping == unique_row_idx)[0]
 
 def do_fig(xtab,outroot):
 
@@ -710,6 +772,8 @@ def get_size(filename='LMC_c48_T08.r.t060.fits'):
 
 
 def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
+
+    print('XXX - do_xphot  %s gaia %s' % (filename,gaia_file))
     
 
     if forced:
@@ -740,6 +804,8 @@ def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,nrow
     Compare photometry in an image to photometry from Gaia
 
     '''
+
+    
 
 
 
@@ -788,7 +854,7 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
         xsize.append(size)
 
     xpos=Table([filenames,xra,xdec,xsize],names=['filename','RA','Dec','Size'])
-    zpos=unique_rows_within_tol(xpos, tol=0.01)
+    zpos, mapping =unique_rows_within_tol(xpos, tol=0.01)
 
     print("Finished getting positions ")
 
@@ -800,11 +866,17 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
 
     print('Finished getting gaia tables for %d files' % len(zpos))
 
-    xpos=join(xpos,zpos['RA','Dec','Size','gaia_file'],join_type='left')
+    xpos.write('xpos.txt',format='ascii.fixed_width_two_line',overwrite=True)
+    zpos.write('zpos.txt',format='ascii.fixed_width_two_line',overwrite=True)
+
+
+    xpos['gaia_file']=zpos['gaia_file'][mapping]
+    xpos.write('xxpos.txt',format='ascii.fixed_width_two_line',overwrite=True)
 
     # At this point all of the gaia files that we need should exist
 
     for one in xpos:
+        print('ZZZ',one)
         do_xphot(one['filename'],one['gaia_file'],forced,nrows_max,outroot)
 
     return
