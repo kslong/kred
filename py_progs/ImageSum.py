@@ -191,11 +191,27 @@ def table_create(xdir='DECam_SUB2',outname=''):
     dec=[]
     height=[]
     width=[]
+    exptime=[]
+    ffilter=[]
+    mag=[]
+    seeing=[]
     for one_file in files:
         name=one_file.split('/')[-1]
         word=name.split('.')
         header = fits.getheader(one_file, ext=0)
         xsource=header['Object']
+        xexptime=header['EXPTIME']
+        xfilter=header['FILTER']
+        xfilter=xfilter.split()[0]
+        try:
+            xmag=header['MAGZERO']
+        except:
+            xmag=-999.
+        try:
+            xseeing=header['SEEING']
+        except:
+            xseeing=-999.
+
         try:
             info=get_image_center_and_size_from_header(header)
             xxtype=word[-2]
@@ -217,16 +233,23 @@ def table_create(xdir='DECam_SUB2',outname=''):
         width.append(info['width_deg'])
         height.append(info['height_deg'])
         xtype.append(xxtype)
+        exptime.append(xexptime)
+        ffilter.append(xfilter)
+        mag.append(xmag)
+        seeing.append(xseeing)
 
     dec=np.array(dec)
     height=np.array(height)
     width=np.array(width)
     width*=np.cos(dec/(180./np.pi))
-    xtab=Table([source,xtype,ra,dec,width,height,files],names=['Source_name','Image_type','RA','Dec','width','height','filename'])
+    xtab=Table([source,ffilter,exptime,xtype,ra,dec,width,height,mag,seeing,files],
+               names=['Source_name','Filter','Exptime','Image_type','RA','Dec','width','height','mag','seeing','filename'])
     xtab['RA'].format='.5f'
     xtab['Dec'].format='.5f'
     xtab['width'].format='.2f'
     xtab['height'].format='.2f'
+    xtab['mag'].format='.2f'
+    xtab['seeing'].format='.2f'
 
     if outname==None:
         return xtab
