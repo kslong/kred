@@ -123,6 +123,9 @@ from kred import ImageSum
 from kred import GaiaCat
 
 
+XDIR=''  # Part of a directory name; used to isolate different runs of PhotCompare
+
+
 def read_table(filename):
     '''
     This is a generic routine to try to read a table
@@ -265,9 +268,11 @@ def unique_rows_within_tol(tab, tol=0.01):
 # unique_row_idx = 5
 # original_indices = np.where(mapping == unique_row_idx)[0]
 
-def do_fig(xtab,outroot):
+def xdo_fig(xtab,outroot):
 
-    os.makedirs('./Figs_phot',exist_ok=True)
+    outdir='./Figs_phot%s' %  XDIR
+
+    os.makedirs(outdir,exist_ok=True)
     plt.figure(1,(12,6))
     plt.clf()
     plt.subplot(1,2,1)
@@ -295,12 +300,107 @@ def do_fig(xtab,outroot):
     plt.ylim(11,24)
     plt.xlim(11,24)  
     plt.tight_layout()
-    plt.savefig('./Figs_phot/%s.png' % outroot)
+    plt.savefig('%s/%s.png' % (outdir,outroot))
+
+
+
+def do_fig(xtab,outroot):
+
+    outdir='./Figs_phot%s' %  XDIR
+
+    os.makedirs(outdir,exist_ok=True)
+    plt.figure(1,(9,8))
+    plt.clf()
+    plt.subplot(2,2,1)
+    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    if 'G' in xtab.colnames:
+        sc=plt.scatter(xtab['G'],xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+        sc=plt.scatter(xtab['G'],-xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+        cbar=plt.colorbar(sc)
+        cbar.set_label('G-R')
+        # Make colorbar solid (ignore scatter alpha)
+        if hasattr(cbar, "solids") and cbar.solids is not None:
+            cbar.solids.set_alpha(1.0) 
+    else:
+        plt.scatter(xtab['G'],xtab['phot_mag'],marker='.',alpha=.05)
+        plt.scatter(xtab['G'],-xtab['phot_mag'],marker='.',alpha=.05)
+    plt.xlabel('Gaia G mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,24],[11,24],'k-')
+
+    plt.ylim(14,22)
+    plt.xlim(14,22) 
+
+
+
+    plt.tight_layout()
+    plt.subplot(2,2,2)
+    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    if 'G' in xtab.colnames:
+        sc=plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+        sc=plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+        cbar=plt.colorbar(sc)
+        cbar.set_label('G-R')
+        # Make colorbar solid (ignore scatter alpha)
+        if hasattr(cbar, "solids") and cbar.solids is not None:
+            cbar.solids.set_alpha(1.0) 
+    else:
+        plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05)
+        plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05)
+    plt.xlabel('Gaia R mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,24],[11,24],'k-')
+    plt.ylim(14,22)
+    plt.xlim(14,22)  
+
+
+
+    plt.subplot(2,2,3)
+    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    sc=plt.scatter(xtab['G'],xtab['phot_mag']-xtab['G'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+    sc=plt.scatter(xtab['G'],xtab['phot_mag']+xtab['G'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+    cbar=plt.colorbar(sc)
+    cbar.set_label('G-R')
+    # Make colorbar solid (ignore scatter alpha)
+    if hasattr(cbar, "solids") and cbar.solids is not None:
+        cbar.solids.set_alpha(1.0) 
+    plt.xlabel('Gaia G mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,24],[0,0],'k-')
+
+    plt.ylim(-2,2) 
+    plt.xlim(14,22) 
+
+    plt.subplot(2,2,4)
+    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    under=xtab[xtab['phot_mag']>0]
+    # plt.text(16,1.5,'Under %d Over %d' % (len(under),len(xtab)-len(under)))
+    sc=plt.scatter(xtab['R'],xtab['phot_mag']-xtab['R'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+    sc=plt.scatter(xtab['R'],xtab['phot_mag']+xtab['R'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
+    cbar=plt.colorbar(sc)
+    cbar.set_label('G-R')
+    # Make colorbar solid (ignore scatter alpha)
+    if hasattr(cbar, "solids") and cbar.solids is not None:
+        cbar.solids.set_alpha(1.0) 
+    plt.xlabel('Gaia R mag')
+    plt.ylabel('DECam mag')
+    plt.plot([11,24],[0,0],'k-')
+    plt.ylim(-2,2) 
+    plt.xlim(14,22)  
+
+    plt.suptitle(outroot)
+    # OK now we can save
+    plt.tight_layout()
+
+    plt.savefig('%s/%s.png' % (outdir,outroot))
 
 
 def do_fig_diff(xtab,outroot):
 
-    os.makedirs('./Figs_phot',exist_ok=True)
+    outdir='./Figs_phot%s' %  XDIR
+    os.makedirs(outdir,exist_ok=True) 
+
+
     plt.figure(1,(12,6))
     plt.clf()
     plt.subplot(1,2,1)
@@ -331,7 +431,7 @@ def do_fig_diff(xtab,outroot):
     plt.ylim(-5,5) 
     plt.xlim(11,22)  
     plt.tight_layout()
-    plt.savefig('./Figs_phot/%s.png' % outroot)
+    plt.savefig('%s/%s.png' % (outdir,outroot))
 
     
 def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
@@ -352,7 +452,7 @@ def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         xfilter=words[-3]
         print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
 
-    tab_dir='./TabPhot'
+    tab_dir='./TabPhot%s' % XDIR
 
     os.makedirs(tab_dir,exist_ok=True)
 
@@ -387,8 +487,6 @@ def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     for col in sources.colnames:  
         sources[col].info.format = '%.8g'  # for consistent table output
 
-    # print(sources) 
-    # sources.write('TabPhot/%s/%s_sources.txt' % (tab_dir,outroot),format='ascii.fixed_width_two_line',overwrite=True)
     outname='%s/%s_sources.txt' % (tab_dir,outroot)
     sources.write(outname,format='ascii.fixed_width_two_line',overwrite=True)
 
@@ -449,6 +547,10 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
 
     sources=read_table(object_file)
+    if 'G' in sources.colnames:
+        good = ~sources['R'].mask      # True where FLUX is NOT masked
+        sources=sources[good]
+        sources['G'] = sources['G'].filled()
 
 
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
@@ -501,7 +603,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
     print('Forced photometry of %d of %d possible sources' % (len(sources),npossible))
 
-    tab_dir='./TabPhot'
+    tab_dir='./TabPhot%s' % XDIR
 
     os.makedirs(tab_dir,exist_ok=True)
 
@@ -607,7 +709,7 @@ def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
         print('Error: do_photometry: could not read object file %s' % object_file)
         return 'Error'
 
-    tab_dir='./TabPhot'
+    tab_dir='./TabPhot%s' % XDIR
 
     os.makedirs(tab_dir,exist_ok=True)
 
@@ -718,13 +820,17 @@ def find_closest_objects(table1_path, table2_path, max_sep=0.5):
 
     
     print('Of %d objects in %s and %d objects in %s, found %d matches' % (len(table1),table1_path,len(table2),table2_path,len(xtab)))
+
+    tab_dir='TabPhot%s' % XDIR
     
     if len(xtab):
         words=table1_path.split('/')
         one=words[-1].replace('.txt','')
+        one=one.replace('.fits','')
         words=table2_path.split('/')
         two=words[-1].replace('.txt','')
-        outfile='TabPhot/xmatch_%s_%s.txt' % (one,two)
+        two=two.replace('.fits','')
+        outfile='%s/%s_x_%s.txt' % (tab_dir,two,one)
         xtab.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
     else:
         print('Error: There are no objects that are closer thn %f arcsec' % max_sep)
@@ -903,11 +1009,14 @@ def steer(argv):
     Usage: PhotCompare.py -h -for -unf -dir -nmax -gcat file1
     '''
 
+    global XDIR
+
     gaia_cat_file=''
     forced=True
     nrows_max=30000
     files=[]
     xdir=''
+    outdir=''
     
     i=1
     while i<len(argv):
@@ -921,6 +1030,9 @@ def steer(argv):
         elif argv[i]=='-dir':
             i+=1
             xdir=argv[i]
+        elif argv[i]=='-out':
+            i+=1
+            out=argv[i]
         elif argv[i]=='-nmax':
             i+=1
             nrows_max=int(argv[i])
@@ -936,6 +1048,7 @@ def steer(argv):
 
 
     if xdir!='':
+        XDIR='_%s' % (xdir.replace('/','-'))
         do_dir(xdir=xdir,nrows_max=nrows_max,forced=forced)
         return
 
