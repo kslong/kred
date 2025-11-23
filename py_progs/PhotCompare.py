@@ -550,7 +550,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     if 'G' in sources.colnames:
         good = ~sources['R'].mask      # True where FLUX is NOT masked
         sources=sources[good]
-        sources['G'] = sources['G'].filled()
+        # sources['G'] = sources['G'].filled()
 
 
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
