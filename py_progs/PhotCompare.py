@@ -533,6 +533,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     image_wcs=WCS(x[image_ext].header)
     image=x[image_ext].data
     image-=np.median(image)
+    image_mask = (image == 0) |  ~np.isfinite(image)
     NAXIS1=x[image_ext].header['NAXIS1']
     NAXIS2=x[image_ext].header['NAXIS2']
 
@@ -620,21 +621,36 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     annulus_apertures=CircularAnnulus(positions,r_in=4, r_out=8)
 
     phot_table = aperture_photometry(image, apertures)  
-    aper_stats=ApertureStats(image,apertures,sigma_clip=None)
+    aper_stats=ApertureStats(image,apertures,sigma_clip=None,mask=image_mask)
     sigclip=SigmaClip(sigma=3,maxiters=10)
-    bkg_stats=ApertureStats(image,annulus_apertures,sigma_clip=sigclip)
-    total_background=bkg_stats.median*aper_stats.sum_aper_area.value
+    bkg_stats=ApertureStats(image,annulus_apertures,sigma_clip=sigclip,mask=image_mask)
+    total_background=bkg_stats.mean*aper_stats.sum_aper_area.value
     net=aper_stats.sum - total_background
+
+    # Error estimation from background
+    bkg_std_per_pixel = bkg_stats.std  # std dev per pixel in annulus
+    n_aper_pixels = aper_stats.sum_aper_area.value
+    n_bkg_pixels = bkg_stats.sum_aper_area.value
+
+    # Total error includes:
+    # 1. Poisson noise from source (approximated by the net flux)
+    # 2. Background noise in aperture
+    # 3. Uncertainty in background estimate
+    error = np.sqrt(
+        np.abs(net) +  # Poisson from source (assumes gain=1, ADU=electrons)
+        n_aper_pixels * bkg_std_per_pixel**2 +  # Background noise in aperture
+        n_aper_pixels**2 * bkg_std_per_pixel**2 / n_bkg_pixels  # Background estimation error
+        )
 
     phot_table['Raw']=aper_stats.sum 
     phot_table['Bkg']=total_background
     phot_table['Net']=net
+    phot_table['ErrNet']=error
 
-    # phot_table['phot_mag']= 27-2.5*np.log10(phot_table['Net'])
-    # phot_table['phot_mag_simple']= 27-2.5*np.log10(phot_table['aperture_sum'])
+    # 28th mag is correct
 
-    phot_table['phot_mag']= 27-2.5*np.log10(np.fabs(phot_table['Net']))
-    phot_table['phot_mag_simple']= 27-2.5*np.log10(np.fabs(phot_table['aperture_sum']))
+    phot_table['phot_mag']= 28-2.5*np.log10(np.fabs(phot_table['Net']))
+    phot_table['phot_mag_simple']= 28-2.5*np.log10(np.fabs(phot_table['aperture_sum']))
 
     phot_table['phot_mag']=np.select([phot_table['Net']>0],[phot_table['phot_mag']],default=-phot_table['phot_mag'])
     phot_table['phot_mag_simple']=np.select([phot_table['Net']>0],[phot_table['phot_mag_simple']],default=-phot_table['phot_mag_simple'])
