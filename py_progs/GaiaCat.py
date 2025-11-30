@@ -9,60 +9,16 @@ Synopsis:
 Routines to handle retreiving information from the GAIA data base, and to interact
 with datat that has been retrieved from the database.
 
+This is NOT intended to be run from the command line at present but rather 
+contains routines that should be called from other rotuines
+
 
 Command line usage (if any):
 
-    usage: PhotCompare.py -h -dir DECamSWARP2/SMC_c01 -nmax 30000 -forced -unforced file1 file2 ...
+    usage: None                                                                              ..
 
 Description:  
 
-    The routines processes one or more files comparing Gaia photometry
-    and images produced with kred, and produces a figure which is stored 
-    in Figs_phot.  (The xmatch between GAIA and the image is stored
-    in TabPhot)
-
-    There are two basic modes, one which is invoked with -dir, and one if that argument is
-    not present
-
-    If a directory is given, then all of the fits files in that or any subdirecotry are processed.  If
-    this is the case then any specific files are ignored
-
-    If one or more files are given then only those files are processed.
-
-    the various switches are as follows:
-
-    -h prints out this help and quites
-    -dir causes all files in the directory named and any subdirectory to be processed.  The is 
-        a basic assumption made that these images are swarped versions of the original data
-    -nmax places a limit on the number of positions that will be used for forced photometry in the 
-        GAIA catalog.  If nmax<0 all positions are processed
-    -forced causes the progrm to used forced photometry (this is the default)
-    -unforced in this case the routine searches for sources in the image, and then x-matches the
-        postions to GAIA. This is largely a diagnostic mode which might become necessary if there
-        are concerns about the relative astrometry between GAIA and our images.  The results of
-        the seach of the image are stored in TabPhot
-
-
-
-
-Primary routines:
-
-    do_many
-
-Notes:
-
-    The routine retrieves if necessary Gaia catalog information for
-    an image (or group of images), carrieds out aperture photometry
-    on the images, and then x-correlates the results.  
-
-    The most time-consuming part of the process is Gaia catalog
-    retrieval, so this is only done once, if all of the files
-    have the same centers and sizes. The GAIA catalogs are stored
-    in a subdirectory GAIA.  
-
-
-
-    (There are some of functions that are not in the end used.)
 
                                        
 History:
@@ -71,53 +27,82 @@ History:
 240527 ksl Speed up the catalog matching.
 251105 ksl Split finding sources in an image from doing photometry
             on the sources
+251130 ksl Cleaned up so this is just a routine for interacting with
+    the GAIA catolog
 
 '''
-
-
-
-
 
 import os
 import numpy as np
 from astropy.io import fits,ascii
-from photutils.detection import DAOStarFinder
-
-from astropy.stats import mad_std
-from photutils.aperture import aperture_photometry, CircularAperture, CircularAnnulus, ApertureStats
-from astropy.stats import SigmaClip
-
-import matplotlib.pyplot as plt
-from astropy.wcs import WCS
-
-import matplotlib.pyplot as plt
 from astropy.table import Table,join,hstack
-
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import timeit
 import time
-import multiprocessing
-multiprocessing.set_start_method("spawn",force=True)
-
-
-
-from astroquery.gaia import Gaia
-
 import pathlib
 import os.path as path
 import requests
 from gaiaxpy import calibrate
-
-from scipy.spatial import KDTree
-import numpy as np
-from astropy.table import Table
-
-
-import time
 from http.client import IncompleteRead
 
-from kred import ImageSum
+
+def load_Gaia(probe_service: bool = True):
+    """
+    Return the astroquery.gaia.Gaia class.
+    Raises RuntimeError with a message distinguishing:
+      - astroquery not installed
+      - external Gaia assets/services unavailable
+
+    Parameters
+    ----------
+    probe_service : bool, default True
+        If True, perform a tiny network-dependent check to detect
+        external service unavailability immediately. If False, only
+        import Gaia and let service failures occur later at first use.
+
+    Returns
+    -------
+    Gaia : type
+        The Gaia class from astroquery.gaia.
+
+    Raises
+    ------
+    RuntimeError
+        With a distinguishing message for the two failure cases.
+    """
+    # 1) Import-time: distinguish "not installed"
+    try:
+        from astroquery.gaia import Gaia
+    except ImportError as e:
+        raise RuntimeError(
+            "astroquery (or 'astroquery.gaia') is not installed in this environment."
+        ) from e
+
+    # Optional: reduce noise from astropy later (not required)
+    try:
+        from astropy.logger import log
+        log.setLevel('ERROR')
+        from astropy.utils import iers
+        iers.conf.auto_download = False
+        iers.conf.auto_max_age = None
+    except Exception:
+        pass  # if astropy isn't present or settings change, just continue
+
+    # 2) Service probe: distinguish "assets unavailable"
+    if probe_service:
+        try:
+            # Minimal, fast probe. Uncomment one of these depending on your preference:
+            # A) Light sync query (hits TAP, but tiny):
+            Gaia.launch_job("SELECT 1", dump_to_file=False)
+            # B) Alternatively, accessing Gaia.tap can initialize the service object:
+            # _ = Gaia.tap
+        except Exception as e:
+            raise RuntimeError(
+                "Gaia external assets/services appear unavailable or unreachable."
+            ) from e
+
+    return Gaia
 
 def random_rows(tab, nrows, seed=None):
     """
@@ -181,13 +166,14 @@ def unique_rows_within_tol(tab, tol=0.01):
 
 
 
-
-
 def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     """
     Load or download and load from cache the spectrum of a gaia star, converted to erg/s/cm^2/A
 
-    Note that I have 'appropiated' this from the lvm drp
+    Note:
+
+    This was  'appropiated'  from the lvmdrp
+
     """
     # create cache dir if it does not exist
     pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
@@ -291,8 +277,6 @@ def get_gaia_mag28_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda
     return flux28
                          
                    
-                   
-
 
 def get_gaia_flux(xid=4658604348568208768):
     '''
@@ -344,12 +328,17 @@ def get_gaia_flux(xid=4658604348568208768):
     return ha_flux,s2_flux,r_flux,n708_flux
 
 
-def get_gaia_from_archive_new(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
+def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667, rad_deg=0.3,
              outroot='', nmax=-1, redo=False, max_retries=3, retry_delay=5):
     '''
     Get data from the Gaia photometric catalog with retry logic for network errors.
+    by conducting a cone search
+
+
 
     THIS IS UNTESTED, AND IS ONLY NEEDED IF WE NEED MORE DATA FROM ESA
+    Even if it works, some changes are needed, including changing the
+    output format to fits.
 
     Parameters
     ----------
@@ -375,6 +364,16 @@ def get_gaia_from_archive_new(ra=84.92500000000001, dec=-66.27416666666667, rad_
     outfile : str or list
         Path to output file, or empty list if no objects retrieved
     '''
+
+    try:
+        Gaia = load_Gaia(probe_service=True)  # or False if you prefer no network on import
+    except RuntimeError as err:
+        # The message tells you which issue it is:
+        # - "astroquery ... is not installed ..."
+        # - "Gaia external assets/services appear unavailable ..."
+        print(f"Dependency/service error: {err}")
+        raise  RuntimeError
+
     if outroot == '':
         outroot = '%05.1f_%05.1f' % (ra, dec)
 
@@ -446,10 +445,25 @@ def get_gaia_from_archive_new(ra=84.92500000000001, dec=-66.27416666666667, rad_
     print('Wrote %s with %d objects' % (outfile, len(r)))
     return outfile
 
-def get_gaia_from_archive(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
+def get_gaia_from_archive_old(ra=84.92500000000001, dec= -66.27416666666667, rad_deg=0.3,outroot='',nmax=-1,redo=False):
     '''
-    Get data from the Gaia photometric catalog
+    Get data from the Gaia photometric catalog, by exucuting a cone search on the Gaia archive
+
+    Notes
+
+    The routine returns a Runtime Error if the archive is not availalbe (or if astroquery is not installed)
+
     '''
+
+    try:
+        Gaia = load_Gaia(probe_service=True)  # or False if you prefer no network on import
+    except RuntimeError as err:
+        # The message tells you which issue it is:
+        # - "astroquery ... is not installed ..."
+        # - "Gaia external assets/services appear unavailable ..."
+        print(f"Dependency/service error: {err}")
+        raise  RuntimeError
+
     if outroot=='':
         outroot='%06.2f_%06.2f' % (ra,dec)
     
@@ -500,11 +514,22 @@ def get_gaia_from_archive(ra=84.92500000000001, dec= -66.27416666666667, rad_deg
 
 def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, size_deg=0.3,outroot='',filename='Gaia_MagClouds.fits'):
     '''
-    Retrieve entries from a table containg informations about stars that are in the Gaia catolog.
+    Retrieve entries from a local table containg information about stars that are in the Gaia catolog.
+
+    Description
+
+    This routine retrieves information a local table that must be installed either in the directroy
+    from which the program is being run, or from a specific directory, namely kred/xdata.  
+
 
 
     Notes:
-    Unlike some other routines the file that is retrieved is 'square' in RA and Dec.
+
+    The file that covers the SMC and LMC can be found on box
+    
+    Note that this routine does not query the GAIA archive unlike many of the routines in this module
+
+    Unlike some other routines the file that is covers a  'square' regionin RA and Dec.
 
 
     '''
@@ -558,10 +583,6 @@ def get_gaia(ra=84.92500000000001, dec= -66.27416666666667, size_deg=0.3,outroot
 
 
 
-
-
-
-
 def steer(argv):
     '''
     Run the script given choices from the command line
@@ -569,47 +590,21 @@ def steer(argv):
     Usage: PhotCompare.py -h -for -unf -dir -nmax -gcat file1
     '''
 
-    gaia_cat_file=''
-    forced=True
-    nrows_max=30000
-    files=[]
-    xdir=''
-    
-    i=1
-    while i<len(argv):
-        if argv[i].count('-h'):
-            print(__doc__)
-            return
-        elif argv[i][:4]=='-for':
-            forced=True
-        elif argv[i][:4]=='-unf':
-            forced=False
-        elif argv[i]=='-dir':
-            i+=1
-            xdir=argv[i]
-        elif argv[i]=='-nmax':
-            i+=1
-            nrows_max=int(argv[i])
-        elif argv[i]=='-gcat':
-            i+=1
-            gaia_cat_file=argv[i]
-        elif argv[i][0]=='-':
-            print('Unknown switch ',argv)
-            return
-        else:
-            files.append(argv[i])
-        i+=1
+    print('This is not a runtime routine (currently)')
+    print(__doc__)
+    #  i=1
+    # while i<len(argv):
+    #     if argv[i].count('-h'):
+    #         print(__doc__)
+    #         return
+    #     elif argv[i][0]=='-':
+    #         print('Unknown switch ',argv)
+    #         return
+    #     else:
+    #         files.append(argv[i])
+    #     i+=1
 
 
-    if xdir!='':
-        do_dir(xdir=xdir,nrows_max=nrows_max,forced=forced)
-        return
-
-    print(files)
-
-    for one in files:
-        print('Processing %s' % one)
-        do_one(one,gaia_cat_file,forced,nrows_max)
     return
 
 
