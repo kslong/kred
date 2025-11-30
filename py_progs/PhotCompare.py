@@ -71,7 +71,7 @@ History:
 240527 ksl Speed up the catalog matching.
 251105 ksl Split finding sources in an image from doing photometry
             on the sources
-
+251130 ksl  Starting cleaning
 '''
 
 
@@ -103,7 +103,6 @@ multiprocessing.set_start_method("spawn",force=True)
 
 
 
-from astroquery.gaia import Gaia
 
 import pathlib
 import os.path as path
@@ -119,8 +118,9 @@ from astropy.wcs._wcs import InvalidCoordinateError
 import time
 from http.client import IncompleteRead
 
-from kred import ImageSum
-from kred import GaiaCat
+import ImageSum
+from GaiaCat import get_gaia
+
 
 
 XDIR=''  # Part of a directory name; used to isolate different runs of PhotCompare
@@ -173,42 +173,6 @@ def random_rows(tab, nrows, seed=None):
     indices = rng.choice(len(tab), size=nrows, replace=False)
     return tab[indices]
 
-def old_unique_rows_within_tol(tab, tol=0.01):
-    """
-    Return unique rows from an Astropy table based on approximate
-    equality of RA, Dec, and Size within a given tolerance (in degrees).
-
-    Parameters
-    ----------
-    tab : astropy.table.Table
-        Table containing columns 'RA', 'Dec', and 'Size' (in degrees).
-    tol : float, optional
-        Matching tolerance in degrees. Default is 0.01°.
-
-    Returns
-    -------
-    unique_tab : astropy.table.Table
-        New table containing one representative row per unique group.
-    """
-    # Stack RA, Dec, Size into a NumPy array
-    data = np.vstack([tab['RA'], tab['Dec'], tab['Size']]).T
-
-    # Initialize list of unique rows
-    unique_indices = []
-    used = np.zeros(len(data), dtype=bool)
-
-    for i in range(len(data)):
-        if used[i]:
-            continue
-        diff = np.abs(data - data[i])
-        mask = np.all(diff < tol, axis=1)
-        used[mask] = True
-        unique_indices.append(i)
-
-    return tab[unique_indices]
-
-
-
 def unique_rows_within_tol(tab, tol=0.01):
     """
     Return unique rows from an Astropy table based on approximate
@@ -256,55 +220,10 @@ def unique_rows_within_tol(tab, tol=0.01):
     return tab[unique_indices], mapping
 
 
-# Example usage:
-# unique_tab, mapping = unique_rows_within_tol(my_table, tol=0.01)
-#
-# To get back to original table rows:
-# for i, row in enumerate(my_table):
-#     unique_idx = mapping[i]
-#     print(f"Row {i} maps to unique row {unique_idx}")
-#
-# To find all original rows that map to a specific unique row:
-# unique_row_idx = 5
-# original_indices = np.where(mapping == unique_row_idx)[0]
-
-def xdo_fig(xtab,outroot):
-
-    outdir='./Figs_phot%s' %  XDIR
-
-    os.makedirs(outdir,exist_ok=True)
-    plt.figure(1,(12,6))
-    plt.clf()
-    plt.subplot(1,2,1)
-    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['G'],xtab['phot_mag'],'.',alpha=.05)
-    plt.plot(xtab['G'],-xtab['phot_mag'],'.',alpha=.05)
-    plt.xlabel('Gaia G mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,24],[11,24],'k-')
-    plt.text(13,20,outroot)
-
-    plt.ylim(11,24)
-    plt.xlim(11,24) 
-
-
-
-    plt.tight_layout()
-    plt.subplot(1,2,2)
-    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['R'],xtab['phot_mag'],'.',alpha=.05)
-    plt.plot(xtab['R'],-xtab['phot_mag'],'.',alpha=.05)
-    plt.xlabel('Gaia R mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,24],[11,24],'k-')
-    plt.ylim(11,24)
-    plt.xlim(11,24)  
-    plt.tight_layout()
-    plt.savefig('%s/%s.png' % (outdir,outroot))
-
-
-
 def do_fig(xtab,outroot=''):
+    '''
+    xtab is a table
+    '''
 
     outdir='./Figs_phot%s' %  XDIR
 
@@ -487,8 +406,8 @@ def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     for col in sources.colnames:  
         sources[col].info.format = '%.8g'  # for consistent table output
 
-    outname='%s/%s_sources.txt' % (tab_dir,outroot)
-    sources.write(outname,format='ascii.fixed_width_two_line',overwrite=True)
+    outname='%s/%s_sources.fits' % (tab_dir,outroot)
+    sources.write(outname,format='fits',overwrite=True)
 
     return outname
 
@@ -685,105 +604,6 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
 
 
-
-def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot='',rstar=6,b_in=8,b_out=12):
-    '''
-    Locate and measure fluxes from source in an image
-    '''
-
-
-    
-    try:
-        x=fits.open(filename)
-    except:
-        print('Error: get_photometry: could not open %s' % filename)
-        return 'Error'
-
-        
-
-    image_ext=locate_first_image_extension(x)
-    if x<0:
-        raise IOError('No Image extension in %s' % filename)
-
-    image_wcs=WCS(x[image_ext].header)
-    image=x[image_ext].data
-
-    # print(np.median(image))
-
-    image-=np.median(image)
-
-    xexptime=x['PRIMARY'].header['EXPTIME']
-    try:
-        xfilter=x['PRIMARY'].header['FILTER']
-    except:
-        words=filename.split('.')
-        xfilter=words[-3]
-        print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
-
-    try:
-        sources=ascii.read(object_file)
-    except:
-        print('Error: do_photometry: could not read object file %s' % object_file)
-        return 'Error'
-    
-    positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
-
-    apertures = CircularAperture(positions, r=rstar)  
-    annulus_apertures=CircularAnnulus(positions,r_in=b_in, r_out=b_out)
-
-    phot_table = aperture_photometry(image, apertures)  
-    aper_stats=ApertureStats(image,apertures,sigma_clip=None)
-    sigclip=SigmaClip(sigma=3,maxiters=10)
-    bkg_stats=ApertureStats(image,annulus_apertures,sigma_clip=sigclip)
-    total_background=bkg_stats.median*aper_stats.sum_aper_area.value
-    net=aper_stats.sum - total_background
-
-    phot_table['Raw']=aper_stats.sum 
-    phot_table['Bkg']=total_background
-    phot_table['Net']=net
-
-    phot_table['phot_mag']= 27-2.5*np.log10(phot_table['Net'])
-    phot_table['phot_mag_simple']= 27-2.5*np.log10(phot_table['aperture_sum'])
-
-
-
-    for col in phot_table.colnames:  
-
-        phot_table[col].info.format = '%.8g'  # for consistent table output
-        
-    pos=image_wcs.pixel_to_world(phot_table['xcenter'],phot_table['ycenter'])
-    names=[]
-    for one in phot_table:
-        names.append('x%05d' % one['id'])
-    phot_table['Source_name']=names
-    phot_table['RA']=pos.ra.degree
-    phot_table['Dec']=pos.dec.degree
-    phot_table['File']=outroot
-    phot_table['Filter']=xfilter
-    phot_table['Exptime']=xexptime
-
-
-    
-
-    tab_dir='./TabPhot%s' % XDIR
-
-    os.makedirs(tab_dir,exist_ok=True)
-
-    
-    if outroot=='':
-        words=filename.split('/')
-        outroot=words[-1].replace('.fits','')
-        
-    
-    # print(phot_table)  
-    outfile='%s/%s_phot.txt' % (tab_dir,outroot)
-    phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s with %d objects' % (outfile,len(phot_table)))
-    return outfile
-
-
-
-
 def find_closest_objects(table1_path, table2_path, max_sep=0.5):
     '''
     Find the objects with a given distance given two astropy tables.  The
@@ -895,6 +715,11 @@ def get_size(filename='LMC_c48_T08.r.t060.fits'):
 
 
 def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
+    '''
+    I am trying to get modifiy this to look more like
+    what is done in MefPhot, so I can used the forced
+    photometry routine their
+    '''
 
     print('XXX - do_xphot  %s gaia %s' % (filename,gaia_file))
     
@@ -904,7 +729,7 @@ def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
         phot_file=do_forced_photometry(filename,object_file,nrows_max,outroot)
     else:
         object_file=get_objects_from_image(filename,outroot)
-        phot_file=do_photometry(filename,object_file,outroot)
+        phot_file=do_forced_photometry(filename,object_file,nrows_max=-1,outroot=outroot)
 
 
     
@@ -983,7 +808,7 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,n
 
     gaia_files=[]
     for one in zpos:
-        gaia_file=GaiaCat.get_gaia(one['RA'], one['Dec'], one['Size'],outroot='')
+        gaia_file=get_gaia(one['RA'], one['Dec'], one['Size'],outroot='')
         gaia_files.append(gaia_file)
     zpos['gaia_file']=gaia_files
 
