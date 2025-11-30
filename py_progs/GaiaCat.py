@@ -243,7 +243,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     return results     
 
 
-def get_gaia_mag27_flux(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
+def get_gaia_mag28_flux(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
     '''
      Get the giaa flux of a star at a particular wavelength and calculate thoe
      total flux assuming in the bandpass from this if it were the same star
@@ -266,10 +266,10 @@ def get_gaia_mag27_flux(xid=4658615927801509760, gmag=15, wavelength=6563,dlambd
     # print(frac)
     flux=(1-frac) * xtab['FLUX'][i-1]+frac*xtab['FLUX'][i]
     # print(flux)
-    flux27=flux*10**(-0.4*(27-gmag))*dlambda
-    return flux27
+    flux28=flux*10**(-0.4*(28-gmag))*dlambda
+    return flux28
 
-def get_gaia_mag27_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
+def get_gaia_mag28_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda=160):
     '''
      Get the averge gaia flux of a star in a partcular wavelength band
 
@@ -287,8 +287,8 @@ def get_gaia_mag27_ave(xid=4658615927801509760, gmag=15, wavelength=6563,dlambda
     z=xtab[xtab['WAVE'] < wmax]
     z=z[z['WAVE']>wmin]
     flux=np.average(z['FLUX'])
-    flux27=flux*10**(-0.4*(27-gmag))*dlambda
-    return flux27
+    flux28=flux*10**(-0.4*(28-gmag))*dlambda
+    return flux28
                          
                    
                    

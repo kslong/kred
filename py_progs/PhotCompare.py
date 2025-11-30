@@ -304,7 +304,7 @@ def xdo_fig(xtab,outroot):
 
 
 
-def do_fig(xtab,outroot):
+def do_fig(xtab,outroot=''):
 
     outdir='./Figs_phot%s' %  XDIR
 
