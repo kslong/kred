@@ -509,9 +509,13 @@ def locate_first_image_extension(xx):
     return -1
 
 
-def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',nrows_max=-1,outroot=''):
+def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',nrows_max=-1,outroot='',rstar=6,b_in=8,b_out=12):
     '''
     Do forced photometry based on ra and decs, where the object file contains a set of source positions
+
+
+    NOTE - this version needs to be replaced by the version in MefPhot, but that one does not write out
+    the data within ther routine and this needs to be fixed both for forced and unforced photmetry
     '''
     
     try:
@@ -603,22 +607,12 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
         sources=random_rows(sources, nrows=nrows_max, seed=None)
 
     print('Forced photometry of %d of %d possible sources' % (len(sources),npossible))
-
-    tab_dir='./TabPhot%s' % XDIR
-
-    os.makedirs(tab_dir,exist_ok=True)
-
-    
-    if outroot=='':
-        words=filename.split('/')
-        outroot=words[-1].replace('.fits','')
-        
     
     
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
 
-    apertures = CircularAperture(positions, r=4.0)  
-    annulus_apertures=CircularAnnulus(positions,r_in=4, r_out=8)
+    apertures = CircularAperture(positions, r=rstar)  
+    annulus_apertures=CircularAnnulus(positions,r_in=b_in, r_out=b_out)
 
     phot_table = aperture_photometry(image, apertures)  
     aper_stats=ApertureStats(image,apertures,sigma_clip=None,mask=image_mask)
@@ -672,6 +666,16 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     phot_table['Exptime']=xexptime
 
 
+
+    tab_dir='./TabPhot%s' % XDIR
+
+    os.makedirs(tab_dir,exist_ok=True)
+
+    
+    if outroot=='':
+        words=filename.split('/')
+        outroot=words[-1].replace('.fits','')
+        
     
     outfile='%s/%s_phot.txt' % (tab_dir,outroot)
     phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
@@ -682,10 +686,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
 
 
 
-
-
-
-def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
+def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot='',rstar=6,b_in=8,b_out=12):
     '''
     Locate and measure fluxes from source in an image
     '''
@@ -724,22 +725,11 @@ def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     except:
         print('Error: do_photometry: could not read object file %s' % object_file)
         return 'Error'
-
-    tab_dir='./TabPhot%s' % XDIR
-
-    os.makedirs(tab_dir,exist_ok=True)
-
-    
-    if outroot=='':
-        words=filename.split('/')
-        outroot=words[-1].replace('.fits','')
-        
-    
     
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
 
-    apertures = CircularAperture(positions, r=4.0)  
-    annulus_apertures=CircularAnnulus(positions,r_in=4, r_out=8)
+    apertures = CircularAperture(positions, r=rstar)  
+    annulus_apertures=CircularAnnulus(positions,r_in=b_in, r_out=b_out)
 
     phot_table = aperture_photometry(image, apertures)  
     aper_stats=ApertureStats(image,apertures,sigma_clip=None)
@@ -773,6 +763,17 @@ def do_photometry(filename='LMC_c48_T08.r.t060.fits',outroot=''):
     phot_table['Exptime']=xexptime
 
 
+    
+
+    tab_dir='./TabPhot%s' % XDIR
+
+    os.makedirs(tab_dir,exist_ok=True)
+
+    
+    if outroot=='':
+        words=filename.split('/')
+        outroot=words[-1].replace('.fits','')
+        
     
     # print(phot_table)  
     outfile='%s/%s_phot.txt' % (tab_dir,outroot)
