@@ -60,8 +60,8 @@ import matplotlib.pyplot as plt
 from astropy.table import join
 import matplotlib.cm as cm
 import PhotCompare
-from kred import ImageSum
-from kred import GaiaCat
+import ImageSum
+from GaiaCat import get_gaia
 
 
 
@@ -74,7 +74,7 @@ def color_compare(cont_image,subtracted_image,forced=False):
         print(f'Error:color_compare: {e}')
         return
 
-    gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot='')
+    gaia_file=get_gaia(ra, dec, size_deg,outroot='')
     # So at this point I have the Gaifile
 
     cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,-1,'')
