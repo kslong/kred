@@ -69,7 +69,8 @@ from astropy.wcs._wcs import InvalidCoordinateError
 import time
 
 
-import GaiaCat
+# import GaiaCat
+from GaiaCat import get_gaia
 import ImageSum
 import numpy as np
 import matplotlib as plt
@@ -345,7 +346,8 @@ def do_one(filename='foo.fits',outroot='',nrows_max=-1,rstar=4,b_in=4,b_out=8):
         height=info['height_deg']
         # print(ra,dec,width,height)
         size=np.sqrt(width*width+height*height)/2.
-        gaia_file=GaiaCat.get_gaia(ra,dec,size)
+        # gaia_file=GaiaCat.get_gaia(ra,dec,size)
+        gaia_file=get_gaia(ra,dec,size)
         # print(gaia_file)
         phot_table=do_forced_photometry(filename,one_extension,gaia_file,nrows_max,rstar,b_in,b_out)
         phot_table['EXT']=one_extension
