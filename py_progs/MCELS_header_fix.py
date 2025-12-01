@@ -142,7 +142,7 @@ def steer(argv):
     datfix which appears to be due to a bug in the astropy wcs library.  If this
     happens after you have made these fixes to the MCELS data, you can add lines
     to any python code to suppress them.  Seee the __doc__ above for details.
-    '''
+    ''')
 
 if __name__ == "__main__":
     if len(sys.argv)>1:
