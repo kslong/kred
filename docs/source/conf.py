@@ -16,7 +16,7 @@ release = '1.0'
 
 extensions = [
         'autoapi.extension',
-
+         'sphinx.ext.viewcode',  # Add [source] links
         ]
 
 templates_path = ['_templates']
