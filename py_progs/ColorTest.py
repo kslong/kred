@@ -60,20 +60,26 @@ import matplotlib.pyplot as plt
 from astropy.table import join
 import matplotlib.cm as cm
 import PhotCompare
-from kred import ImageSum
+import ImageSum
+from GaiaCat import get_gaia
 
 
 
 def color_compare(cont_image,subtracted_image,forced=False):
 
     print('Making new GaiCat file')
-    ra,dec,size_deg=PhotCompare.get_size(cont_image)
-    gaia_file=PhotCompare.get_gaia(ra, dec, size_deg,outroot='',nmax=-1)
+    try:
+        ra,dec,size_deg=PhotCompare.get_size(cont_image)
+    except IOError as e:
+        print(f'Error:color_compare: {e}')
+        return
+
+    gaia_file=get_gaia(ra, dec, size_deg,outroot='')
     # So at this point I have the Gaifile
 
-    cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,'test')
+    cont_phot=PhotCompare.do_forced_photometry(cont_image,gaia_file,-1,'')
     print(cont_phot)
-    sub_phot=PhotCompare.do_forced_photometry(subtracted_image,gaia_file,'xtest')
+    sub_phot=PhotCompare.do_forced_photometry(subtracted_image,gaia_file,-1,'')
     print(sub_phot)
     return cont_phot,sub_phot,gaia_file
 
@@ -81,8 +87,9 @@ def color_compare(cont_image,subtracted_image,forced=False):
 
 
 def plot_both(gaia,final,title=''):
+    plt.close(3)
     plt.figure(3,(12,6))
-    plt.clf()
+    # plt.clf()
     plt.subplot(1,2,1)
     # plt.plot(gaia['G']-gaia['R'],gaia['R'],'.',alpha=0.01)
     sc=plt.scatter(gaia['G']-gaia['R'],gaia['R'],c=gaia['G']-gaia['R'],marker='.',cmap='plasma',vmin=-1,vmax=1,alpha=0.01)
@@ -151,10 +158,18 @@ def find_cont(filenames):
 
 def doit(continuum_file='DECam_SWARP2/LMC_c35/T06/LMC_c35_T06.r.fits',subtracted_file='DECam_SUB2/LMC_c35/T06/LMC_c35_T06.ha_sub_r.fits'):
 
-    cont_phot,sub_phot,gaia_file=color_compare(continuum_file,subtracted_file)
-    cont=ascii.read(cont_phot)
-    sub=ascii.read(sub_phot)
-    gaia=ascii.read(gaia_file)
+    try:
+        cont_phot,sub_phot,gaia_file=color_compare(continuum_file,subtracted_file)
+    except:
+        print('Unsucessful for theis combination: %s %s' % (continuum_file,subtracted_file))
+        return
+
+    cont=PhotCompare.read_table(cont_phot)
+    sub=PhotCompare.read_table(sub_phot)
+    gaia=PhotCompare.read_table(gaia_file)
+    # cont=ascii.read(cont_phot)
+    # sub=ascii.read(sub_phot)
+    # gaia=ascii.read(gaia_file)
     gaia['id']=np.arange(len(gaia))+1
     gaia['G-R']=gaia['G']-gaia['R']
 
@@ -167,7 +182,7 @@ def doit(continuum_file='DECam_SWARP2/LMC_c35/T06/LMC_c35_T06.r.fits',subtracted
     title='GAIA Color/Flux Comparison: %s and %s' % (base_sub,base_cont)
     plot_both(gaia,final,title)
     os.makedirs('Figs_color',exist_ok=True)
-    plt.savefig('Figs_Color/%s.png' % base_sub)
+    plt.savefig('Figs_color/%s.png' % base_sub)
     return
 
 
@@ -176,7 +191,11 @@ def do_dir(xdir='DECam_SUB2/LMC_c37/T07',nrow_max=-1):
     Sort out how to call doit based on the directories
     '''
 
-    xtab=ImageSum.table_create(xdir,outname=None)
+    try:
+        xtab=ImageSum.table_create(xdir,outname=None)
+    except IOError as e:
+        print(f'Error:do_dir: {e}')
+        return
     # The two or ultimated 3 types of images we will have will all be indentied becasue the image bytpe will have a name including sub_
     select=[]
     for i in range(len(xtab)):
@@ -192,8 +211,9 @@ def do_dir(xdir='DECam_SUB2/LMC_c37/T07',nrow_max=-1):
         name=name.replace('SUB','SWARP')
         name=name.replace('ha_sub_r','r')
         name=name.replace('s2_sub_r','r')
-        name=name.replace('ha_sub_n708','n708')
-        name=name.replace('s2_sub_n708','n708')
+        name=name.replace('ha_sub_N708','N708')
+        name=name.replace('s2_sub_N708','N708')
+        name=name.replace('o3_sub_N540','N540')
         names.append(name)
     xsub['cont_file']=names
     print(xsub)
@@ -240,7 +260,7 @@ def steer(argv):
         do_dir(xdir=xdir,nrow_max=nrow_max)
         return
 
-    cont_files=find_cont(filenames)
+    cont_files=find_cont(filens)
     xtab=Table([files,cont_files],names=['filename','cont_file'])
     for one_row in xtab:
         doit(continuum_file=one_row['cont_file'],subtracted_file=one_row['filename'])
