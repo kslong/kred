@@ -5,31 +5,48 @@
 
 Synopsis:  
 
-Carry out forced photomentry on multi-extension
+Carry out forced photomentry on (multi-extension)
 files and produce tables of the outputs
 
 
 Command line usage (if any):
 
-    usage MefPhot.py [-h] [-np 8] [-out root] file1 file2 ...
+    usage MefPhot.py [-h] [-np 8] [-r 6] [-b 8 12][-out root] file1 file2 ...
 
 Description:  
 
     where
         -h prints out this documentaiton and exits
         -np 8 sets the number of processors to use (default 8)
+        -r 6  the radius in pixels to be used for extraction of the stellar flux
+        -b 8 12 the inner and outer radius of the background to be used
         -out root changes the root name of the output table
+
+    As normally  run, the routine reads each image extension in one or
+    more fits files, and then finds stars in the Gaia catalog
+    of the region, and does carries out forced photometry of the
+    gaia stars
+
+
+    A table containing the results from the forced photmetry is produced
+    and normally placed in the directory TabPhot
 
 
 Primary routines:
 
-    do_one
+    do_one where the work is actually done
+    do_many when multiprocessing is used, this distributes the work
 
 Notes:
+
+    The Gaia data should be contained in a file Gaia_MagClouds.fits, located either locally
+    or in kred/xdata
                                        
 History:
 
 251128 ksl Coding begun
+251205 ksl This has been tested with version 2.3.0 of photutils; earlier versions seemed to "hang".  
+    A typical MEF files takes or order 8 minutes on an M1 Mac.
 
 '''
 
@@ -492,7 +509,7 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=4, b_in=4, b_out=8,
 
 def steer(argv):
     '''
-    usage MefPhot.py [-h] [-np 8] [-out root] file1 file2 ...
+    usage MefPhot.py [-h] [-np 8] [-r 6] [-b 8 12][-out root] file1 file2 ...
     '''
 
     filenames=[]
@@ -543,8 +560,14 @@ def steer(argv):
         print('UNPHYSICAL limits for photometry')
         return
 
+    if len(filenames)==1 or np<2:
+        for one_file in filenames:
+            do_one(filename=one_file,outroot=root,nrows_max=nrows_max,rstar=rstar,b_in=b_in,b_out=b_out)
+        return
+
     do_many(filenames, outroot=root, nrows_max=nrows_max, rstar=rstar, b_in=b_in, b_out=b_out, 
             n_processes=np, logfile=None)
+    return
 
 
 
