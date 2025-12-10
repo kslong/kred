@@ -160,7 +160,7 @@ def unique_rows_within_tol(tab, tol=0.01):
 # --------------------------------------------------------------------------------
 # Gaia XP spectrum helper (does not use astroquery)
 # --------------------------------------------------------------------------------
-def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
+def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
     """
     Load or download and load from cache the spectrum of a Gaia star,
     converted to erg/s/cm^2/Å.
@@ -174,7 +174,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec'):
     flux_path = f"{GAIA_CACHE_DIR}/gaia_spec_{gaiaID}.csv"
     wave_path = f"{GAIA_CACHE_DIR}/gaia_spec_{gaiaID}_sampling.csv"
 
-    if path.exists(flux_path) and path.exists(wave_path):
+    if path.exists(flux_path) and path.exists(wave_path) and redo==False:
         print('Star is in cache')
         gaiaflux = Table.read(flux_path, format="csv")
         gaiawave = Table.read(wave_path, format="csv")
