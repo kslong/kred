@@ -174,7 +174,7 @@ def get_keyword(key,ext):
 
 def get_mef_overview(field='LMC_c45'):
     '''
-    Get keyword  information from the 0th exetnsion of the mef files
+    Get keyword  information from the 0th extension of the mef files
     in a single field
     '''
 
@@ -185,7 +185,7 @@ def get_mef_overview(field='LMC_c45'):
 
     records=[]
     
-    keys=['OBJECT','FILTER','EXPTIME','MAGZERO','SEEING','OBSID']
+    keys=['OBJECT','FILTER','EXPTIME','MAGZERO','SEEING','SKYORDER','OBSID']
     
     for one_file in files:
         x=fits.open(one_file,memmap=True)
@@ -231,6 +231,13 @@ def get_mef_overview(field='LMC_c45'):
         os.remove('goo_%s.txt' %field)
         ztab.sort(['FILTER','EXPTIME'])
         ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
+        zztab=ztab[ztab['SKYORDER']!=1]
+        if len(zztab):
+            print('Warning -- these files have SKYORDER >1; OK in some circumstances)')
+            for one_row in zztab:
+                print('Skyorder %2d for %30s in field %s' % (one_row['SKYORDER'],one_row['Root'],one_row['Field']))
+        else:
+            print('All good images have SKYORDER 1')
 
     if len(bad)>0:
         xbad=xtab[bad]

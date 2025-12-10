@@ -69,7 +69,7 @@ def test(filename='c4d_190108_063145_ooi_N662_v1.fits.fz', outputfile='out.txt')
     x = fits.open(filename, memmap=True)
     for i, hdu in enumerate(x):
         if i == 0:
-            for keyword in ['EXPTIME', 'SEEING','MAGZERO']:
+            for keyword in ['EXPTIME', 'SEEING','MAGZERO','SKYORDER']:
                 if keyword not in hdu.header:
                     warnings.warn(f"Missing keyword '{keyword}' in extension {i}", UserWarning)
         else:
@@ -125,9 +125,15 @@ def check_mefs(field='LMC_c45'):
         return []
 
     xstat=[]
+    skyorder=[]
     for one in files:
         xx=do_one(one)
         xstat.append(xx)
+        try: 
+            xorder=fits.getval(one,'SKYORDER',0)
+        except:
+            xorder=100
+        skyorder.append(xorder)
 
     xfiles=[]
     for one in files:
@@ -135,8 +141,17 @@ def check_mefs(field='LMC_c45'):
         xfiles.append(words[-1])
 
 
-    qtab=Table([xfiles,xstat],names=['Filename','Header_Quality'])
+    qtab=Table([xfiles,xstat,skyorder],names=['Filename','Header_Quality','SKYORDER'])
     qtab.write('Summary/%s_mef_qual.tab' % field,format='ascii.fixed_width_two_line',overwrite=True)
+
+    ztab=qtab[qtab['SKYORDER']>1]
+    if len(ztab):
+        print('WARNING: there are %d files in %s with SKYORDER > 1; this may be OK in certain situations' % (len(ztab),field))
+        for one in ztab:
+            print('file %50s has SKYORDER %3d' % (one['Filename'],one['SKYORDER']))
+    else:
+        print('All files in field %s have SKYORDER 1' % field)
+
 
 
 
