@@ -15,6 +15,9 @@ History:
 251105 ksl  Split finding sources in an image from doing photometry on the sources
 251130 ksl  Cleaned up so this is just a routine for interacting with the GAIA catalog
 251130 ksl  Robust handling of astroquery import vs service availability
+251211 ksl  Considerable effort has been expended be abble to deal with a problem
+            to handle an error in get_gaia_spec, that is due to an error in gaiaxpy
+            between versions 2.1.1 1nd 2.1.2.
 """
 
 import os
@@ -83,7 +86,7 @@ def load_Gaia(probe_service: bool = True):
     if probe_service:
         try:
             # Minimal, fast probe (hits TAP briefly):
-            Gaia.launch_job("SELECT 1", dump_to_file=False)
+            Gaia.launch_job("SELECT TOP 1 source_id FROM gaiadr3.gaia_source", dump_to_file=False)
             # Alternatively, if you want absolutely minimal probing:
             # _ = Gaia.tap
         except Exception as e:
@@ -160,7 +163,7 @@ def unique_rows_within_tol(tab, tol=0.01):
 # --------------------------------------------------------------------------------
 # Gaia XP spectrum helper (does not use astroquery)
 # --------------------------------------------------------------------------------
-def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
+def old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
     """
     Load or download and load from cache the spectrum of a Gaia star,
     converted to erg/s/cm^2/Å.
@@ -212,10 +215,114 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
         gaiawave = Table.read(wave_path, format="csv")
 
     # make numpy arrays from gaia tables
-    wave = np.fromstring(gaiawave["pos"][0][1:-1], sep=",") * 10  # Angstrom
-    flux = 1e4 * np.fromstring(gaiaflux["flux"][0][1:-1], sep=",")  # W/s/nm -> erg/s/cm^2/Å
+    # Handle both old CSV format (comma-separated) and new format (numpy repr strings)
+    wave_str = gaiawave["pos"][0]
+    flux_str = gaiaflux["flux"][0]
+    
+    # Try to parse as numpy array representation first (new format)
+    try:
+        # New format has strings like "(np.float64(1.23), np.float64(4.56), ...)"
+        # Extract numeric values from inside np.float64() calls
+        import re
+        wave_numbers = re.findall(r'np\.float64\(([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)\)', wave_str)
+        flux_numbers = re.findall(r'np\.float64\(([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)\)', flux_str)
+        
+        if len(wave_numbers) > 10 and len(flux_numbers) > 10:  # Sanity check
+            wave = np.array([float(x) for x in wave_numbers]) * 10  # Angstrom
+            flux = 1e4 * np.array([float(x) for x in flux_numbers])  # W/s/nm -> erg/s/cm^2/Å
+        else:
+            raise ValueError("Could not extract enough numeric values")
+    except (ValueError, AttributeError):
+        # Fall back to old comma-separated format
+        wave = np.fromstring(wave_str[1:-1], sep=",") * 10  # Angstrom
+        flux = 1e4 * np.fromstring(flux_str[1:-1], sep=",")  # W/s/nm -> erg/s/cm^2/Å
+    
     results = Table([wave, flux], names=['WAVE', 'FLUX'])
     return results
+
+
+
+def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
+    """
+    Load or download and load from cache the spectrum of a Gaia star,
+    converted to erg/s/cm^2/Å.
+
+    Note:
+    This was 'appropriated' from the lvmdrp.
+    """
+    # create cache dir if it does not exist
+    pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+
+    spec_path = f"{GAIA_CACHE_DIR}/gaia_spec_{gaiaID}.fits"
+
+    if path.exists(spec_path) and redo==False:
+        print('Star is in cache')
+        spec_table = Table.read(spec_path, format="fits")
+    else:
+        print('Star must be retrieved')
+        # Deferred imports to keep module import-safe
+        import requests
+        from gaiaxpy import calibrate
+
+        # need to download from Gaia archive
+        CSV_URL = (
+            "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"
+            + str(gaiaID)
+            + "&format=CSV&DATA_STRUCTURE=RAW"
+        )
+        FILE = f"{GAIA_CACHE_DIR}/XP_{gaiaID}_RAW.csv"
+
+        with requests.get(CSV_URL, stream=True) as r:
+            r.raise_for_status()
+            if len(r.content) < 2:
+                return []
+            with open(FILE, "w") as f:
+                f.write(r.content.decode("utf-8"))
+
+        # convert coefficients to sampled spectrum using FITS format
+        _, _ = calibrate(
+            FILE,
+            output_path=GAIA_CACHE_DIR,
+            output_file=f"gaia_spec_{gaiaID}",
+            output_format="fits",
+        )
+
+        # read the spectrum table
+        spec_table = Table.read(spec_path, format="fits")
+
+
+    # Extract wavelength and flux arrays
+    # In FITS format, wavelength is stored as a table parameter (metadata), not a column
+    # Handle both old format (2.1.1: simple arrays) and new format (2.1.2+: numpy repr strings)
+    wave_str = spec_table.meta['SAMPLING']
+
+    # Try new format first (2.1.2+): "(np.float64(336.0), np.float64(338.0), ...)"
+    import re
+    wave_numbers = re.findall(r'np\.float64\(([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)\)', wave_str)
+
+    if len(wave_numbers) > 0:
+        # New format (2.1.2+)
+        wave = np.array([float(x) for x in wave_numbers]) * 10  # Convert to Angstrom
+    else:
+        # Old format (≤2.1.1): Try simple array or list parsing
+        # Remove brackets/parentheses and parse as comma-separated
+        cleaned = wave_str.strip('[]()').strip()
+        try:
+            # Try direct numpy parsing
+            wave = np.fromstring(cleaned, sep=',') * 10  # Convert to Angstrom
+        except ValueError:
+            # Last resort: extract all valid numbers
+            all_numbers = re.findall(r'[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?', cleaned)
+            if len(all_numbers) > 0:
+                wave = np.array([float(x) for x in all_numbers]) * 10
+            else:
+                raise ValueError(f"Could not parse SAMPLING metadata: {wave_str[:100]}...")
+
+    flux = spec_table['flux'][0] * 1e4  # Convert W/s/nm to erg/s/cm^2/Å
+
+    results = Table([wave, flux], names=['WAVE', 'FLUX'])
+    return results
+
 
 
 def get_gaia_mag28_flux(xid=4658615927801509760, gmag=15, wavelength=6563, dlambda=160):
@@ -508,6 +615,23 @@ def get_gaia_from_archive_old(
     print('Wrote %s with %d objects' % (outfile, len(r)))
     return outfile
 
+def simple_test():
+    '''
+    Check functionality
+    '''
+
+    print('Here we just check if a small amount of the SW works')
+    print('Can we retrieve a catalog of stars')
+    if os.path.isfile('Gaia/Gaia.foo.txt'):
+        os.remove('Gaia/Gaia.foo.txt')
+        print('Removed Gaia/Gaia.foo.txt, before retrieving catalog from archive')
+    get_gaia_from_archive(rad_deg=0.1,outroot='foo')
+    print('Can we retrieve a spectrum')
+    get_gaia_spec(4658615927801509760,redo=True)
+    print('\nIf there were no errors we have success\n')
+    return
+
+
 
 # --------------------------------------------------------------------------------
 # Command-line stub
@@ -517,8 +641,13 @@ def steer(argv):
     Run the script given choices from the command line.
     Usage: PhotCompare.py -h -for -unf -dir -nmax -gcat file1
     """
+    
+
     print('This is not a runtime routine (currently)')
+
     print(__doc__)
+
+
     return
 
 
