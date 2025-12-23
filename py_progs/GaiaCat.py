@@ -647,6 +647,10 @@ def steer(argv):
 
     print(__doc__)
 
+    print('Now check for status today')
+
+    simple_test()
+
 
     return
 
@@ -654,7 +658,7 @@ def steer(argv):
 # Next lines permit one to run the routine from the command line
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 0:
         steer(sys.argv)
     else:
         print(__doc__)
