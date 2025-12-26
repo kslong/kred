@@ -23,6 +23,10 @@ Primary routines:
     doit
 
 Notes:
+
+    This is one of the routines developed to see how
+    consistent MAGZERO is as delivered by the community
+    pipeline.
                                        
 History:
 
