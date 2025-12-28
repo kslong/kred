@@ -463,10 +463,21 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
           f'and annulus {b_in:.1f} {b_out:.1f}')
 
     xexptime = x['PRIMARY'].header['EXPTIME']
-    magzero=x['PRIMARY'].header['MAGZERO']
-    zpt=x['PRIMARY'].header['MAGZERO']
-    srad=x['PRIMARY'].header['RADIUS']
-    ssee=x['PRIMARY'].header['SEEING']
+
+    try:
+        magzero=x['PRIMARY'].header['MAGZERO']
+    except:
+        magzero=28.
+
+    # zpt=x['PRIMARY'].header['MAGZERO']
+    try:
+        srad=x['PRIMARY'].header['RADIUS']
+    except:
+        srad=-99.
+    try:
+        ssee=x['PRIMARY'].header['SEEING']
+    except:
+        ssee=-99.
     try:
         xfilter = x['PRIMARY'].header['FILTER']
     except:
