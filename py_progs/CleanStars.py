@@ -196,13 +196,22 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
     x[0].data-=r_pure[0].data
     x[0].header['PROCTYPE']='StarSubtracted'
     x[0].header['SFILTER']=(zr[0].header['FILTER'],'Filter of image used for subtracttion')
-    x.writeto(outroot+'.ha_sub_r.fits',overwrite=True)        
+    outfile_ha=outroot+'.ha_sub_r.fits'
+    x.writeto(outfile_ha,overwrite=True)        
 
     x=fits_deep_copy(zs2)
     x[0].data-=r_pure[0].data
     x[0].header['PROCTYPE']='StarSubtracted'
     x[0].header['SFILTER']=(zr[0].header['FILTER'],'Filter of image used for subtracttion')
-    x.writeto(outroot+'.s2_sub_r.fits',overwrite=True)      
+
+    outfile_s2=outroot+'.s2_sub_r.fits'
+    x.writeto(outfile_s2,overwrite=True)      
+
+    print('ha:    %s' %ha)
+    print('s2:    %s' % s2)
+    print('r:     %s' % r)
+    print('ha sub %s' % outfile_ha)
+    print('s2 sub %s' % outfile_s2)
     
     return
 
@@ -251,8 +260,13 @@ def make_n540_subtractions(o3='data/LMC_c42_T07.N501.t800.fits', n540='data/LMC_
         zo3[0].header['PROCTYPE']='StarSubtracted'
         zo3[0].header['SFILTER']=(zn540[0].header['FILTER'],'Filter of image used for star subtraction')
         zo3[0].data-=zn540[0].data
-        zo3.writeto(outroot+'.o3_sub_N540.fits',overwrite=True)
+        outfile=outroot+'.o3_sub_N540.fits'
+        zo3.writeto(outfile,overwrite=True)
 
+
+    print('o3:      %s' % o3)
+    print('n540:    %s' % n540)
+    print('outfile: %s' % outfile)
 
 
 def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42_T07.N673.t800.fits',n708='data/LMC_c42_T07.N708.t400.fits',outroot='test2'):
@@ -315,14 +329,24 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         zha[0].header['PROCTYPE']='StarSubtracted'
         zha[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zha[0].data-=zn708[0].data
-        zha.writeto(outroot+'.ha_sub_N708.fits',overwrite=True)
+        outfile_ha=outroot+'.ha_sub_N708.fits'
+
+        zha.writeto(outfile_ha,overwrite=True)
 
     if s2_exists and n708_exists:
         # zs2[0].data-=zn708[0].data
         zs2[0].header['PROCTYPE']='StarSubtracted'
         zs2[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zs2[0].data-=zn708[0].data
-        zs2.writeto(outroot+'.s2_sub_N708.fits',overwrite=True)
+        outfile_s2=outroot+'.s2_sub_N708.fits'
+        zs2.writeto(outfile_s2,overwrite=True)
+
+    print('ha:    %s' %ha)
+    print('s2:    %s' % s2)
+    print('n708   %s' % n708)
+    print('ha sub %s' % outfile_ha)
+    print('s2 sub %s' % outfile_s2)
+    
         
 
 def doit(xdir='data',outdir='data'):
@@ -356,6 +380,7 @@ def doit(xdir='data',outdir='data'):
 
 
     r=ha=s2=n708=n540=o3='none'
+    r_s=ha_s=s2_s=n708_s=n540_s=o3_s='none'
     xtab=Table([qfile,qroot,qfilt],names=['Filename','Root','Image'])
     xtab.sort('Image')
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
@@ -365,22 +390,38 @@ def doit(xdir='data',outdir='data'):
         if one['Image']=='N662':
             ha=one['Filename']
             zroot=one['Root']
+        elif one['Image']=='N662_s':
+            ha_s=one['Filename']
+            zroot=one['Root']
         elif one['Image']=='N673':
             s2=one['Filename']
+            zroot=one['Root']
+        elif one['Image']=='N673_s':
+            s2_s=one['Filename']
             zroot=one['Root']
         elif one['Image']=='N501':
             o3=one['Filename']
             zroot=one['Root']
+        elif one['Image']=='N501_s':
+            o3_s=one['Filename']
+            zroot=one['Root']
         elif one['Image']=='r':
             r=one['Filename']
+        elif one['Image']=='r_s':
+            r_s=one['Filename']
         elif one['Image']=='N708':
             n708=one['Filename']
+        elif one['Image']=='N708_s':
+            n708_s=one['Filename']
         elif one['Image']=='N540':
             n540=one['Filename']
+        elif one['Image']=='N540_s':
+            n540_s=one['Filename']
         else:
             print('CleanStars: Unknown fits file: %s '% one['Filename'])
 
     print(ha,s2,r,n708,o3,n540)
+    print(ha_s,s2_s,r_s,n708_s,o3_s,n540_s)
 
 
     if r!='none':
@@ -388,15 +429,33 @@ def doit(xdir='data',outdir='data'):
     else:
         print('CleanStars: No r band image found')
 
+    if r_s!='none':
+        make_rband_subtractions(ha_s,s2_s,r_s,outroot='%s/%s.sh' % (outdir,zroot))
+    else:
+        print('CleanStars: No r_s band image found')
+
+
     if n708!='none':
         make_n708_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
         print('CleanStars: No N708 image found')
 
+    if n708_s!='none':
+        make_n708_subtractions(ha_s,s2_s,r_s,outroot='%s/%s.sh' % (outdir,zroot))
+    else:
+        print('CleanStars: No N708_s image found')
+
+
     if n540!='none':
         make_n540_subtractions(o3,n540,outroot='%s/%s' % (outdir,zroot))
     else:
         print('CleanStars: No N540 image found')
+
+    if n540_s!='none':
+        make_n540_subtractions(o3_s,n540_s,outroot='%s/%s.sh' % (outdir,zroot))
+    else:
+        print('CleanStars: No N540_s image found')
+
 
 
 
