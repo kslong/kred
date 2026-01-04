@@ -1,26 +1,26 @@
 #!/usr/bin/env python 
 
 """
-Space Telescope Science Institute PSF Photometry Module
-========================================================
-
-This module performs PSF photometry on astronomical images using model PSFs,
-optimized for bright-star flux accuracy and crowded field performance.
+Space Telescope Science Institute
 
 Command Line Usage
 ------------------
+
 ::
 
+    ::
+
     Usage: PsfPhot.py [-out whatever] [-np N] image.fits psf.fits stars.fits
-    
+
     where:
-        -out : Output filename root (default: 'psf_phot')
-        -np  : Number of parallel processes (default: 1, 0=auto-detect)
+    -out : Output filename root (default: 'psf_phot')
+    -np  : Number of parallel processes (default: 1, 0=auto-detect)
 
 Notes
 -----
+
 This parallelized version handles large images efficiently and includes:
-    
+
 * Saturation masking to prevent flux overestimation
 * Post-fit peak consistency checks
 * Robust source grouping with size limits
@@ -30,7 +30,9 @@ This parallelized version handles large images efficiently and includes:
 
 The algorithm performs post-processing validation by comparing predicted
 peak values with actual image values in each region.
+
 """
+
 
 import sys
 import time

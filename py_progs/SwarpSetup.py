@@ -1,40 +1,41 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-Create inputs for combining images of the different filters in the field with Swarp
+"""Create inputs for combining images of the different filters in the field with Swarp
 
-This rotutined can only be run after PrepFiles and SumFiles have benn run.    The routines here generate 
-inputs to run swarp which combines the individual CCD images into tile images.   
-To run swarp from the command line (one must be in the normal run directory) since
-a particular directory structure is assumed here)
+Space Telescope Science Institute
 
-Usage:   SwarpSetup.py [-all] [-bsub] [-ave_pos field [tiles]
+Command Line Usage
+------------------
 
-where 
+::
+
+    Usage:   SwarpSetup.py [-all] [-bsub] [-ave_pos field [tiles]
+
+    where
 
     -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
-        use the files ending in _sw.tab to set up run files
+    use the files ending in _sw.tab to set up run files
     -bsub directs the routine to use data for which an addtioal backgound subtraction
-        algorithm has been used.  In this case the Swarp commmands are written and to
-        the DECam_SWARP2/field/tile directory and the data are taken from the DECAM_PREP2/field/tile
-        directory
+    algorithm has been used.  In this case the Swarp commmands are written and to
+    the DECam_SWARP2/field/tile directory and the data are taken from the DECAM_PREP2/field/tile
+    directory
     -ave_pos causes the output fits file to be centered on the average position of all of the
-        files which will be swarped
+    files which will be swarped
 
+    If one wants to run only 1 or a few tiles then the command will be something like
 
-If one wants to run only 1 or a few tiles then the command will be something like
+    SwarpSetup.py LMC_c42  T01 T02 T03
 
-SwarpSetup.py LMC_c42  T01 T02 T03
-
-Note: 
+    Note:
 
     The current default is to create input files for Swarp that are centered on
     the position designated in the configuration file, unlike what was done
     initially which was to center on the average position of all of the files
     to be swarped. To restore the old behavior use the switch -ave_pos
 
-'''
+"""
+
 
 
 import os, stat

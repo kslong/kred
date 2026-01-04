@@ -1,17 +1,21 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Read an astropy table containg RA's and Dec's
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Read an astropy table containg RA's and Dec's
 and return the field and tile located cose
 to each object
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: MCLocate.py [-h] [-out whatever] filename
 
@@ -19,10 +23,11 @@ Command line usage (if any):
     and  -out whatever prints the output to a file named whatever.
     (if this is missing then the output file will be X+filename
 
-Description:  
+Description
+-----------
 
-    The routine is hardwired to look at MC_tiles.txt in 
-    the kred/config directory.  
+The routine is hardwired to look at MC_tiles.txt in
+    the kred/config directory.
 
     The input table needs to have fields with columns
     named 'RA', and 'Dec' with the positions of objects
@@ -31,23 +36,28 @@ Description:
     The routine finds the field and tile closest to
     each position and adds that (and the separation to the output
     table, which will be printed to the scrren,
-    and written to a file. 
+    and written to a file.
 
-Primary routines:
+Primary Routines
+----------------
 
-    doit
+doit
 
-Notes:
+Notes
+-----
 
-    The routine does not check that that the object is actually
+The routine does not check that that the object is actually
     in a tile; it just reports the distance in arcmin to the
     closest tile.
-                                       
-History:
 
-240422 ksl Coding begun
+Version History
+---------------
 
-'''
+240422 ksl
+    Coding begun
+
+"""
+
 
 import sys
 import os

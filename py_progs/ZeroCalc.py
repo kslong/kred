@@ -1,18 +1,22 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Calculate the ZeroPoint for an image
 
-Synopsis:  
+Space Telescope Science Institute
 
-Calculate the ZeroPoint for an image 
-given one or more tables containing 
+Synopsis
+--------
+
+Calculate the ZeroPoint for an image
+given one or more tables containing
 forced photometry based on the Gaia
 catalog
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: ZeroCalc.py [-h] [-R] [-G] file1.fits file2.fits ...
 
@@ -21,13 +25,14 @@ Command line usage (if any):
     -h prints this help documenation and quits
     -R indicates that the fit should be to the Gaia R mags
     -G indicates that it should be to Gaia (G) which is
-        what the DECam pipeline usgses
+    what the DECam pipeline usgses
 
     and this should be followed by a list of files
 
-Description:  
+Description
+-----------
 
-    The routine uses the masured magnitudes in
+The routine uses the masured magnitudes in
     images and cculates a model to correct these
     to a Gaia Band
 
@@ -35,24 +40,30 @@ Description:
     whose name depends in part on which band is used,
     and plots are created to illutrate the resuls
 
+Primary Routines
+----------------
 
-Primary routines:
-
-    do_one
+do_one
     do_many
 
-Notes:
+Notes
+-----
 
-    This is one of the routines developed to see how
+This is one of the routines developed to see how
     consistent MAGZERO is as delivered by the community
     pipeline.
-                                       
-History:
 
-251128 ksl Coding begun
-251228 ksl Updated to allow matching to the Gaia G band
+Version History
+---------------
 
-'''
+251128 ksl
+    Coding begun
+
+251228 ksl
+    Updated to allow matching to the Gaia G band
+
+"""
+
 
 import sys
 import matplotlib.pyplot as plt

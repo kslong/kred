@@ -1,35 +1,57 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Quantify in various ways how good star subtraction
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Quantify in various ways how good star subtraction
 is between two images, in which star fluxes have been
 calculated using MefPhot
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: QuantifySubtraction.py orig_file subtracted_file [more pairs...]
 
-Description:  
+Description
+-----------
 
 Primary routines:
 
     doit - Process a single pair of files
     do_many - Process multiple pairs and create comparison table
 
-Notes:
-                                       
+Primary Routines
+----------------
+
+doit - Process a single pair of files
+    do_many - Process multiple pairs and create comparison table
+
+Notes
+-----
+
 History:
 
 251229 ksl Coding begun
 251229 ksl Refactored for modularity and result capture
 
-'''
+Version History
+---------------
+
+251229 ksl
+    Coding begun
+
+251229 ksl
+    Refactored for modularity and result capture
+
+"""
+
 
 import sys
 from astropy.io import ascii,fits

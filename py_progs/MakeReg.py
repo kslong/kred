@@ -1,39 +1,53 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Create region files for fits files in a directory,
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Create region files for fits files in a directory,
 assuming that the images have the corners of the images
 store in the headers.
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
-    usage: MakeReg.py xdir     
+    usage: MakeReg.py xdir
 
     where xdir is a directory that contains fits files with
     the corners of the images given
 
-Description:  
+Description
+-----------
 
-    The routine produces a set of region files, one
+The routine produces a set of region files, one
     for each unique filter and exposure time for
     the files that are in the directory
 
-Primary routines:
+Primary Routines
+----------------
 
-    gen_regions
+gen_regions
 
-Notes:
-                                       
+Notes
+-----
+
 History:
 
 231017 ksl Coding begun
 
-'''
+Version History
+---------------
+
+231017 ksl
+    Coding begun
+
+"""
+
 
 
 

@@ -1,32 +1,37 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""StarFind - Star Identification for PSF Creation
 
-Synopsis:  
+Space Telescope Science Institute
 
-This routine is intended to identify stars for use in creating a psf function
+Synopsis
+--------
 
+Identifies stars suitable for creating PSF functions from astronomical images.
 
-Command line usage (if any):
+Command Line Usage
+------------------
 
-    Usage: StarFind -h -out root file1 file2 etc.
+::
 
-Description:  
+    Usage: StarFind.py -h -out root file1 file2 etc.
 
-Primary routines:
+Description
+-----------
 
-    doit
+This routine identifies stars suitable for PSF (Point Spread Function) creation.
 
-Notes:
-                                       
-History:
+Version History
+---------------
+251210 ksl
+    Coding begun
 
-251210 ksl Coding begun
-251222 ksl Added to kred
+251222 ksl
+    Added to kred
 
-'''
+"""
+
 
 import sys
 from astropy.io import ascii,fits
@@ -79,11 +84,11 @@ XDIR=''  # Part of a directory name; used to isolate different runs of PhotCompa
 
 
 def read_table(filename):
-    '''
+    """
     This is a generic routine to try to read a table
     in fits or ascii format.  It is intended to accommodate 
     several different types of formats.
-    '''
+    """
 
     print('XXXX - filename ',filename)
 
@@ -172,21 +177,37 @@ def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
 
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',image_ext=0,object_file='objects.txt',nrows_max=-1,rstar=6,b_in=8,b_out=12,add_psf_metrics=False):
-    '''
-    Do forced photometry based on ra and decs, where the object file contains a set of source positions
+    """Do forced photometry based on RA/Dec positions from object file.
 
-    where:
-        filename is a file with one or more image extensions.
-        image_ext is the extension to be analyised
-        nrows_rows limits the total number of object for forced photometry to a value, all
-            if -1
-        rstar is the aperure readius in pixles used for source extraction
-        b_in and b_out define the size of the background annulus
-        add_psf_metrics if True, adds columns useful for PSF star selection
+    Parameters
+    ----------
+    filename : str, optional
+        FITS file with one or more image extensions. Default is 'LMC_c48_T08.r.t060.fits'.
+    image_ext : int, optional
+        Extension to be analyzed. Default is 0.
+    object_file : str, optional
+        File containing source positions. Default is 'objects.txt'.
+    nrows_max : int, optional
+        Maximum number of objects for forced photometry. If -1, processes all. Default is -1.
+    rstar : float, optional
+        Aperture radius in pixels for source extraction. Default is 6.
+    b_in : float, optional
+        Inner radius of background annulus in pixels. Default is 8.
+    b_out : float, optional
+        Outer radius of background annulus in pixels. Default is 12.
+    add_psf_metrics : bool, optional
+        If True, adds columns useful for PSF star selection. Default is False.
 
+    Returns
+    -------
+    phot_table : astropy.table.Table
+        Photometry results table.
 
-    Notes this seems to return the table, but not write it out
-    '''
+    Notes
+    -----
+    This function returns the table but does not write it to disk.
+    
+    """
 
 
     try:

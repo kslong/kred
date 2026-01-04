@@ -1,32 +1,53 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Build PSF from a selection of stars
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Build PSF from a selection of stars
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     Usage: PsFBuild [-out root] image_file psf_stars
 
-Description:  
+Description
+-----------
 
 Primary routines:
 
     doit
 
-Notes:
-                                       
+Primary Routines
+----------------
+
+doit
+
+Notes
+-----
+
 History:
 
 251210 ksl Coding begun
 251222 ksl Added to kred
 
-'''
+Version History
+---------------
+
+251210 ksl
+    Coding begun
+
+251222 ksl
+    Added to kred
+
+"""
+
 
 import sys
 from astropy.io import ascii,fits

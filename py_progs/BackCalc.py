@@ -1,41 +1,56 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Calculate backgrounds for images for which
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Calculate backgrounds for images for which
 the statistics have been gathered
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: BackCalc.py [-all]   Field T01 ...
 
-Description:  
+Description
+-----------
 
-    Uset a variety of techingiques to try to find 
+Uset a variety of techingiques to try to find
     the best backgrounds to subtract from the
     fileds to match backgrounds
 
     The main output is a file field_tile_bbb.txt
-    that contains the calculated values for 
+    that contains the calculated values for
     the offsets.
 
     Files (xxx) are also generated that show how
-    good the the actual fits is. 
+    good the the actual fits is.
 
-Primary routines:
-
+Primary Routines
+----------------
 
 Notes:
-                                       
+
+Notes
+-----
+
 History:
 
 230609 ksl Coding begun
 
-'''
+Version History
+---------------
+
+230609 ksl
+    Coding begun
+
+"""
+
 
 import sys
 from astropy.io import ascii
