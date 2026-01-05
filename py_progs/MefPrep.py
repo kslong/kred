@@ -2,44 +2,32 @@
 # coding: utf-8
 
 
-'''
-                    Space Telescope Science Institute
+"""Prepare files for combining with Swarp
 
-Synopsis:
+Space Telescope Science Institute
 
-Prepare files for combining with Swarp  
- 
+Synopsis
+--------
+
+Prepare files for combining with Swarp
+
 This is where any processing of the individal files is done that cannot be done by swarp.
 
-Prior to running PrepFiles one must have 
+Prior to running PrepFiles one must have
 
 * Downloaded the MEF and put them in the standard directory structure
 * Run MefSum on the appropriate fields to create tables that contain the RA's and DECs of the corrners of CCDs
 
 Run this routine to rescale the images to the same magnitude scale and to subtract
-and initial estimate of the background.  The default background is estimated from a 
+and initial estimate of the background.  The default background is estimated from a
 biased median (calculated with in the MefSum stage)  The default is to use the median
-value in each of the CCDs for an individual 
+value in each of the CCDs for an individual
 exposure.  One can modify this with the options indicated below
 
- 
+Description
+-----------
 
-Usage:  MefPref.py [-h] [-finish] [-all] [-back_min] [-back_none] [-np 4] Field_name or names
-
-where -h   --- to print this documentation and exit
-       -finish --> do not redo files that have already been processed
-      -back_min --> causes background to be the miniumum background in the individeal CCDs of an exposure
-      -back_none --> causes no background to be subtracted.                   
-      -np 4   --. To run in parallel with a set number of thereads.  
-      -all  -- To carry out processing on all fields that are in DECam_MEF.  This should
-        only be used with caution since it will take a long time, and so the user
-        will be asked to confrirm this option.
-
-
-
-Description:
-
-    If the preliminaries indicated above have taken place, MefPrep will create directories if 
+If the preliminaries indicated above have taken place, MefPrep will create directories if
     necessary to store the results.  The program then reads tables files in the Summary directory
     where there is a table that identify the Mef files and extensions associated with them.
     it then processes the each Mefile individual.
@@ -52,23 +40,35 @@ Description:
 
     With this approach, one must create links to the appropriate files using TileSetup
 
-Primary routines:
-
+Primary Routines
+----------------
 
 Notes:
 
     As written one can only PrepFiles from a specific MEF directory
 
     Here unlike MefSum.py, individual filess are processed with  individual
-    threads, so generally speaking all requested threads are utilized    
+    threads, so generally speaking all requested threads are utilized
 
+Notes
+-----
 
-History:
+As written one can only PrepFiles from a specific MEF directory
 
-230513 ksl Coding begun
-230621 ksl Revised so that the default is to subtract background
+    Here unlike MefSum.py, individual filess are processed with  individual
+    threads, so generally speaking all requested threads are utilized
 
-'''
+Version History
+---------------
+
+230513 ksl
+    Coding begun
+
+230621 ksl
+    Revised so that the default is to subtract background
+
+"""
+
 
 
 

@@ -2,53 +2,66 @@
 # coding: utf-8
 
 
-'''
-                    Space Telescope Science Institute
+"""This routine simple allows one to sumarize some information
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 This routine simple allows one to sumarize some information
 from all of the fits files in a particular part of the
-kred directory structure, such as DECam_SUB2. 
+kred directory structure, such as DECam_SUB2.
 
-It is intended to facillitate locating images that 
+It is intended to facillitate locating images that
 include a given RA and Dec on the sky
 
-Command line usage (if any):
+Command Line Usage
+------------------
 
-    usage: ImageSum.py [-h] [-out whatever] dirname 
+::
+
+    usage: ImageSum.py [-h] [-out whatever] dirname
 
     where:
 
-        -h prints this documentation and exits
-        -out whatever changes the name of the output
-            file that is created.  Without this
-            the name of the output file is based
-            on dirname
-        dir the directory which will be searched
+    -h prints this documentation and exits
+    -out whatever changes the name of the output
+    file that is created.  Without this
+    the name of the output file is based
+    on dirname
+    dir the directory which will be searched
 
+Description
+-----------
 
-Description:  
-
-    The routine simply searches for fits files in
-    a directory and all of its subdirectories 
+The routine simply searches for fits files in
+    a directory and all of its subdirectories
     and produces a listing of all of the files,
     along with certain information derived from
     the header
 
+Primary Routines
+----------------
 
-Primary routines:
+steer - directs the routine
+   table_create - the main routine
 
-   steer - directs the routine 
-   table_create - the main routine 
+Notes
+-----
 
-Notes:
-                                       
 History:
 
 250813 ksl Coding begun
 
-'''
+Version History
+---------------
+
+250813 ksl
+    Coding begun
+
+"""
+
 
 import sys
 import os

@@ -1,31 +1,49 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Analyze the forced photometry associated with various filters
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Analyze the forced photometry associated with various filters
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: PhotAnal.py filename
 
-Description:  
+Description
+-----------
 
 Primary routines:
 
     doit
 
-Notes:
-                                       
+Primary Routines
+----------------
+
+doit
+
+Notes
+-----
+
 History:
 
 251123 ksl Coding begun
 
-'''
+Version History
+---------------
+
+251123 ksl
+    Coding begun
+
+"""
+
 
 import sys
 from astropy.io import ascii

@@ -1,36 +1,49 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Get information about the date and commit in the
 
-Synopsis:  
+Space Telescope Science Institute
 
-Get information about the date and commit in the 
+Synopsis
+--------
+
+Get information about the date and commit in the
 git repository of the sofware being run
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: get_kred_repo_infoa
 
-
-Description:  
+Description
+-----------
 
 Primary routines:
 
     get_kred_repo_info
 
-Notes:
+Primary Routines
+----------------
 
-    This is just a simple routine so that any time we
+get_kred_repo_info
+
+Notes
+-----
+
+This is just a simple routine so that any time we
     can obtain the data and time of the version of
     kred sofware used to run a file
-                                       
-History:
 
-240501 ksl Coding begun
+Version History
+---------------
 
-'''
+240501 ksl
+    Coding begun
+
+"""
+
 
 
 

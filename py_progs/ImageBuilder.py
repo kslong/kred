@@ -1,46 +1,59 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# # Create an artificial image given a psf
+"""Construct an artificial image of a field given
 
+Space Telescope Science Institute
 
-'''
-                    Space Telescope Science Institute
+Synopsis
+--------
 
-Synopsis:  
-
-Construct an artificial image of a field given 
+Construct an artificial image of a field given
 an original image, a psf, and a list of sources
 with fluxes (calculated using aperstats) from
 the image.  A residual image is alse constructed
-
 
 PSF Image Generator Module
 
 Generate artificial images from PSF models and star catalogs.
 Completely independent from PSF building - just reads PSF FITS files and star tables.
 
+Command Line Usage
+------------------
 
+ussage ImageBuilder [-h] [-out root] original_image psf_file star_table
 
-
-Command line usage (if any):
-
-    ussage ImageBuilder [-h] [-out root] original_image psf_file star_table
-
-Description:  
+Description
+-----------
 
 Primary routines:
 
     doit
 
-Notes:
-                                       
+Primary Routines
+----------------
+
+doit
+
+Notes
+-----
+
 History:
 
 251216 ksl Coding begun
 251223 ksl Added to kred
 
-'''
+Version History
+---------------
+
+251216 ksl
+    Coding begun
+
+251223 ksl
+    Added to kred
+
+"""
+
 
 import sys
 from astropy.io import ascii,fits

@@ -1,50 +1,60 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""See how well images have been subtracted
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 See how well images have been subtracted
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     Usage ColorTest.py -h -dir dirname file1..
 
     where:
-        -h prints out this help and exits
-        -dir searches the directory dirname and
-            all subdirectories for continuum subtracted
-            emission line files, processes these images
-        file1 ... if -xdir is not specified carries out
-            the analysis on specific files
+    -h prints out this help and exits
+    -dir searches the directory dirname and
+    all subdirectories for continuum subtracted
+    emission line files, processes these images
+    file1 ... if -xdir is not specified carries out
+    the analysis on specific files
 
-Description:  
+Description
+-----------
 
-    The routine access the GAIA database to find stars in the
+The routine access the GAIA database to find stars in the
     field.  It then carries out forced photometry on emission
     line image from which the stars were subtracted and on
     the continuum image that was used for subtraction.  It
     produces a plot that shows the amount of over-subtaction
     or under-subtraction
 
-Primary routines:
+Primary Routines
+----------------
 
-    doit
+doit
 
-Notes:
+Notes
+-----
 
-    The routine looks for files with specific names to decide
+The routine looks for files with specific names to decide
     what images are are those that can be analyzed.  If new
     filters are involved some changes are requried.
-                                       
-History:
 
-251108 ksl Coding begun
+Version History
+---------------
 
-'''
+251108 ksl
+    Coding begun
+
+"""
+
 
 import sys
 from astropy.io import ascii,fits

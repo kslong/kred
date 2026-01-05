@@ -1,50 +1,53 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""The MCELS images (both for the LMC and SMC) have
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 The MCELS images (both for the LMC and SMC) have
 some header info that is depracated, notably:
 
-WARNING: FITSFixedWarning: RADECSYS= 'FK5 ' 
-the RADECSYS keyword is deprecated, use RADESYSa. [astropy.wcs.wcs]
-WARNING: FITSFixedWarning: 'datfix' made the change 'Set MJD-OBS to 51146.000000 from DATE-OBS.
-Changed DATE-OBS from '29/11/1998' to '1998-11-29''. [astropy.wcs.wcs]
+Command Line Usage
+------------------
 
-These generate warnings if the WCS is accessed.
-
-This routine fixes these warnings. The original files 
-are copied to a subdirectory old
-
-
-Command line usage (if any):
+::
 
     usage: head_fix.py filename
 
-Description:  
+Description
+-----------
 
 Primary routines:
 
     doit
 
-Notes:
+Primary Routines
+----------------
 
-    WARNING - while this does fix the actual problem one will likely still see warnings
+doit
+
+Notes
+-----
+
+WARNING - while this does fix the actual problem one will likely still see warnings
     apparently there are problems with the astroy wcs library.  To suppress these warnings
     add to your code the following:
-
 
     import warnings
     from astropy.wcs import WCS, FITSFixedWarning
     warnings.filterwarnings('ignore', category=FITSFixedWarning, message=".*datfix.*")
-                                       
-History:
 
-250731 ksl Coding begun
+Version History
+---------------
 
-'''
+250731 ksl
+    Coding begun
+
+"""
+
 
 
 import sys

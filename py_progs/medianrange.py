@@ -12,23 +12,31 @@ import numpy as np
 from scipy.special import gammaln
 
 def medianrange(data, **kw):
-    """
-    Compute median for array data plus error bounds medlo,medhi for the specified confidence interval
-    using binomial probabilities from eqn 1 of Gott et al. 2001, ApJ, 549, 1
+    """Compute median and error bounds using binomial probabilities.
+    
+    Based on equation 1 of Gott et al. 2001, ApJ, 549, 1.
     https://ui.adsabs.harvard.edu/abs/2001ApJ...549....1G/abstract
 
-    data        Array of input values
-    Additional keywords are passed to getbounds()
+    Parameters
+    ----------
+    data : array-like
+        Array of input values
+    kw : dict
+        Additional keyword arguments passed to getbounds()
 
-    Returns (med, medlo, medhi):
-    med         Median of array
-    medlo       Lower bound of given confidence interval
-    medhi       Upper bound of given confidence interval
+    Returns
+    -------
+    med : float
+        Median of array
+    medlo : float
+        Lower bound of confidence interval
+    medhi : float
+        Upper bound of confidence interval
 
-
-    Note: 
-
-    np.percentile requires a recent version of np (1.23.5 is known to work)
+    Notes
+    -----
+    Requires numpy >= 1.23.5 for the percentile method.
+    
     """
 
     data = np.asarray(data)
@@ -41,22 +49,32 @@ def medianrange(data, **kw):
 _bound_cache = {}
 
 def getbounds(ndata, ncut=10, a=1.2, verbose=False):
-    """
-    Compute percentile bounds for array with n elements to compute
-    the med, medlo, medhi values for the specified confidence interval
-    using binomial probabilities from eqn 1 of Gott et al. 2001, ApJ, 549, 1
+    """Compute percentile bounds using binomial probabilities.
+    
+    Based on equation 1 of Gott et al. 2001, ApJ, 549, 1.
     https://ui.adsabs.harvard.edu/abs/2001ApJ...549....1G/abstract
 
-    ndata       Number of input values
-    ncut        Use direct calculation for ndata <= ncut points, and model
-                fit for ndata>ncut points
-    a           Parameter in model fit
-    verbose     If true, prints the percentile range
+    Parameters
+    ----------
+    ndata : int
+        Number of input values
+    ncut : int, optional
+        Use direct calculation for ndata <= ncut points, and model
+        fit for ndata > ncut points. Default is 10.
+    a : float, optional
+        Parameter in model fit. Default is 1.2.
+    verbose : bool, optional
+        If True, prints the percentile range. Default is False.
 
-    Returns (pct_med, pct_medlo, pct_medhi)
-    pct_med     Percentile for median of array (always 50.0)
-    pct_medlo   Percentile for lower bound of confidence interval
-    pct_medhi   Percentile for upper bound of confidence interval
+    Returns
+    -------
+    pct_med : float
+        Percentile for median of array (always 50.0)
+    pct_medlo : float
+        Percentile for lower bound of confidence interval
+    pct_medhi : float
+        Percentile for upper bound of confidence interval
+        
     """
 
     percentile = 50.0

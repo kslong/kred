@@ -1,19 +1,22 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Use calculated backgrounds and subtract these
 
-Synopsis:
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Use calculated backgrounds and subtract these
 from the existing images
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: BackSub.py [-h] [-all] -np 8  field T01 T02 ...
-
 
     where
 
@@ -21,24 +24,32 @@ Command line usage (if any):
     - all causes all tiles in the field to be processed
     - np 8  causes 8 procesors to be used
 
-Description:
+Description
+-----------
 
-    The routine reads the files in the DECam_Prep/field/tile 
+The routine reads the files in the DECam_Prep/field/tile
     directory and writes the subtacted in imaages to
     DECam_Prep2/field/tile
 
-
-Primary routines:
-
+Primary Routines
+----------------
 
 Notes:
     The input tables  for this have names like  Summary/Field_Tile_bbb.txt
 
-History:
+Notes
+-----
 
-230619 ksl Coding begun
+The input tables  for this have names like  Summary/Field_Tile_bbb.txt
 
-'''
+Version History
+---------------
+
+230619 ksl
+    Coding begun
+
+"""
+
 
 
 

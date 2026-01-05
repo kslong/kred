@@ -1,33 +1,35 @@
 #!/usr/bin/env python 
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Produce pure emision (and continuum) images via
 
-Synopsis:  
+Space Telescope Science Institute
 
-Produce pure emision (and continuum) images via 
+Synopsis
+--------
+
+Produce pure emision (and continuum) images via
 simple subtraction
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: CleanStars.py [-all] [-bsub] field [tiles]
 
-    where 
-        -all will cause CleanStars to be run on all 16 tiles in a field
-            and if -all is not given, then one or more tiles should be listed
-        -bsub will search for inputs in the DECam_SWARP2 directories which
-            have "better" background matching, while if it is absence
-            one will use the data in the DECam_SWARP directories, which use
-            the background form the overal fields
+    where
+    -all will cause CleanStars to be run on all 16 tiles in a field
+    and if -all is not given, then one or more tiles should be listed
+    -bsub will search for inputs in the DECam_SWARP2 directories which
+    have "better" background matching, while if it is absence
+    one will use the data in the DECam_SWARP directories, which use
+    the background form the overal fields
 
+Description
+-----------
 
-
-
-Description:  
-
-    This routine produces simple images that
+This routine produces simple images that
     have been subtracted to remove the coinuum
     (or from the r-band continuum the emissionlines)
 
@@ -36,51 +38,56 @@ Description:
     The routine is currently hardwired to use the
     longest exposures of a particular filter type.
 
-    
-    The routine is NOT sophisticated.  
+
+    The routine is NOT sophisticated.
 
     For creating the r-band results, we first subtract the two emission
     line images from the r-band images; this should produce an image
     with the emission lines removed.  We then subtract this from the emission
     line images.  There is some scaling involved.
 
-    For creating the N708 results, we do a simple subtraction.  
+    For creating the N708 results, we do a simple subtraction.
 
-
-    (Note that before we actually do the subtractions, we calculated 
+    (Note that before we actually do the subtractions, we calculated
     a background level n the continuum images.   This is intended
     to leave whatever backgrouground level in the emission line images
     unaffected.)
 
-
     The files that are produced are nominally the following (for LMC_c42_T07):
     LMC_c42_T07.ha_sub_r.fits     - pure ha image using r-band for continuum
     LMC_c42_T07.s2_sub_r.fits     - pure s2 image using r-rand for continuum
-    LMC_c42_T07.r_sub.fits        - pure r-band image after emission lines are subtracted       
-    LMC_c42_T07.ha_s2_sub.fits    - the emission line portion of the r-band image 
+    LMC_c42_T07.r_sub.fits        - pure r-band image after emission lines are subtracted
+    LMC_c42_T07.ha_s2_sub.fits    - the emission line portion of the r-band image
 
     LMC_c42_T07.ha_sub_N708.fits  - pure ha image based on subtrcting the n708 image
     LMC_c42_T07.s2_sub_N708.fits  - pure ha image based on subtrcting the n708 image
-    LMC_c42_T07.n708_sub.fits     - n708 image (after subtracting a biased median) 
-
+    LMC_c42_T07.n708_sub.fits     - n708 image (after subtracting a biased median)
 
     The outputs are written to a subdirectory of DECam_SUB
 
+Primary Routines
+----------------
 
-Primary routines:
-
-    doit
+doit
     make_rband_subtractions
     make_n708_subtractions
     make_n540_subtractions
 
-Notes:
-                                       
+Notes
+-----
+
 History:
 
 230717 ksl Coding begun
 
-'''
+Version History
+---------------
+
+230717 ksl
+    Coding begun
+
+"""
+
 
 import sys
 from astropy.io import ascii

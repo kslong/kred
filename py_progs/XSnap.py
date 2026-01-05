@@ -1,60 +1,42 @@
 #!/usr/bin/env python
 # coding: utf-8
-'''
-Create one or more images and fits files of
-snapshots of one or more sets of sources in 
-a masterfile
 
+"""XSnap - Create Snapshots of Astronomical Sources
 
+Space Telescope Science Institute
 
-Usaage:
-    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] -out ha [images or table_of_snaps]   master_table_of_regions
+Synopsis
+--------
 
-    where:
+Create one or more images and FITS files of snapshots from astronomical images.
 
+Command Line Usage
+------------------
 
-    image.fits   a fitsfile, with the data in the PRIMARY header
-        to create the snaps
-    or 
-    table_of_ naps  a masterfile with positions and sizes of objects in 
-        a standard format
+::
 
-    master_table_of_regions - a table containing the definition of region files
+    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] -out ha [images or table] master_table
 
-    The routine has thre  basic modes, 
-    
-    * if there is a single fits file, and if -size is not proviced a single image will be produced, and if there is
+Description
+-----------
 
-    * if there is a single fits file, and if size is provide and if there is a master table of regions, then one
-        snapshot is provided at each position in the master_table_of_regions.  In this case, all of the region files
-        will be overplotted on the imaes
+This routine creates snapshot images from FITS files at specified positions.
 
-    * if there is a table of snaps (rather than a single image), then that table can contain the name of each sourcej,
-        the RA and DEC or each snapshot , and one snapshot will be made of for each line in the table.   (See below)
-        
+It has three basic modes:
 
-    -out is only relevant when a single image file is provided.  If provided the name it determines
-    the name of the output plot file
+* Single image mode: If a single FITS file is provided without -size
+* Multiple snapshot mode: If -size is provided with a master table of regions
+* Table mode: If a table of snapshots is provided
 
-    The  fits images associated with each cutout will be placed in the ximage 
-    directory
+The FITS images associated with each cutout are placed in the ximage directory.
 
-    The plots will be in the ximage directory
+Notes
+-----
 
-    -type ha  is just used to help name the plots
+The routine can overlay region files on images when in snapshot mode.
 
-    In the absence of -min or -max, the images are autoscaled, if -xmin or -xmax
-    are provided then one or the other of these values will replace
-    what the autoscaled values would have been 
+"""
 
-
-    More details about creating multiple snapshots and multiple sources:
-
-    This option requires one to create a table that matches sources to images.  To do that, one needs to use ImageSum to creat
-    a list of images to consider, and ImageMatch2Source to create an input table_of_snaps
-
-
-'''
 
 # # Create  routine to prodces a Summary Overview of SNRS in MCELS
 
