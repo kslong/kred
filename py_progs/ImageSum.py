@@ -58,6 +58,29 @@ from glob import glob
 from astropy.table import Table
 from astropy.wcs import WCS
 
+def list_image_extensions(filename):
+    with fits.open(filename, memmap=True) as hdul:
+        rows = []
+        for i, hdu in enumerate(hdul):
+            name = hdu.header.get("EXTNAME")
+            if name is None:
+                name = f"Ext_{i:02d}"
+            hdu_type = hdu.__class__.__name__
+            # has_data = (hdu.data is not None)
+            has_data = (hdu.header.get('NAXIS', 0) != 0)
+            rows.append((i, name, hdu_type, has_data))
+
+    xtab = Table(rows=rows, names=("EXT", "NAME", "HDU_TYPE", "HAS_DATA"))
+
+    mask = (
+        (xtab['HDU_TYPE'] == 'PrimaryHDU') |
+        (xtab['HDU_TYPE'] == 'ImageHDU')   |
+        (xtab['HDU_TYPE'] == 'CompImageHDU')
+    ) & xtab['HAS_DATA']
+
+    ytab = xtab[mask]
+    return ytab['EXT', 'NAME']
+
 def get_image_center_and_size_from_header(header):
     """
     Calculate the center coordinates (RA, Dec) and size in degrees 
@@ -181,34 +204,82 @@ def print_header_image_info(header, description="FITS Header"):
 
 
 def table_create(xdir='DECam_SUB2',outname=''):
-    files=glob('%s/**/*.fits' % xdir,recursive=True)
+    files=glob('%s/**/*.fits*' % xdir,recursive=True)
+    if len(files)==0:
+        raise IOError("No files found for %s" % xdir)
+
     source=[]
     xtype=[]
     ra=[]
     dec=[]
     height=[]
     width=[]
+    exptime=[]
+    ffilter=[]
+    mag=[]
+    seeing=[]
+    xfiles=[]
+    xext=[]
+
     for one_file in files:
         name=one_file.split('/')[-1]
+        name=name.replace('.fz','')
         word=name.split('.')
-        xtype.append(word[-2])
         header = fits.getheader(one_file, ext=0)
-        source.append(header['Object'])
-        info=get_image_center_and_size_from_header(header)
-        ra.append(info['center_ra'])
-        dec.append(info['center_dec'])
-        width.append(info['width_deg'])
-        height.append(info['height_deg'])
+        xsource=header['Object']
+        xexptime=header['EXPTIME']
+        xfilter=header['FILTER']
+        xfilter=xfilter.split()[0]
+        try:
+            xmag=header['MAGZERO']
+        except:
+            xmag=-999.
+        try:
+            xseeing=header['SEEING']
+        except:
+            xseeing=-999.
+
+        ztab=list_image_extensions(one_file)
+        # print(one_file,len(ztab))
+        for one_row in ztab:
+            header=fits.getheader(one_file,ext=one_row['EXT'])
+            info=get_image_center_and_size_from_header(header)
+            if one_row['EXT']==0:
+                xxtype=word[-2]
+            else:
+                fiddle=word[-2]
+                fiddle=fiddle.split('_')
+                # xxtype='%s-%s' % (fiddle[-3],one_row['NAME'])
+                xxtype='%s-%s' % (xfilter,one_row['NAME'])
+
+
+            source.append(xsource)
+            ra.append(info['center_ra'])
+            dec.append(info['center_dec'])
+            width.append(info['width_deg'])
+            height.append(info['height_deg'])
+            xtype.append(xxtype)
+            exptime.append(xexptime)
+            ffilter.append(xfilter)
+            mag.append(xmag)
+            seeing.append(xseeing)
+            xfiles.append(one_file)
+            xext.append(one_row['EXT'])
 
     dec=np.array(dec)
     height=np.array(height)
     width=np.array(width)
     width*=np.cos(dec/(180./np.pi))
-    xtab=Table([source,xtype,ra,dec,width,height,files],names=['Source_name','Image_type','RA','Dec','width','height','filename'])
+
+
+    xtab=Table([source,ffilter,exptime,xtype,ra,dec,width,height,mag,seeing,xfiles,xext],
+               names=['Source_name','Filter','Exptime','Image_type','RA','Dec','width','height','mag','seeing','filename','ext'])
     xtab['RA'].format='.5f'
     xtab['Dec'].format='.5f'
     xtab['width'].format='.2f'
     xtab['height'].format='.2f'
+    xtab['mag'].format='.2f'
+    xtab['seeing'].format='.2f'
 
     if outname==None:
         return xtab
@@ -216,6 +287,10 @@ def table_create(xdir='DECam_SUB2',outname=''):
     if outname=='':
         qdir=xdir.replace('/','-')
         outname='Image_Sum_%s.txt' % qdir
+
+
+    print('Ready to write')
+
     xtab.write(outname,format='ascii.fixed_width_two_line',overwrite=True)
     print('Wrote summary with %d lines to %s' % (len(xtab),outname))
 

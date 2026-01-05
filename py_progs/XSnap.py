@@ -5,18 +5,33 @@ Create one or more images and fits files of
 snapshots of one or more sets of sources in 
 a masterfile
 
+
+
 Usaage:
-    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] [-out outroot] image.fits  mastertable
+    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] -out ha [images or table_of_snaps]   master_table_of_regions
+
+    where:
+
 
     image.fits   a fitsfile, with the data in the PRIMARY header
-    mastertable  a masterfile with positions and sizes of objects in 
+        to create the snaps
+    or 
+    table_of_ naps  a masterfile with positions and sizes of objects in 
         a standard format
 
-    The routine has two basic modes, if -size is not provided, an plot of
-    the fits file will be made, and the regions will be ovelaid on the plot
+    master_table_of_regions - a table containing the definition of region files
 
-    If -size is provided, cutouts of the image will be made, with a size 
-    in arcmin given by the number that follows the size command
+    The routine has thre  basic modes, 
+    
+    * if there is a single fits file, and if -size is not proviced a single image will be produced, and if there is
+
+    * if there is a single fits file, and if size is provide and if there is a master table of regions, then one
+        snapshot is provided at each position in the master_table_of_regions.  In this case, all of the region files
+        will be overplotted on the imaes
+
+    * if there is a table of snaps (rather than a single image), then that table can contain the name of each sourcej,
+        the RA and DEC or each snapshot , and one snapshot will be made of for each line in the table.   (See below)
+        
 
     -out is only relevant when a single image file is provided.  If provided the name it determines
     the name of the output plot file
@@ -33,6 +48,10 @@ Usaage:
     what the autoscaled values would have been 
 
 
+    More details about creating multiple snapshots and multiple sources:
+
+    This option requires one to create a table that matches sources to images.  To do that, one needs to use ImageSum to creat
+    a list of images to consider, and ImageMatch2Source to create an input table_of_snaps
 
 
 '''
@@ -57,7 +76,7 @@ import matplotlib.patches as patches
 
 
 
-def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',default_value=0,frac_off=0.01):
+def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',default_value=0,frac_off=0.1):
     '''
     Extract a region of a given size, but do not write an image if a fraction of an
     image has not data exceeds frac_off
@@ -119,6 +138,7 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     num_default_value_pixels = np.sum(output_data == default_value)
     frac_default=num_default_value_pixels/output_data.size
     if frac_default>frac_off:
+        print(f"Too much of the requested image at {ra} and {dec} appears to outside the region of the fits file: {input_fits}")
         print(f"This image had {frac_default} > {frac_off} so ignoring")
         return
 
@@ -164,7 +184,8 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
     try:
         hdul = fits.open(image_file)
     except:
-        print('Could not open: ' % image_file)
+        print('Could not open: %s' % image_file)
+        return None
 
 
     # Access the image data
@@ -267,7 +288,7 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
         pixel_scale=np.abs(wcs_info.pixel_scale_matrix[0,0])*3600.
 
         for one in xmaster:
-            print('starting\n ',one)
+            # print('starting\n ',one)
             ra=float(one['RA'])
             dec=float(one['Dec'])
             # print(ra,dec)
@@ -331,7 +352,7 @@ def make_one_image(filename,master,ymin,ymax,outroot=''):
 
     return
 
-def make_many_images(filename,master,xtype,size,ymin,ymax):
+def make_many_images(filename,master,xtype,size,ymin,ymax,frac_orr=0.1):
     '''
     Create cut-outs of an image, one for each source in a masterfile
     and overlay the regions from the master file on each sanpshot.
@@ -343,7 +364,7 @@ def make_many_images(filename,master,xtype,size,ymin,ymax):
         os.mkdir('ximage')
     
     for one in xm:
-        print('starting\n',one)
+        # print('starting\n',one)
         xsource_name='%s' % one['Source_name']
         xra=float(one['RA'])
         xdec=float(one['Dec'])
@@ -352,7 +373,7 @@ def make_many_images(filename,master,xtype,size,ymin,ymax):
         else:
             outfile_name='ximage/%s.%s.png' % (xsource_name,xtype)
 
-        stamp=extract_region(xsource_name, xra, xdec, size_arcmin=size, input_fits=filename, outdir='xdata',default_value=0,frac_off=0.01)
+        stamp=extract_region(xsource_name, xra, xdec, size_arcmin=size, input_fits=filename, outdir='xdata',default_value=0,frac_off=frac_off)
         display_fits_image(image_file=stamp, scale='linear', ymin=ymin,ymax=ymax,invert=True,masterfile=master,outfile=outfile_name)
     
     
@@ -361,11 +382,13 @@ def make_many_images(filename,master,xtype,size,ymin,ymax):
 
 
 
-def make_many_images2(master,xtype,size,ymin,ymax):
+def make_many_images2(master,reg,xtype,size,ymin,ymax):
     '''
     Create cut-outs of an image, one for each line in a mastefile  
     and overlay the regions from the master file on each sanpshot.
     '''
+
+    print('Doing make_many_images2: %s %s' % (master,reg))
 
     xm=ascii.read(master)
     print(xm)
@@ -373,7 +396,7 @@ def make_many_images2(master,xtype,size,ymin,ymax):
         os.mkdir('ximage')
     
     for one in xm:
-        print('starting\n',one)
+        # print('starting\n',one)
         xsource_name='%s' % one['Source_name']
         xra=float(one['RA'])
         xdec=float(one['Dec'])
@@ -385,7 +408,7 @@ def make_many_images2(master,xtype,size,ymin,ymax):
 
         stamp=extract_region(xsource_name, xra, xdec, size_arcmin=size, input_fits=filename, outdir='xdata',default_value=0,frac_off=0.01)
         print('XXX ',stamp)
-        display_fits_image(image_file=stamp, scale='linear', ymin=ymin,ymax=ymax,invert=True,masterfile=master,outfile=outfile_name)
+        display_fits_image(image_file=stamp, scale='linear', ymin=ymin,ymax=ymax,invert=True,masterfile=reg,outfile=outfile_name)
     
     
     print('Creating an image for each regions')
@@ -395,7 +418,7 @@ def make_many_images2(master,xtype,size,ymin,ymax):
 def steer(argv):
     '''
 
-    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] filename  mastertable
+    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] -out ha [filename or table of snaps]   master_table_of_regions
 
     without - size we use the full image, and just display eveything
     with a size we make images of each of the source in the master tale
@@ -409,6 +432,7 @@ def steer(argv):
     ymin=None
     ymax=None
     xtype=None
+    reg=''
 
     i=1
     while i<len(argv):
@@ -436,6 +460,8 @@ def steer(argv):
             filename=argv[i]
         elif master=='':
             master=argv[i]
+        elif reg=='':
+            reg=argv[i]
         else:
             print('Error: Too many arguments :', argv)
         i+=1
@@ -458,8 +484,8 @@ def steer(argv):
         fits_exists=False
 
     if xfilenames==True and fits_exists==False:
-        # This is the case where we want to read the fits file from the master file
-        make_many_images2(master,xtype,size,ymin,ymax)
+        # This is the case where we want to read multiple fits file from the master file
+        make_many_images2(master,reg,xtype,size,ymin,ymax)
         return
     if fits_exists==True and size>0:
         # This is the case where we have a single fits file, but a master file with regions indecated.
