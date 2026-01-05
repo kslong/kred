@@ -18,7 +18,7 @@ Command line usage (if any):
 Description:  
 
     This routine estimates the zeropoints based on the
-    ouputs from the PhotCompare routine
+    outputs from the PhotCompare routine
 
 Primary routines:
 
@@ -29,6 +29,9 @@ Notes:
     The routine produces or adds to the PhotMaster.txt file 
     and produces a historgram plot of the derived 
     zero points.
+
+    This routine is the one that was used to estimate 
+    sensitivity in Points+24
                                        
 History:
 
@@ -43,7 +46,6 @@ from astropy.table import Table,vstack
 import numpy as np
 import matplotlib.pyplot as plt
 import random
-
 
 from PhotCompare import get_gaia_spec
 
