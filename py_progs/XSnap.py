@@ -227,8 +227,8 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
     # Invert the colors if invert is True
 
     # Create a figure and axes using wcsaxes
-    fig = plt.figure(1,figsize=(10, 10))  # Adjust the figure size as needed
-    fig.clf()
+    plt.close(1)  # Close existing figure 1 if it exists
+    fig = plt.figure(1, figsize=(10, 10))  # Adjust the figure size as needed
     ax = WCSAxes(fig, [0.1, 0.1, 0.8, 0.8], wcs=wcs_info, aspect='equal')  # Set the aspect ratio to 'equal'
     fig.add_axes(ax)
 
@@ -334,7 +334,7 @@ def make_one_image(filename,master,ymin,ymax,outroot=''):
 
     return
 
-def make_many_images(filename,master,xtype,size,ymin,ymax,frac_orr=0.1):
+def make_many_images(filename,master,xtype,size,ymin,ymax,frac_off=0.1):
     '''
     Create cut-outs of an image, one for each source in a masterfile
     and overlay the regions from the master file on each sanpshot.
