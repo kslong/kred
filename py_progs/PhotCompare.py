@@ -655,10 +655,11 @@ def locate_first_image_extension(xx):
 
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='objects.txt',
-                         nrows_max=-1, outroot='', rstar=6, b_in=8, b_out=12):
+                         nrows_max=-1, outroot='', rstar=6, b_in=8, b_out=12,
+                         add_psf_metrics=False):
     """
     Perform forced photometry at catalog positions.
-    
+
     Extracts aperture photometry at specified sky positions (typically
     from Gaia catalog) with local background subtraction.
 
@@ -679,31 +680,34 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
         Inner background annulus radius in pixels. Default: 8.
     b_out : float, optional
         Outer background annulus radius in pixels. Default: 12.
+    add_psf_metrics : bool, optional
+        If True, adds columns useful for PSF star selection (SNR, Concentration,
+        BkgContam). Default: False.
 
     Returns
     -------
     str or 'Error'
         Path to output photometry table, or 'Error' if file cannot be opened.
-    
+
     Notes
     -----
     **NOTE:** This version should be replaced by MefPhot.do_forced_photometry()
     which has been better tested. This version is maintained for compatibility
     but writes output directly within the routine.
-    
+
     **Processing:**
-    
+
     1. Load image and source catalog
     2. Transform sky coordinates to pixel coordinates
     3. Filter sources within detector boundaries
     4. Perform aperture photometry with local background
     5. Calculate magnitudes (zero point = 28)
     6. Write results to TabPhot directory
-    
+
     **Output Table:**
-    
-    Written to ``TabPhot{XDIR}/{outroot}_phot.txt``
-    
+
+    Written to ``TabPhot{XDIR}/{outroot}_phot.fits``
+
     Examples
     --------
     >>> phot_file = do_forced_photometry('image.fits', 'gaia_sources.fits')
@@ -812,16 +816,52 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
 
     phot_table['Raw'] = aper_stats.sum
     phot_table['Bkg'] = total_background
+    phot_table['BkgMean'] = bkg_stats.mean
+    phot_table['BkgStd'] = bkg_std_per_pixel
     phot_table['Net'] = net
     phot_table['ErrNet'] = error
 
+    # FWHM and Eccentricity from cutout analysis
+    phot_table['FWHM'] = np.nan
+    phot_table['Eccentricity'] = np.nan
+
+    for i in range(len(positions)):
+        x_int, y_int = int(positions[i, 0]), int(positions[i, 1])
+        cutout_size = int(2 * b_out) + 10
+        y_min = max(0, y_int - cutout_size)
+        y_max = min(NAXIS2, y_int + cutout_size)
+        x_min = max(0, x_int - cutout_size)
+        x_max = min(NAXIS1, x_int + cutout_size)
+
+        if y_max > y_min and x_max > x_min:
+            cutout = image[y_min:y_max, x_min:x_max] - bkg_stats.mean[i]
+            cutout_pos = [(positions[i, 0] - x_min, positions[i, 1] - y_min)]
+            cutout_aper = CircularAperture(cutout_pos, r=rstar)
+            cutout_stats = ApertureStats(cutout, cutout_aper, sigma_clip=None)
+
+            if np.isfinite(cutout_stats.fwhm.value):
+                phot_table['FWHM'][i] = cutout_stats.fwhm.value
+            if np.isfinite(cutout_stats.eccentricity):
+                phot_table['Eccentricity'][i] = cutout_stats.eccentricity
+
+    phot_table['Max'] = aper_stats.max
+    phot_table['Min'] = aper_stats.min
+
     phot_table['phot_mag'] = 28 - 2.5*np.log10(np.fabs(phot_table['Net']))
-    phot_table['phot_mag_simple'] = 28 - 2.5*np.log10(np.fabs(phot_table['aperture_sum']))
+    phot_table['phot_mag_raw'] = 28 - 2.5*np.log10(np.fabs(phot_table['aperture_sum']))
 
     phot_table['phot_mag'] = np.select([phot_table['Net'] > 0], [phot_table['phot_mag']],
                                        default=-phot_table['phot_mag'])
-    phot_table['phot_mag_simple'] = np.select([phot_table['Net'] > 0], [phot_table['phot_mag_simple']],
-                                              default=-phot_table['phot_mag_simple'])
+    phot_table['phot_mag_raw'] = np.select([phot_table['Net'] > 0], [phot_table['phot_mag_raw']],
+                                           default=-phot_table['phot_mag_raw'])
+
+    # Add optional PSF quality metrics
+    if add_psf_metrics:
+        phot_table['SNR'] = np.abs(phot_table['Net']) / phot_table['ErrNet']
+        mean_flux_density = phot_table['Net'] / n_aper_pixels
+        phot_table['Concentration'] = phot_table['Max'] / mean_flux_density
+        median_bkg_std = np.nanmedian(phot_table['BkgStd'])
+        phot_table['BkgContam'] = phot_table['BkgStd'] / median_bkg_std
 
     for col in phot_table.colnames:
         phot_table[col].info.format = '%.8g'
@@ -830,6 +870,8 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
     # Use preserved id and Source_name from sources table (created before filtering)
     phot_table['id'] = sources['id']
     phot_table['Source_name'] = sources['Source_name']
+    phot_table['xcentroid'] = sources['xcentroid']
+    phot_table['ycentroid'] = sources['ycentroid']
     phot_table['RA'] = pos.ra.degree
     phot_table['Dec'] = pos.dec.degree
     phot_table['File'] = outroot
@@ -847,8 +889,8 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
         words = filename.split('/')
         outroot = words[-1].replace('.fits', '')
 
-    outfile = '%s/%s_phot.txt' % (tab_dir, outroot)
-    phot_table.write(outfile, format='ascii.fixed_width_two_line', overwrite=True)
+    outfile = '%s/%s_phot.fits' % (tab_dir, outroot)
+    phot_table.write(outfile, format='fits', overwrite=True)
     print('Wrote %s with %d objects' % (outfile, len(phot_table)))
     return outfile
 
