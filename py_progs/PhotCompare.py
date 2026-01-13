@@ -168,7 +168,7 @@ from astropy.wcs._wcs import InvalidCoordinateError
 from http.client import IncompleteRead
 
 import ImageSum
-from GaiaCat import get_gaia
+from GaiaCat import get_gaia_from_archive as get_gaia
 
 
 #: Directory suffix for isolating different runs of PhotCompare
@@ -740,6 +740,17 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
         good = ~sources['R'].mask
         sources = sources[good]
 
+    # Create id and Source_name before any filtering if they don't exist
+    # This ensures a direct match before and after forced photometry
+    id_existed = 'id' in sources.colnames
+    source_name_existed = 'Source_name' in sources.colnames
+
+    if not id_existed:
+        sources['id'] = np.arange(1, len(sources) + 1)
+
+    if not source_name_existed:
+        sources['Source_name'] = ['x%05d' % i for i in sources['id']]
+
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
 
     # Initialize with NaNs
@@ -816,15 +827,18 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
         phot_table[col].info.format = '%.8g'
 
     pos = image_wcs.pixel_to_world(phot_table['xcenter'], phot_table['ycenter'])
-    names = []
-    for one in phot_table:
-        names.append('x%05d' % one['id'])
-    phot_table['Source_name'] = names
+    # Use preserved id and Source_name from sources table (created before filtering)
+    phot_table['id'] = sources['id']
+    phot_table['Source_name'] = sources['Source_name']
     phot_table['RA'] = pos.ra.degree
     phot_table['Dec'] = pos.dec.degree
     phot_table['File'] = outroot
     phot_table['Filter'] = xfilter
     phot_table['Exptime'] = xexptime
+
+    phot_table['RA'].format='.7f'
+    phot_table['Dec'].format='.7f'
+
 
     tab_dir = './TabPhot%s' % XDIR
     os.makedirs(tab_dir, exist_ok=True)
