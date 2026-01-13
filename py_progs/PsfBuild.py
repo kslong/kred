@@ -1,33 +1,46 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""Build PSF from a selection of stars
+"""Build PSF from star catalog
 
 Space Telescope Science Institute
 
 Synopsis
 --------
 
-Build PSF from a selection of stars
+Build PSF models from an image and star catalog. Selects optimal PSF stars
+from the input catalog and builds Gaussian, Moffat, and summed PSF models.
 
 Command Line Usage
 ------------------
 
 ::
 
-    Usage: PsFBuild [-out root] image_file psf_stars
+    Usage: PsfBuild [-out root] image_file star_catalog
+
+where star_catalog is typically the all_stars.fits output from StarFind.
 
 Description
 -----------
 
-Primary routines:
+This module handles all PSF-related decisions:
 
-    doit
+1. Selects optimal stars for PSF construction based on SNR, FWHM, eccentricity
+2. Writes the selected PSF stars to {prefix}_psf_stars.fits
+3. Builds Gaussian, Moffat, and summed PSF models
+4. Writes PSF models to FITS files
 
 Primary Routines
 ----------------
 
-doit
+select_psf_stars
+    Select optimal stars for PSF construction from photometry table.
+
+do_one
+    Build PSF from an image and star catalog.
+
+quick_psf_build
+    Quick function to build all PSF models.
 
 Notes
 -----
@@ -36,15 +49,7 @@ History:
 
 251210 ksl Coding begun
 251222 ksl Added to kred
-
-Version History
----------------
-
-251210 ksl
-    Coding begun
-
-251222 ksl
-    Added to kred
+260113 ksl Moved select_psf_stars from StarFind; PsfBuild now handles all PSF decisions
 
 """
 
@@ -66,6 +71,67 @@ from astropy.io import fits
 from astropy.table import Table
 from scipy.optimize import minimize
 import warnings
+
+
+def select_psf_stars(phot_table, snr_min=20, fwhm_tolerance=0.3, ecc_max=0.2,
+                     bkg_contam_max=1.5, concentration_min=3.0, max_stars=100):
+    """
+    Select optimal stars for PSF construction from photometry table.
+
+    Parameters
+    ----------
+    phot_table : astropy.table.Table
+        Output from do_forced_photometry with add_psf_metrics=True
+    snr_min : float
+        Minimum signal-to-noise ratio (default: 20)
+    fwhm_tolerance : float
+        Maximum fractional deviation from median FWHM (default: 0.3)
+    ecc_max : float
+        Maximum eccentricity (default: 0.2)
+    bkg_contam_max : float
+        Maximum background contamination relative to median (default: 1.5)
+    concentration_min : float
+        Minimum concentration index (default: 3.0)
+    max_stars : int
+        Maximum number of PSF stars to return (default: 100)
+
+    Returns
+    -------
+    psf_stars : astropy.table.Table
+        Subset of brightest, highest quality isolated stars
+    """
+
+    # Calculate median FWHM for consistency check
+    median_fwhm = np.nanmedian(phot_table['FWHM'])
+    fwhm_deviation = np.abs(phot_table['FWHM'] - median_fwhm) / median_fwhm
+
+    # Apply selection criteria
+    mask = (
+        (phot_table['SNR'] > snr_min) &
+        (fwhm_deviation < fwhm_tolerance) &
+        (phot_table['Eccentricity'] < ecc_max) &
+        (phot_table['BkgContam'] < bkg_contam_max) &
+        (phot_table['Concentration'] > concentration_min) &
+        np.isfinite(phot_table['FWHM']) &
+        np.isfinite(phot_table['Eccentricity'])
+    )
+
+    candidates = phot_table[mask]
+
+    if len(candidates) == 0:
+        print("Warning: No stars meet PSF selection criteria")
+        return candidates
+
+    # Sort by SNR and take brightest
+    candidates.sort('SNR', reverse=True)
+    psf_stars = candidates[:max_stars]
+
+    print(f"Selected {len(psf_stars)} PSF stars from {len(phot_table)} sources")
+    print(f"  Median FWHM: {np.nanmedian(psf_stars['FWHM']):.2f} pixels")
+    print(f"  Median SNR: {np.nanmedian(psf_stars['SNR']):.1f}")
+    print(f"  Median Eccentricity: {np.nanmedian(psf_stars['Eccentricity']):.3f}")
+
+    return psf_stars
 
 
 class PSFBuilder:
@@ -506,24 +572,46 @@ def quick_psf_build(fits_file, star_table, stamp_size=25, normalize='peak', outp
 
 
 
-def do_one(image_file,psf_stars,prefix=''):
+def do_one(image_file, star_file, prefix='', snr_min=20, max_stars=1000):
+    """
+    Build PSF from an image and star catalog.
 
+    Parameters
+    ----------
+    image_file : str
+        Path to FITS image file.
+    star_file : str
+        Path to star catalog (typically all_stars.fits from StarFind).
+    prefix : str, optional
+        Output filename prefix. If empty, derived from image_file.
+    snr_min : float, optional
+        Minimum SNR for PSF star selection. Default: 20.
+    max_stars : int, optional
+        Maximum number of stars to use for PSF. Default: 1000.
+    """
 
-    if prefix=='':
-        root=image_file.split('/')[-1]
-        root=root.replace('.fits','')
-        root=root.replace('.fz','')
-        prefix=root
+    if prefix == '':
+        root = image_file.split('/')[-1]
+        root = root.replace('.fits', '')
+        root = root.replace('.fz', '')
+        prefix = root
 
+    # Load all stars table
+    all_stars = Table.read(star_file)
 
-    # Load your star table (from aperture photometry)
-    star_table = Table.read(psf_stars)
+    # Select PSF stars
+    psf_stars = select_psf_stars(all_stars, snr_min=snr_min, max_stars=max_stars)
+
+    # Write selected PSF stars
+    psf_stars_out = '%s_psf_stars.fits' % prefix
+    psf_stars.write(psf_stars_out, format='fits', overwrite=True)
+    print('Wrote PSF stars: %s' % psf_stars_out)
 
     # Build PSFs with consistent normalization
-    results = quick_psf_build(image_file, star_table, 
-                             stamp_size=25, 
-                             normalize='peak',  # or 'sum' or 'none'
-                             output_prefix=prefix)
+    results = quick_psf_build(image_file, psf_stars,
+                              stamp_size=25,
+                              normalize='peak',
+                              output_prefix=prefix)
 
     # Access results
     print("\n=== Elliptical Gaussian PSF ===")
@@ -548,49 +636,44 @@ def steer(argv):
     '''
     This is generally just a steering routine
 
-    Usage: PsFBuild [-out root] image_file psf_stars
+    Usage: PsfBuild [-out root] image_file star_catalog
     '''
 
-    image_file=''
-    star_file=''
-    root=''
+    image_file = ''
+    star_file = ''
+    root = ''
 
-
-
-    i=1
-    while i<len(argv):
-        if argv[i][:2]=='-h':
+    i = 1
+    while i < len(argv):
+        if argv[i][:2] == '-h':
             print(__doc__)
             return
-        elif argv[i][:4]=='-out':
-            i+=1
-            root=argv[i]
-        elif argv[i][0]=='-':
-            print('Error: Could not intepret commands: ',argv)
+        elif argv[i][:4] == '-out':
+            i += 1
+            root = argv[i]
+        elif argv[i][0] == '-':
+            print('Error: Could not interpret commands: ', argv)
             return
-        elif image_file=='':
-            image_file=argv[i]
-        elif star_file=='':
-            star_file=argv[i]
+        elif image_file == '':
+            image_file = argv[i]
+        elif star_file == '':
+            star_file = argv[i]
         else:
-            print('Error: Two many commands: ',argv)
+            print('Error: Too many commands: ', argv)
             return
 
-        i+=1
+        i += 1
 
-    if root=='':
-        root=image_file.split('/')[-1]
-        root=root.replace('.fits','')
-        root=root.replace('.gz','')
+    if root == '':
+        root = image_file.split('/')[-1]
+        root = root.replace('.fits', '')
+        root = root.replace('.gz', '')
 
+    print('       Image: ', image_file)
+    print('Star catalog: ', star_file)
+    print('        Root: ', root)
 
-    print('     Image: ',image_file)
-    print(' PSF_stars: ',star_file)
-    print('     Root : ',root)
-
-
-
-    do_one(image_file=image_file,psf_stars=star_file,prefix=root)
+    do_one(image_file=image_file, star_file=star_file, prefix=root)
 
 
 

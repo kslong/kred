@@ -381,93 +381,34 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',image_ext=0,object_f
     return phot_table
 
 
-def select_psf_stars(phot_table, snr_min=20, fwhm_tolerance=0.3, ecc_max=0.2, 
-                     bkg_contam_max=1.5, concentration_min=3.0, max_stars=100):
+def do_one(filename, root='test'):
     """
-    Select optimal stars for PSF construction from photometry table.
+    Find stars and perform photometry on an image.
 
     Parameters
     ----------
-    phot_table : astropy.table.Table
-        Output from do_forced_photometry with add_psf_metrics=True
-    snr_min : float
-        Minimum signal-to-noise ratio (default: 20)
-    fwhm_tolerance : float
-        Maximum fractional deviation from median FWHM (default: 0.3)
-    ecc_max : float
-        Maximum eccentricity (default: 0.2)
-    bkg_contam_max : float
-        Maximum background contamination relative to median (default: 1.5)
-    concentration_min : float
-        Minimum concentration index (default: 3.0)
-    max_stars : int
-        Maximum number of PSF stars to return (default: 100)
+    filename : str
+        Path to FITS image file.
+    root : str, optional
+        Output filename root. If empty, derived from filename.
 
-    Returns
-    -------
-    psf_stars : astropy.table.Table
-        Subset of brightest, highest quality isolated stars
+    Notes
+    -----
+    Writes {root}_all_stars.fits containing all detected stars with photometry.
+    Use PsfBuild to select PSF stars and build PSF models.
     """
 
-    # Calculate median FWHM for consistency check
-    median_fwhm = np.nanmedian(phot_table['FWHM'])
-    fwhm_deviation = np.abs(phot_table['FWHM'] - median_fwhm) / median_fwhm
+    if root == '':
+        root = filename.split('/')[-1]
+        root = root.replace('.fits', '')
+        root = root.replace('.fz', '')
 
-    # Apply selection criteria
-    mask = (
-        (phot_table['SNR'] > snr_min) &
-        (fwhm_deviation < fwhm_tolerance) &
-        (phot_table['Eccentricity'] < ecc_max) &
-        (phot_table['BkgContam'] < bkg_contam_max) &
-        (phot_table['Concentration'] > concentration_min) &
-        np.isfinite(phot_table['FWHM']) &
-        np.isfinite(phot_table['Eccentricity'])
-    )
+    source_file = get_objects_from_image(filename=filename, outroot=root)
+    phot = do_forced_photometry(filename, object_file=source_file, add_psf_metrics=True)
 
-    candidates = phot_table[mask]
-
-    if len(candidates) == 0:
-        print("Warning: No stars meet PSF selection criteria")
-        return candidates
-
-    # Sort by SNR and take brightest
-    candidates.sort('SNR', reverse=True)
-    psf_stars = candidates[:max_stars]
-
-    print(f"Selected {len(psf_stars)} PSF stars from {len(phot_table)} sources")
-    print(f"  Median FWHM: {np.nanmedian(psf_stars['FWHM']):.2f} pixels")
-    print(f"  Median SNR: {np.nanmedian(psf_stars['SNR']):.1f}")
-    print(f"  Median Eccentricity: {np.nanmedian(psf_stars['Eccentricity']):.3f}")
-
-    return psf_stars
-
-
-def do_one(filename,root='test'):
-    '''
-    '''
-
-    print('xxxx ',root)
-
-    if root=='':
-        root=filename.split('/')[-1]
-        root=root.replace('.fits','')
-        root=root.replace('.fz','')
-
-
-    source_file=get_objects_from_image(filename=filename,outroot=root)
-    phot = do_forced_photometry(filename, object_file=source_file,add_psf_metrics=True)
-
-    all_out='%s_all_stars.fits' % root
-    print('Writing all stars: %s' % (all_out))
-    phot.write(all_out,format='fits',overwrite=True)
-
-    psf_stars = select_psf_stars(phot, snr_min=20, max_stars=1000)
-
-    psf_out='%s_psf_stars.fits' % root
-    print('Writing psf stars: %s' % (psf_out))
-
-
-    psf_stars.write(psf_out,format='fits',overwrite=True)
+    all_out = '%s_all_stars.fits' % root
+    print('Writing all stars: %s' % all_out)
+    phot.write(all_out, format='fits', overwrite=True)
 
 
 
