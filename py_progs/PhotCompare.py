@@ -756,8 +756,10 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
 
     sources = read_table(object_file)
     if 'G' in sources.colnames:
-        good = ~sources['R'].mask
-        sources = sources[good]
+        # Handle case where column may not be masked (no values to mask)
+        if hasattr(sources['R'], 'mask'):
+            good = ~sources['R'].mask
+            sources = sources[good]
 
     # Create id and Source_name before any filtering if they don't exist
     # This ensures a direct match before and after forced photometry

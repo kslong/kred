@@ -119,8 +119,19 @@ def select_psf_stars(phot_table, snr_min=20, fwhm_tolerance=0.3, ecc_max=0.2,
     candidates = phot_table[mask]
 
     if len(candidates) == 0:
-        print("Warning: No stars meet PSF selection criteria")
-        return candidates
+        # Fallback: select best stars by SNR with minimal requirements
+        print("Warning: No stars meet strict PSF selection criteria, falling back to best available stars")
+        basic_mask = (
+            np.isfinite(phot_table['FWHM']) &
+            np.isfinite(phot_table['Eccentricity']) &
+            np.isfinite(phot_table['SNR']) &
+            (phot_table['SNR'] > 0)
+        )
+        candidates = phot_table[basic_mask]
+
+        if len(candidates) == 0:
+            print("Error: No valid stars available for PSF construction")
+            return candidates
 
     # Sort by SNR and take brightest
     candidates.sort('SNR', reverse=True)
@@ -268,6 +279,11 @@ class PSFBuilder:
         if self.stamps is None:
             self.extract_stamps()
 
+        # Check if we have any stamps to work with
+        if len(self.stamps) == 0:
+            print('Error: No valid stamps extracted. Cannot build Gaussian PSF.')
+            return None, None
+
         # Prepare data for fitting
         all_data = []
         half = self.stamp_size // 2
@@ -346,6 +362,11 @@ class PSFBuilder:
         """
         if self.stamps is None:
             self.extract_stamps()
+
+        # Check if we have any stamps to work with
+        if len(self.stamps) == 0:
+            print('Error: No valid stamps extracted. Cannot build Moffat PSF.')
+            return None, None
 
         # Prepare data
         all_data = []
@@ -433,6 +454,11 @@ class PSFBuilder:
         if self.stamps is None:
             self.extract_stamps()
 
+        # Check if we have any stamps to work with
+        if len(self.stamps) == 0:
+            print('Error: No valid stamps extracted. Cannot build summed PSF.')
+            return None
+
         summed = np.zeros((self.stamp_size, self.stamp_size))
 
         for stamp in self.stamps:
@@ -465,8 +491,17 @@ class PSFBuilder:
         Returns
         -------
         results : dict
-            Dictionary containing all PSF models and parameters
+            Dictionary containing all PSF models and parameters, or None if no stamps available
         """
+        # Extract stamps if not already done
+        if self.stamps is None:
+            self.extract_stamps()
+
+        # Check if we have any stamps to work with
+        if len(self.stamps) == 0:
+            print('Error: No valid stamps available. Cannot build PSFs.')
+            return None
+
         print("Building Elliptical Gaussian PSF...")
         gauss_params, gauss_model = self.build_gaussian_psf()
 
@@ -565,7 +600,7 @@ def quick_psf_build(fits_file, star_table, stamp_size=25, normalize='peak', outp
     builder = PSFBuilder(fits_file, star_table, stamp_size=stamp_size, normalize=normalize)
     results = builder.build_all_psfs()
 
-    if output_prefix is not None:
+    if results is not None and output_prefix is not None:
         builder.save_psfs(output_prefix)
 
     return results
@@ -602,6 +637,11 @@ def do_one(image_file, star_file, prefix='', snr_min=20, max_stars=1000):
     # Select PSF stars
     psf_stars = select_psf_stars(all_stars, snr_min=snr_min, max_stars=max_stars)
 
+    # Check if we have any PSF stars
+    if len(psf_stars) == 0:
+        print('Error: No valid PSF stars found. Cannot build PSF.')
+        return None
+
     # Write selected PSF stars
     psf_stars_out = '%s_psf_stars.fits' % prefix
     psf_stars.write(psf_stars_out, format='fits', overwrite=True)
@@ -612,6 +652,11 @@ def do_one(image_file, star_file, prefix='', snr_min=20, max_stars=1000):
                               stamp_size=25,
                               normalize='peak',
                               output_prefix=prefix)
+
+    # Check if PSF build succeeded
+    if results is None:
+        print('Error: PSF build failed. No valid stamps could be extracted.')
+        return None
 
     # Access results
     print("\n=== Elliptical Gaussian PSF ===")
