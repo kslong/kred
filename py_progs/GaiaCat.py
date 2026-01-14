@@ -103,7 +103,7 @@ import astropy.units as u
 # --------------------------------------------------------------------------------
 # Gaia loader (astroquery) — distinguishes dependency vs asset/service problems
 # --------------------------------------------------------------------------------
-def load_Gaia(probe_service=True):
+def load_Gaia(probe_service=True, credentials_file=None):
     """Return the astroquery.gaia.Gaia class with service validation.
 
     This function provides a controlled import of the GAIA query interface,
@@ -115,6 +115,10 @@ def load_Gaia(probe_service=True):
         If True (default), perform a minimal network check to verify that
         external GAIA services are reachable. If False, only import the
         Gaia class without network validation.
+    credentials_file : str, optional
+        Path to file containing Gaia credentials (username on line 1,
+        password on line 2). If None, defaults to ~/.gaia_credentials
+        if it exists.
 
     Returns
     -------
@@ -133,6 +137,9 @@ def load_Gaia(probe_service=True):
     GAIA operations by setting the log level to ERROR and disabling IERS
     auto-downloads.
 
+    If a credentials file exists, the function will automatically login
+    to the Gaia archive.
+
     Examples
     --------
     Load GAIA with service validation::
@@ -146,6 +153,8 @@ def load_Gaia(probe_service=True):
         >>> # Service errors will occur at first query attempt
 
     """
+    import os
+
     # 1) Import-time: distinguish "not installed"
     try:
         from astroquery.gaia import Gaia
@@ -165,7 +174,20 @@ def load_Gaia(probe_service=True):
         # If astropy settings change or aren't present, just continue.
         pass
 
-    # 2) Service probe: distinguish "assets unavailable"
+    # 2) Login using credentials file if available
+    if credentials_file is None:
+        credentials_file = os.path.expanduser('~/.gaia_credentials')
+
+    if os.path.isfile(credentials_file):
+        try:
+            Gaia.login(credentials_file=credentials_file)
+        except Exception as e:
+            print(f"Warning: Gaia login failed: {e}")
+    else:
+        print(f"Note: No Gaia credentials file found at {credentials_file}")
+        print("      Create one with username on line 1, password on line 2")
+
+    # 3) Service probe: distinguish "assets unavailable"
     if probe_service:
         try:
             # Minimal, fast probe (hits TAP briefly):

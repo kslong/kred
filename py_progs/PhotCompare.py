@@ -140,13 +140,24 @@ Author
 Space Telescope Science Institute
 """
 
+# Suppress Gaia password warning immediately at startup
+# import os as _os
+# import sys as _sys
+# _devnull = open(_os.devnull, 'w')
+# _original_stdout = _sys.stdout
+# _original_stderr = _sys.stderr
+# _sys.stdout = _devnull
+# _sys.stderr = _devnull
+
 
 import os
+import sys
+import warnings
 import numpy as np
 from astropy.io import fits, ascii
 from photutils.detection import DAOStarFinder
 from astropy.stats import mad_std
-from photutils.aperture import (aperture_photometry, CircularAperture, 
+from photutils.aperture import (aperture_photometry, CircularAperture,
                                  CircularAnnulus, ApertureStats)
 from astropy.stats import SigmaClip
 import matplotlib.pyplot as plt
@@ -166,9 +177,13 @@ from scipy.spatial import KDTree
 from astropy.wcs import NoConvergence
 from astropy.wcs._wcs import InvalidCoordinateError
 from http.client import IncompleteRead
-
 import ImageSum
 from GaiaCat import get_gaia_from_archive as get_gaia
+
+# Restore stdout/stderr after imports
+# _devnull.close()
+# _sys.stdout = _original_stdout
+# _sys.stderr = _original_stderr
 
 
 #: Directory suffix for isolating different runs of PhotCompare
@@ -1344,3 +1359,69 @@ def do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True):
     Finished getting gaia tables for 12 files
     Processing images...
     """
+
+
+def steer(argv):
+    """
+    Parse command-line arguments and run PhotCompare.
+
+    Usage: PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
+                          [-gcat FILE] [-out NAME] file1 file2 ...
+    """
+    xdir = ''
+    nrows_max = 30000
+    forced = True
+    gaia_cat_file = ''
+    outroot = ''
+    filenames = []
+
+    print('hello knox')
+
+    i = 1
+    while i < len(argv):
+        if argv[i] == '-h':
+            print('Ready to print doc')
+            print(__doc__)
+            return
+        elif argv[i] == '-dir':
+            i += 1
+            xdir = argv[i]
+        elif argv[i] == '-nmax':
+            i += 1
+            nrows_max = int(argv[i])
+        elif argv[i] == '-forced':
+            forced = True
+        elif argv[i] == '-unforced':
+            forced = False
+        elif argv[i] == '-gcat':
+            i += 1
+            gaia_cat_file = argv[i]
+        elif argv[i] == '-out':
+            i += 1
+            outroot = argv[i]
+        elif argv[i][0] == '-':
+            print('Error: Unknown option: %s' % argv[i])
+            return
+        else:
+            filenames.append(argv[i])
+        i += 1
+
+    if xdir != '':
+        do_dir(xdir=xdir, nrows_max=nrows_max, forced=forced)
+    elif len(filenames) > 0:
+        if len(filenames) == 1:
+            do_one(filenames[0], gaia_cat_file=gaia_cat_file, forced=forced,
+                   nrows_max=nrows_max, outroot=outroot)
+        else:
+            do_many(filenames, forced=forced, nrows_max=nrows_max, outroot=outroot)
+    else:
+        print(__doc__)
+
+
+# Next lines permit one to run the routine from the command line
+if __name__ == "__main__":
+    import sys
+    if len(sys.argv) > 1:
+        steer(sys.argv)
+    else:
+        print(__doc__)
