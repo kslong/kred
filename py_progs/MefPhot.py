@@ -223,7 +223,7 @@ def read_table(filename):
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
                          object_file='objects.txt', nrows_max=-1,
-                         rstar=4, b_in=4, b_out=8):
+                         rstar=4, b_in=4, b_out=8, add_psf_metrics=True):
     """
     Perform forced aperture photometry at specified sky positions.
 
@@ -248,6 +248,9 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
         Inner radius of background annulus in pixels. Default: 4.
     b_out : float, optional
         Outer radius of background annulus in pixels. Default: 8.
+    add_psf_metrics : bool, optional
+        If True, adds columns useful for PSF star selection:
+        SNR, Concentration, BkgContam. Default: True.
 
     Returns
     -------
@@ -267,8 +270,11 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
         * Max, Min : float - Maximum and minimum pixel values in aperture
         * phot_mag : float - Instrumental magnitude (negative if Net < 0)
         * phot_mag_raw : float - Magnitude from raw flux
+        * SNR : float - Signal-to-noise ratio (if add_psf_metrics=True)
+        * Concentration : float - Peak/mean flux density (if add_psf_metrics=True)
+        * BkgContam : float - Background contamination normalized to median (if add_psf_metrics=True)
         * Original columns from object_file (RA, Dec, Gaia data, etc.)
-        
+
         Returns 'Error' string if file cannot be opened.
 
     Notes
@@ -445,6 +451,19 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
     phot_table['phot_mag_raw'] = np.select([phot_table['Net'] > 0],
                                            [phot_table['phot_mag_raw']],
                                            default=-phot_table['phot_mag_raw'])
+
+    # Add PSF quality metrics if requested
+    if add_psf_metrics:
+        # Signal-to-noise ratio
+        phot_table['SNR'] = np.abs(phot_table['Net']) / phot_table['ErrNet']
+
+        # Light concentration (peak/mean flux density)
+        mean_flux_density = phot_table['Net'] / n_aper_pixels
+        phot_table['Concentration'] = phot_table['Max'] / mean_flux_density
+
+        # Background contamination (normalized to median)
+        median_bkg_std = np.nanmedian(phot_table['BkgStd'])
+        phot_table['BkgContam'] = phot_table['BkgStd'] / median_bkg_std
 
     # Format output
     for col in phot_table.colnames:
