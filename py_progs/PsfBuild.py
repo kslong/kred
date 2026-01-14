@@ -70,77 +70,213 @@ import numpy as np
 from astropy.io import fits
 from astropy.table import Table
 from scipy.optimize import minimize
+from scipy.stats import rankdata
 import warnings
 
 
-def select_psf_stars(phot_table, snr_min=20, fwhm_tolerance=0.3, ecc_max=0.2,
-                     bkg_contam_max=1.5, concentration_min=3.0, max_stars=100):
+def select_psf_stars(phot_table, max_stars=100, weights=None, verbose=True):
     """
-    Select optimal stars for PSF construction from photometry table.
+    Select optimal stars for PSF construction using percentile-based quality scoring.
+
+    Uses a weighted combination of quality metrics to rank stars, rather than
+    hard cutoffs that may reject all stars in difficult fields.
 
     Parameters
     ----------
     phot_table : astropy.table.Table
-        Output from do_forced_photometry with add_psf_metrics=True
-    snr_min : float
-        Minimum signal-to-noise ratio (default: 20)
-    fwhm_tolerance : float
-        Maximum fractional deviation from median FWHM (default: 0.3)
-    ecc_max : float
-        Maximum eccentricity (default: 0.2)
-    bkg_contam_max : float
-        Maximum background contamination relative to median (default: 1.5)
-    concentration_min : float
-        Minimum concentration index (default: 3.0)
+        Output from do_forced_photometry with add_psf_metrics=True.
+        Required columns: SNR, FWHM, Eccentricity, BkgContam, Concentration
     max_stars : int
         Maximum number of PSF stars to return (default: 100)
+    weights : dict, optional
+        Weights for each metric. Default weights emphasize SNR and FWHM consistency:
+        {'snr': 0.35, 'fwhm': 0.25, 'ecc': 0.20, 'bkg': 0.10, 'conc': 0.10}
+    verbose : bool
+        Print diagnostic statistics (default: True)
 
     Returns
     -------
     psf_stars : astropy.table.Table
-        Subset of brightest, highest quality isolated stars
+        Subset of highest quality stars, sorted by quality score
     """
 
-    # Calculate median FWHM for consistency check
-    median_fwhm = np.nanmedian(phot_table['FWHM'])
-    fwhm_deviation = np.abs(phot_table['FWHM'] - median_fwhm) / median_fwhm
+    if weights is None:
+        weights = {'snr': 0.35, 'fwhm': 0.25, 'ecc': 0.20, 'bkg': 0.10, 'conc': 0.10}
 
-    # Apply selection criteria
-    mask = (
-        (phot_table['SNR'] > snr_min) &
-        (fwhm_deviation < fwhm_tolerance) &
-        (phot_table['Eccentricity'] < ecc_max) &
-        (phot_table['BkgContam'] < bkg_contam_max) &
-        (phot_table['Concentration'] > concentration_min) &
+    # Reference thresholds for diagnostics (not used for selection)
+    ref_thresholds = {
+        'snr_min': 20,
+        'fwhm_tolerance': 0.3,
+        'ecc_max': 0.2,
+        'bkg_contam_max': 1.5,
+        'concentration_min': 3.0
+    }
+
+    # First filter to valid stars only
+    valid_mask = (
+        np.isfinite(phot_table['SNR']) &
         np.isfinite(phot_table['FWHM']) &
-        np.isfinite(phot_table['Eccentricity'])
+        np.isfinite(phot_table['Eccentricity']) &
+        np.isfinite(phot_table['BkgContam']) &
+        np.isfinite(phot_table['Concentration']) &
+        (phot_table['SNR'] > 0) &
+        (phot_table['FWHM'] > 0)
     )
 
-    candidates = phot_table[mask]
+    n_total = len(phot_table)
+    n_valid = np.sum(valid_mask)
 
-    if len(candidates) == 0:
-        # Fallback: select best stars by SNR with minimal requirements
-        print("Warning: No stars meet strict PSF selection criteria, falling back to best available stars")
-        basic_mask = (
-            np.isfinite(phot_table['FWHM']) &
-            np.isfinite(phot_table['Eccentricity']) &
-            np.isfinite(phot_table['SNR']) &
-            (phot_table['SNR'] > 0)
+    if n_valid == 0:
+        print("Error: No valid stars available for PSF construction")
+        return phot_table[valid_mask]  # Return empty table
+
+    candidates = phot_table[valid_mask].copy()
+
+    # Extract metrics
+    snr = np.array(candidates['SNR'])
+    fwhm = np.array(candidates['FWHM'])
+    ecc = np.array(candidates['Eccentricity'])
+    bkg = np.array(candidates['BkgContam'])
+    conc = np.array(candidates['Concentration'])
+
+    # Calculate FWHM deviation from median
+    median_fwhm = np.median(fwhm)
+    fwhm_dev = np.abs(fwhm - median_fwhm) / median_fwhm
+
+    # Calculate percentile scores (0-1, higher is better)
+    n = len(candidates)
+
+    # SNR: higher is better (use log scale for ranking)
+    snr_rank = rankdata(np.log10(snr)) / n
+
+    # FWHM deviation: lower is better
+    fwhm_rank = 1.0 - rankdata(fwhm_dev) / n
+
+    # Eccentricity: lower is better (more circular)
+    ecc_rank = 1.0 - rankdata(ecc) / n
+
+    # Background contamination: lower is better
+    bkg_rank = 1.0 - rankdata(bkg) / n
+
+    # Concentration: higher is better (more point-like)
+    conc_rank = rankdata(conc) / n
+
+    # Calculate weighted quality score
+    quality_score = (
+        weights['snr'] * snr_rank +
+        weights['fwhm'] * fwhm_rank +
+        weights['ecc'] * ecc_rank +
+        weights['bkg'] * bkg_rank +
+        weights['conc'] * conc_rank
+    )
+
+    # Add quality score to table
+    candidates['QualityScore'] = quality_score
+
+    # Print diagnostic statistics
+    if verbose:
+        print("\n=== PSF Star Selection Diagnostics ===")
+        print(f"Total sources: {n_total}")
+        print(f"Valid sources (finite values, SNR>0): {n_valid}")
+
+        # Calculate how many pass each threshold
+        pass_snr = np.sum(snr >= ref_thresholds['snr_min'])
+        pass_fwhm = np.sum(fwhm_dev <= ref_thresholds['fwhm_tolerance'])
+        pass_ecc = np.sum(ecc <= ref_thresholds['ecc_max'])
+        pass_bkg = np.sum(bkg <= ref_thresholds['bkg_contam_max'])
+        pass_conc = np.sum(conc >= ref_thresholds['concentration_min'])
+        pass_all = np.sum(
+            (snr >= ref_thresholds['snr_min']) &
+            (fwhm_dev <= ref_thresholds['fwhm_tolerance']) &
+            (ecc <= ref_thresholds['ecc_max']) &
+            (bkg <= ref_thresholds['bkg_contam_max']) &
+            (conc >= ref_thresholds['concentration_min'])
         )
-        candidates = phot_table[basic_mask]
 
-        if len(candidates) == 0:
-            print("Error: No valid stars available for PSF construction")
-            return candidates
+        print("\nMetric distributions and reference threshold pass rates:")
+        print(f"  {'Metric':<15} {'Min':>10} {'Median':>10} {'Max':>10} {'Pass Ref':>12}")
+        print(f"  {'-'*15} {'-'*10} {'-'*10} {'-'*10} {'-'*12}")
+        print(f"  {'SNR':<15} {np.min(snr):>10.1f} {np.median(snr):>10.1f} {np.max(snr):>10.1f} {pass_snr:>5}/{n_valid} ({100*pass_snr/n_valid:>4.0f}%)")
+        print(f"  {'FWHM':<15} {np.min(fwhm):>10.2f} {np.median(fwhm):>10.2f} {np.max(fwhm):>10.2f} {'--':>12}")
+        print(f"  {'FWHM deviation':<15} {np.min(fwhm_dev):>10.2f} {np.median(fwhm_dev):>10.2f} {np.max(fwhm_dev):>10.2f} {pass_fwhm:>5}/{n_valid} ({100*pass_fwhm/n_valid:>4.0f}%)")
+        print(f"  {'Eccentricity':<15} {np.min(ecc):>10.3f} {np.median(ecc):>10.3f} {np.max(ecc):>10.3f} {pass_ecc:>5}/{n_valid} ({100*pass_ecc/n_valid:>4.0f}%)")
+        print(f"  {'BkgContam':<15} {np.min(bkg):>10.2f} {np.median(bkg):>10.2f} {np.max(bkg):>10.2f} {pass_bkg:>5}/{n_valid} ({100*pass_bkg/n_valid:>4.0f}%)")
+        print(f"  {'Concentration':<15} {np.min(conc):>10.2f} {np.median(conc):>10.2f} {np.max(conc):>10.2f} {pass_conc:>5}/{n_valid} ({100*pass_conc/n_valid:>4.0f}%)")
+        print(f"\n  Stars passing ALL reference thresholds: {pass_all}/{n_valid} ({100*pass_all/n_valid:.0f}%)")
 
-    # Sort by SNR and take brightest
-    candidates.sort('SNR', reverse=True)
+        # Identify the most problematic metric(s)
+        pass_rates = {
+            'SNR': pass_snr / n_valid,
+            'FWHM deviation': pass_fwhm / n_valid,
+            'Eccentricity': pass_ecc / n_valid,
+            'BkgContam': pass_bkg / n_valid,
+            'Concentration': pass_conc / n_valid
+        }
+        sorted_metrics = sorted(pass_rates.items(), key=lambda x: x[1])
+
+        if pass_all == 0:
+            print("\n  ** Warning: No stars pass all reference thresholds **")
+            print("  Most problematic metrics (lowest pass rates):")
+            for metric, rate in sorted_metrics[:3]:
+                if rate < 0.5:
+                    print(f"    - {metric}: only {100*rate:.0f}% pass")
+
+    # Sort by quality score and select top stars
+    candidates.sort('QualityScore', reverse=True)
     psf_stars = candidates[:max_stars]
 
-    print(f"Selected {len(psf_stars)} PSF stars from {len(phot_table)} sources")
-    print(f"  Median FWHM: {np.nanmedian(psf_stars['FWHM']):.2f} pixels")
-    print(f"  Median SNR: {np.nanmedian(psf_stars['SNR']):.1f}")
-    print(f"  Median Eccentricity: {np.nanmedian(psf_stars['Eccentricity']):.3f}")
+    if verbose:
+        print(f"\nSelected {len(psf_stars)} PSF stars by quality score")
+        print(f"  Weights: snr={weights['snr']}, fwhm={weights['fwhm']}, ecc={weights['ecc']}, bkg={weights['bkg']}, conc={weights['conc']}")
+        print(f"  Quality score range: {psf_stars['QualityScore'][-1]:.3f} - {psf_stars['QualityScore'][0]:.3f}")
+
+        # Extract selected star metrics
+        sel_snr = np.array(psf_stars['SNR'])
+        sel_fwhm = np.array(psf_stars['FWHM'])
+        sel_ecc = np.array(psf_stars['Eccentricity'])
+        sel_bkg = np.array(psf_stars['BkgContam'])
+        sel_conc = np.array(psf_stars['Concentration'])
+        sel_fwhm_dev = np.abs(sel_fwhm - median_fwhm) / median_fwhm
+
+        # Compare selected vs full sample
+        print("\nSelected stars vs full sample (median values):")
+        print(f"  {'Metric':<15} {'Selected':>12} {'Full Sample':>12} {'Improvement':>12}")
+        print(f"  {'-'*15} {'-'*12} {'-'*12} {'-'*12}")
+
+        # SNR - higher is better
+        sel_med = np.median(sel_snr)
+        full_med = np.median(snr)
+        improvement = (sel_med - full_med) / full_med * 100 if full_med > 0 else 0
+        print(f"  {'SNR':<15} {sel_med:>12.1f} {full_med:>12.1f} {improvement:>+11.0f}%")
+
+        # FWHM - report absolute value
+        sel_med = np.median(sel_fwhm)
+        full_med = np.median(fwhm)
+        print(f"  {'FWHM':<15} {sel_med:>12.2f} {full_med:>12.2f} {'--':>12}")
+
+        # FWHM deviation - lower is better
+        sel_med = np.median(sel_fwhm_dev)
+        full_med = np.median(fwhm_dev)
+        improvement = (full_med - sel_med) / full_med * 100 if full_med > 0 else 0
+        print(f"  {'FWHM deviation':<15} {sel_med:>12.3f} {full_med:>12.3f} {improvement:>+11.0f}%")
+
+        # Eccentricity - lower is better
+        sel_med = np.median(sel_ecc)
+        full_med = np.median(ecc)
+        improvement = (full_med - sel_med) / full_med * 100 if full_med > 0 else 0
+        print(f"  {'Eccentricity':<15} {sel_med:>12.3f} {full_med:>12.3f} {improvement:>+11.0f}%")
+
+        # BkgContam - lower is better
+        sel_med = np.median(sel_bkg)
+        full_med = np.median(bkg)
+        improvement = (full_med - sel_med) / full_med * 100 if full_med > 0 else 0
+        print(f"  {'BkgContam':<15} {sel_med:>12.2f} {full_med:>12.2f} {improvement:>+11.0f}%")
+
+        # Concentration - higher is better
+        sel_med = np.median(sel_conc)
+        full_med = np.median(conc)
+        improvement = (sel_med - full_med) / abs(full_med) * 100 if full_med != 0 else 0
+        print(f"  {'Concentration':<15} {sel_med:>12.2f} {full_med:>12.2f} {improvement:>+11.0f}%")
 
     return psf_stars
 
@@ -607,7 +743,7 @@ def quick_psf_build(fits_file, star_table, stamp_size=25, normalize='peak', outp
 
 
 
-def do_one(image_file, star_file, prefix='', snr_min=20, max_stars=1000):
+def do_one(image_file, star_file, prefix='', max_stars=1000, weights=None):
     """
     Build PSF from an image and star catalog.
 
@@ -619,10 +755,10 @@ def do_one(image_file, star_file, prefix='', snr_min=20, max_stars=1000):
         Path to star catalog (typically all_stars.fits from StarFind).
     prefix : str, optional
         Output filename prefix. If empty, derived from image_file.
-    snr_min : float, optional
-        Minimum SNR for PSF star selection. Default: 20.
     max_stars : int, optional
         Maximum number of stars to use for PSF. Default: 1000.
+    weights : dict, optional
+        Weights for quality score metrics. See select_psf_stars for details.
     """
 
     if prefix == '':
@@ -634,8 +770,8 @@ def do_one(image_file, star_file, prefix='', snr_min=20, max_stars=1000):
     # Load all stars table
     all_stars = Table.read(star_file)
 
-    # Select PSF stars
-    psf_stars = select_psf_stars(all_stars, snr_min=snr_min, max_stars=max_stars)
+    # Select PSF stars using quality scoring
+    psf_stars = select_psf_stars(all_stars, max_stars=max_stars, weights=weights)
 
     # Check if we have any PSF stars
     if len(psf_stars) == 0:
