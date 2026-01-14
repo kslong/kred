@@ -671,7 +671,7 @@ def locate_first_image_extension(xx):
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='objects.txt',
                          nrows_max=-1, outroot='', rstar=6, b_in=8, b_out=12,
-                         add_psf_metrics=False):
+                         add_psf_metrics=True):
     """
     Perform forced photometry at catalog positions.
 
@@ -1141,10 +1141,10 @@ def do_xphot(filename, gaia_file, forced, nrows_max, outroot):
 
     if forced:
         object_file = gaia_file
-        phot_file = do_forced_photometry(filename, object_file, nrows_max, outroot)
+        phot_file = do_forced_photometry(filename, object_file, nrows_max, outroot, add_psf_metrics=True)
     else:
         object_file = get_objects_from_image(filename, outroot)
-        phot_file = do_forced_photometry(filename, object_file, nrows_max=-1, outroot=outroot)
+        phot_file = do_forced_photometry(filename, object_file, nrows_max=-1, outroot=outroot, add_psf_metrics=True)
 
     closest_objects_table = find_closest_objects(gaia_file, phot_file)
     if len(closest_objects_table) == 0:
