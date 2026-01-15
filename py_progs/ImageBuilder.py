@@ -502,8 +502,8 @@ def doit(psf_file='my_psf_gaussian.fits',star_table='forced.fits',reference_imag
     if root=='':
         root='test'
 
-    # Method 1: Quick generation
-    print("=== Quick Method ===")
+    # Generate artificial image from PSF and star table
+    print("=== Generating Artificial Image ===")
     artificial = generate_artificial_image(
         psf_file=psf_file,
         star_table=star_table,
@@ -512,17 +512,6 @@ def doit(psf_file='my_psf_gaussian.fits',star_table='forced.fits',reference_imag
         background=0.0,
         subpixel=True
         )
-
-    # Method 2: More control
-    # print("\n=== Advanced Method ===")
-
-    # Load components
-    # generator = PSFImageGenerator('psf_summed.fits', reference_image='science.fits')
-    # generator.load_star_table('stars.fits')
-
-    # Generate with custom settings
-    # artificial = generator.generate_image(background=100.0, subpixel=True)
-    #generator.save_image(artificial, 'artificial_summed.fits')
 
     # Generate residual
     print("\n=== Generating Residual ===")
