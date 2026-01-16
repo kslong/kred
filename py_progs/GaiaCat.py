@@ -4,80 +4,100 @@
 
 Space Telescope Science Institute
 
+Synopsis
+--------
+
+Retrieve GAIA catalog data either from the archive or from a local file.
+Can determine the search center from a FITS image WCS or from explicit
+RA/Dec coordinates.
+
 Command Line Usage
 ------------------
 
 ::
 
-    .. note::
-    This module requires the astroquery package for archive access.
-    All archive-dependent functions will provide clear error messages if
-    astroquery is not available or if GAIA services are unreachable.
+    GaiaCat.py [-h] [-archive] [-gfile FILENAME] [-rad DEGREES] [-out OUTROOT]
+               input.fits or RA Cec
 
-    Author
+Arguments
+---------
 
-    Space Telescope Science Institute
+input
+    Either a FITS file (to extract center from WCS), or RA in degrees.
+    If RA is given, dec must also be provided.
 
-    Version History
-    ---------------
+RA, Dec  RA and DEC of field center
 
-    240318 ksl
-    Coding begun
+or
 
-    240527 ksl
-    Speed up the catalog matching
+whatever.fits  a fits file with a WCS,  not that size is not taken from WCS
 
-    251105 ksl
-    Split finding sources in an image from doing photometry
+Options
+-------
 
-    251130 ksl
-    Cleaned up to focus on GAIA catalog interaction
+-h
+    Print this help message and exit
 
-    251130 ksl
-    Robust handling of astroquery import vs service availability
+-archive
+    Retrieve from GAIA archive instead of local file. By default,
+    tries local file first, then falls back to archive.
 
-    251211 ksl
-    Handle gaiaxpy version compatibility (2.1.1 vs 2.1.2)
+-gfile FILENAME
+    Name of local GAIA catalog file. Searches locally first, then
+    in $KRED/xdata/. Default: Gaia_MagClouds.fits
 
-    Example Usage
+-rad DEGREES
+    Search radius in degrees. Default: 0.5
 
-    Basic usage for retrieving GAIA catalog data::
+-out OUTROOT
+    Output filename root. Default: derived from RA/Dec or FITS filename
 
-    >>> from GaiaCat import get_gaia_from_archive
-    >>> outfile = get_gaia_from_archive(ra=84.925, dec=-66.274, rad_deg=0.3)
-    >>> print(f"Catalog saved to: {outfile}")
+Description
+-----------
 
-Version History
----------------
+This module provides functions to retrieve GAIA DR3 photometric data.
+The primary functions are:
 
+- get_gaia_from_archive(): Query the GAIA archive with cone search
+- get_gaia_from_file(): Extract from a local pre-downloaded catalog
 
-240318 ksl
+Notes
+-----
 
-    Coding begun
+This module requires the astroquery package for archive access.
+All archive-dependent functions will provide clear error messages if
+astroquery is not available or if GAIA services are unreachable.
 
-240527 ksl
+History:
 
-    Speed up the catalog matching
-
-251105 ksl
-
-    Split finding sources in an image from doing photometry
-
-251130 ksl
-
-    Cleaned up to focus on GAIA catalog interaction
-
-251130 ksl
-
-    Robust handling of astroquery import vs service availability
-
-251211 ksl
-
-    Handle gaiaxpy version compatibility (2.1.1 vs 2.1.2)
+240318 ksl Coding begun
+240527 ksl Speed up the catalog matching
+251105 ksl Split finding sources in an image from doing photometry
+251130 ksl Cleaned up to focus on GAIA catalog interaction
+251130 ksl Robust handling of astroquery import vs service availability
+251211 ksl Handle gaiaxpy version compatibility (2.1.1 vs 2.1.2)
+250116 ksl Added command-line steering with FITS/WCS support
 
 Example Usage
+-------------
 
-Basic usage for retrieving GAIA catalog data::
+Command line with FITS file::
+
+    $ GaiaCat.py myimage.fits -rad 0.3
+
+Command line with RA/Dec::
+
+    $ GaiaCat.py 84.925 -66.274 -rad 0.5
+
+Force archive retrieval (skip local file)::
+
+    $ GaiaCat.py 84.925 -66.274 -archive -rad 0.3
+
+Use a different local catalog file::
+
+    $ GaiaCat.py 84.925 -66.274 -gfile my_gaia_catalog.fits
+
+Python usage::
 
     >>> from GaiaCat import get_gaia_from_archive
     >>> outfile = get_gaia_from_archive(ra=84.925, dec=-66.274, rad_deg=0.3)
@@ -469,7 +489,7 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
 
 
 def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
-                       size_deg=0.3, filename='', outroot=''):
+                       size_deg=0.3, filename='Gaia_MagClouds.fits', outroot=''):
     """Extract GAIA sources from a local catalog file within a sky region.
 
     This function performs a rectangular selection from a pre-downloaded GAIA
@@ -486,9 +506,8 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
     size_deg : float, optional
         Size of the extraction region in degrees. Default is 0.3°.
     filename : str, optional
-        Name of the local GAIA catalog file. If empty, looks for the file
-        in the directory specified by the ``KRED`` environment variable
-        under ``xdata/``.
+        Name of the local GAIA catalog file. Searches locally first, then
+        in $KRED/xdata/. Default is 'Gaia_MagClouds.fits'.
     outroot : str, optional
         Root name for the output file. If empty, constructs from RA and Dec.
 
@@ -500,8 +519,8 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
     Raises
     ------
     IOError
-        If the input file cannot be located or if the ``KRED`` environment
-        variable is not set when needed.
+        If the input file cannot be located in either the current directory
+        or $KRED/xdata/.
 
     Notes
     -----
@@ -523,20 +542,22 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
         >>> print(f"Extracted catalog: {outfile}")
 
     """
-    # 1) Determine input file path
+    # 1) Determine input file path - search locally first, then $KRED/xdata/
     xfilename = ''
     if os.path.isfile(filename):
         xfilename = filename
+        print(f'get_gaia_from_file: Using local file {xfilename}')
     else:
         KRED = os.environ.get("KRED")
         if KRED is not None:
             candidate = f"{KRED}/xdata/{filename}"
             if os.path.isfile(candidate):
                 xfilename = candidate
+                print(f'get_gaia_from_file: Using {xfilename}')
             else:
-                raise IOError(f'Could not locate {filename}')
+                raise IOError(f'Could not locate {filename} locally or in $KRED/xdata/')
         else:
-            raise IOError('Environment variable KRED is not set')
+            raise IOError(f'Could not locate {filename} locally and KRED environment variable is not set')
 
     # read the local table
     if xfilename.lower().endswith('.fits'):
@@ -562,6 +583,7 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
     outfile = f'Gaia/Gaia.{outroot}.fits'
 
     ftab.write(outfile, format='fits', overwrite=True)
+    print(f'Wrote {outfile} with {len(ftab)} objects')
     return outfile
 
 
@@ -625,7 +647,7 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     - ``logg_gspphot`` → ``log_g``
     - ``distance_gspphot`` → ``D``
 
-    Output is written to ``Gaia/Gaia.<outroot>.txt`` in ASCII fixed-width format.
+    Output is written to ``Gaia/Gaia.<outroot>.fits`` in FITS table format.
 
     Examples
     --------
@@ -657,7 +679,7 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     if outroot == '':
         outroot = '%05.1f_%05.1f' % (ra, dec)
     os.makedirs('Gaia', exist_ok=True)
-    outfile = 'Gaia/Gaia.%s.txt' % outroot
+    outfile = 'Gaia/Gaia.%s.fits' % outroot
 
     if not redo and os.path.isfile(outfile):
         print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
@@ -669,6 +691,7 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
 
     # Retry loop for handling IncompleteRead errors
     r = None
+    start_time = time.time()
     for attempt in range(max_retries):
         try:
             if attempt > 0:
@@ -693,6 +716,8 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
             else:
                 print('get_gaia: Max retries reached. Query failed.')
                 raise
+    elapsed_time = time.time() - start_time
+    print(f'get_gaia: Archive query completed in {elapsed_time:.1f} seconds')
 
     if r is None or len(r) == 0:
         print('Error: get_gaia: No objects were retrieved')
@@ -713,7 +738,7 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     r.rename_column('distance_gspphot', 'D')
 
     r['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D'].write(
-        outfile, format='ascii.fixed_width_two_line', overwrite=True
+        outfile, format='fits', overwrite=True
     )
     print('Wrote %s with %d objects' % (outfile, len(r)))
     return outfile
@@ -845,52 +870,172 @@ def simple_test():
     return
 
 
+def get_wcs_center(fitsfile):
+    """Extract the center RA/Dec from a FITS file WCS.
+
+    Parameters
+    ----------
+    fitsfile : str
+        Path to FITS file with valid WCS in header
+
+    Returns
+    -------
+    ra : float
+        Right Ascension of image center in degrees
+    dec : float
+        Declination of image center in degrees
+
+    Raises
+    ------
+    ValueError
+        If WCS cannot be extracted from the FITS file
+    """
+    from astropy.wcs import WCS
+
+    with fits.open(fitsfile) as hdul:
+        header = hdul[0].header
+        data_shape = hdul[0].data.shape
+
+        try:
+            wcs = WCS(header)
+        except Exception as e:
+            raise ValueError(f"Could not extract WCS from {fitsfile}: {e}")
+
+        # Get center pixel
+        ny, nx = data_shape
+        cx, cy = nx / 2.0, ny / 2.0
+
+        # Convert to sky coordinates
+        ra, dec = wcs.wcs_pix2world(cx, cy, 0)
+
+    return float(ra), float(dec)
+
+
 # --------------------------------------------------------------------------------
-# Command-line stub
+# Command-line interface
 # --------------------------------------------------------------------------------
 def steer(argv):
     """Execute command-line interface for GaiaCat module.
 
-    This function provides a basic command-line interface, primarily for
-    testing purposes. The module is designed to be imported and used
-    programmatically rather than run from the command line.
+    Parses command-line arguments and retrieves GAIA catalog data.
+    By default, tries local file first, then falls back to archive.
 
     Parameters
     ----------
     argv : list of str
-        Command-line arguments (currently unused).
+        Command-line arguments
 
     Returns
     -------
-    None
-
-    Notes
-    -----
-    Currently this function displays the module documentation and runs
-    the test suite via :func:`simple_test`.
-
-    Examples
-    --------
-    Run from command line::
-
-        $ python GaiaCat.py
-
+    str
+        Path to output file, or None if error
     """
-    print('This is not a runtime routine (currently)')
+    force_archive = False
+    rad_deg = 0.5
+    outroot = ''
+    ra = None
+    dec = None
+    fitsfile = None
+    gaia_file = 'Gaia_MagClouds.fits'
 
-    print(__doc__)
+    i = 1
+    while i < len(argv):
+        if argv[i][:2] == '-h':
+            print(__doc__)
+            return
+        elif argv[i] == '-archive':
+            force_archive = True
+        elif argv[i][:6] == '-gfile':
+            i += 1
+            gaia_file = argv[i]
+        elif argv[i][:4] == '-rad':
+            i += 1
+            rad_deg = float(argv[i])
+        elif argv[i][:4] == '-out':
+            i += 1
+            outroot = argv[i]
+        elif argv[i][0] == '-':
+            print('Error: Unknown option:', argv[i])
+            return
+        elif ra is None:
+            # First positional argument - could be FITS file or RA
+            if argv[i].endswith('.fits') or argv[i].endswith('.fits.gz'):
+                fitsfile = argv[i]
+            else:
+                try:
+                    ra = float(argv[i])
+                except ValueError:
+                    # Assume it's a FITS file without .fits extension
+                    if os.path.isfile(argv[i]):
+                        fitsfile = argv[i]
+                    else:
+                        print(f'Error: Cannot parse {argv[i]} as RA or find as file')
+                        return
+        elif dec is None:
+            try:
+                dec = float(argv[i])
+            except ValueError:
+                print(f'Error: Cannot parse {argv[i]} as Dec')
+                return
+        else:
+            print('Error: Too many arguments:', argv[i])
+            return
+        i += 1
 
-    print('Now check for status today')
+    # If FITS file provided, extract RA/Dec from WCS
+    if fitsfile is not None:
+        if not os.path.isfile(fitsfile):
+            print(f'Error: FITS file not found: {fitsfile}')
+            return
+        try:
+            ra, dec = get_wcs_center(fitsfile)
+            print(f'Extracted center from {fitsfile}: RA={ra:.5f}, Dec={dec:.5f}')
+        except Exception as e:
+            print(f'Error extracting WCS: {e}')
+            return
 
-    simple_test()
+        # Default outroot from FITS filename
+        if outroot == '':
+            outroot = os.path.basename(fitsfile).replace('.fits.gz', '').replace('.fits', '')
 
-    return
+    # Validate we have coordinates
+    if ra is None or dec is None:
+        print('Error: Must provide either a FITS file or RA and Dec')
+        print(__doc__)
+        return
+
+    # Default outroot from coordinates
+    if outroot == '':
+        outroot = '%.2f_%.2f' % (ra, dec)
+
+    # Print parameters
+    print('         RA : %.5f' % ra)
+    print('        Dec : %.5f' % dec)
+    print('     Radius : %.3f deg' % rad_deg)
+    print('    Outroot : %s' % outroot)
+    print('  Gaia file : %s' % gaia_file)
+
+    # Try local file first (unless -archive specified), then fall back to archive
+    if force_archive:
+        print('Source mode : archive (forced)')
+        outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot)
+    else:
+        print('Source mode : local file (with archive fallback)')
+        try:
+            outfile = get_gaia_from_file(ra=ra, dec=dec, size_deg=rad_deg * 2,
+                                         filename=gaia_file, outroot=outroot)
+        except (IOError, FileNotFoundError) as e:
+            print(f'Local file not available: {e}')
+            print('Falling back to archive...')
+            outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot)
+
+    return outfile
 
 
 # Next lines permit one to run the routine from the command line
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 0:
+    if len(sys.argv) > 1:
         steer(sys.argv)
     else:
         print(__doc__)
