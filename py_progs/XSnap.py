@@ -8,32 +8,79 @@ Space Telescope Science Institute
 Synopsis
 --------
 
-Create one or more images and FITS files of snapshots from astronomical images.
+Create PNG images (and optionally FITS cutouts) of astronomical sources from
+FITS images, with optional region overlays.
 
 Command Line Usage
 ------------------
 
 ::
 
-    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] -out ha [images or table] master_table
+    XSnap.py [-size arcmin] [-type suffix] [-min vmin] [-max vmax] [-o outname] image.fits master_table
+    XSnap.py [-size arcmin] [-type suffix] [-min vmin] [-max vmax] snapshot_table region_table
 
-Description
------------
-
-This routine creates snapshot images from FITS files at specified positions.
-
-It has three basic modes:
-
-* Single image mode: If a single FITS file is provided without -size
-* Multiple snapshot mode: If -size is provided with a master table of regions
-* Table mode: If a table of snapshots is provided
-
-The FITS images associated with each cutout are placed in the ximage directory.
-
-Notes
+Modes
 -----
 
-The routine can overlay region files on images when in snapshot mode.
+The script operates in three modes depending on the inputs:
+
+1. **Overview mode** (FITS file + master table, no -size):
+   Creates a single PNG of the full FITS image with regions from the master
+   table overlaid.
+
+   Example::
+
+       XSnap.py -o lmc_ha_overview DECam_SWARP/LMC_c42_T01.ha.fits config/lmc_snr.txt
+
+   Output: ``lmc_ha_overview.png``
+
+2. **Snapshot mode** (FITS file + master table + -size):
+   Creates one PNG snapshot per source in the master table, all extracted from
+   the same FITS image. Also creates FITS cutouts in ``xdata/``.
+
+   Example::
+
+       XSnap.py -size 10 -type ha -min -1 -max 20 DECam_SWARP/LMC_c42_T01.ha.fits config/lmc_snr.txt
+
+   Output: ``ximage/{Source_name}.ha.png`` for each source, plus FITS cutouts
+   in ``xdata/``
+
+3. **Multi-file snapshot mode** (snapshot table + region table, no FITS file):
+   The snapshot table must contain a ``filename`` column specifying a different
+   FITS file for each source. Creates one PNG per row using the corresponding
+   FITS file.
+
+   Example::
+
+       XSnap.py -size 10 -type ha snapshots.txt config/lmc_snr.txt
+
+   Where ``snapshots.txt`` contains columns: Source_name, RA, Dec, filename
+
+Options
+-------
+
+-size arcmin    Size of snapshot cutouts in arcminutes. Required for snapshot modes.
+-type suffix    Suffix appended to output filenames (e.g., "ha" -> Source.ha.png).
+                Useful for distinguishing filter/image types.
+-o outname      Base name for output file in overview mode (produces outname.png).
+-min vmin       Minimum value for image scaling (default: 5th percentile).
+-max vmax       Maximum value for image scaling (default: 95th percentile).
+
+Input Tables
+------------
+
+Master/region tables must contain at minimum: Source_name, RA, Dec
+
+For region overlays, tables may also include:
+- RegType: "circle" or "ellipse"
+- Major, Minor: region sizes in arcseconds
+- Theta: position angle for ellipses
+
+Output
+------
+
+- PNG images are written to ``ximage/`` (snapshots) or current directory (overview)
+- FITS cutouts are written to ``xdata/`` (snapshot modes only)
 
 """
 

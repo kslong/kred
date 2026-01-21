@@ -1,84 +1,98 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""
+"""ImageMatch2Source - Match sources to images by position
+
 Space Telescope Science Institute
+
+Synopsis
+--------
+
+Given a source catalog and an image catalog (from ImageSum.py), find which
+images cover each source position. Returns the closest N images of a specified
+type for each source.
 
 Command Line Usage
 ------------------
 
 ::
 
-    ImageMatch2Source.py [-h] [-out whatever] [-sep 33.] [-n_closest 3]
+    ImageMatch2Source.py [-h] [-out outname] [-sep arcmin] [-n_closest N]
                          file_tab source_tab image_type
 
-**Required Arguments:**
+Arguments
+---------
 
 file_tab
-    An astropy table produced by ImageSum.py that indicates what files
-    are available to match
+    Image catalog table produced by ImageSum.py. Must contain columns:
+    filename, RA, Dec, Image_type.
 
 source_tab
-    A table containing columns Source_name, RA, Dec (at least). The program
-    identifies files that match these positions
+    Source catalog table with columns: Source_name, RA, Dec (at minimum).
 
 image_type
-    The type of image to match to (e.g., 's2_sub_r')
+    Type of image to match (e.g., 'ha', 's2_sub_r'). Must match values in
+    the Image_type column of file_tab.
 
-**Optional Arguments:**
+Options
+-------
 
--h
-    Print documentation and exit
+-h              Print this documentation and exit.
+-out outname    Set output filename. Default: XX_{image_type}.{source_tab}
+-sep arcmin     Maximum separation between source and image center in arcmin.
+                Default: 33 arcmin.
+-n_closest N    Return up to N closest matches per source. Default: 1.
 
--out whatever
-    Define the name of the output file. If not given, the name is based
-    on the source_tab and image_type
+Description
+-----------
 
--sep 33.
-    Set the maximum separation between a source and image center in arcmin
-    (default: 33 arcmin)
+This script performs spatial matching between a list of astronomical sources
+and a catalog of available images. For each source, it finds images where the
+source falls within a specified distance of the image center.
 
--n_closest 3
-    Return matches for a source to up to N files (default: 1, closest only)
+This is useful for:
+
+* Finding which tile(s) contain a given source
+* Selecting the best image for each source (closest to center)
+* Identifying sources covered by multiple overlapping images
 
 Workflow
-The typical workflow is:
+--------
 
-1. Run ImageSum.py to produce a file catalog
+1. Run ImageSum.py to produce an image catalog for a directory
 2. Run this script to match sources to available images
-3. Use the output to create snapshots centered on each source
+3. Use the output with XSnap.py to create snapshots centered on each source
 
-Output
-------
-The output table contains:
+Output Columns
+--------------
 
-* Source_name - Source identifier
-* RA - Right ascension of the source (degrees)
-* Dec - Declination of the source (degrees)
-* filename - Name of the matching image file
-* separation_arcmin - Distance from source to image center (arcmin)
-* rank - Match rank (1 is closest, 2 is second closest, etc.)
+Source_name        Source identifier from source_tab
+RA                 Right ascension of the source (degrees)
+Dec                Declination of the source (degrees)
+filename           Path to the matching image file
+separation_arcmin  Distance from source to image center (arcmin)
+rank               Match rank (1 = closest, 2 = second closest, etc.)
 
 Examples
 --------
+
 Find the closest image for each source::
 
-    $ ImageMatch2Source.py Image_Sum_DECam_SUB2.txt sources.txt s2_sub_r
+    ImageMatch2Source.py Image_Sum_DECam_SUB2.txt sources.txt s2_sub_r
 
 Find up to 3 closest images within 20 arcmin::
 
-    $ ImageMatch2Source.py -sep 20 -n_closest 3 Image_Sum_DECam_SUB2.txt sources.txt s2_sub_r
+    ImageMatch2Source.py -sep 20 -n_closest 3 Image_Sum_DECam_SUB2.txt sources.txt s2_sub_r
 
 Specify custom output filename::
 
-    $ ImageMatch2Source.py -out my_matches.txt Image_Sum_DECam_SUB2.txt sources.txt s2_sub_r
+    ImageMatch2Source.py -out my_matches.txt Image_Sum_DECam_SUB2.txt sources.txt s2_sub_r
 
-Version History
----------------
+History
+-------
 
-250813 ksl
+240813 ksl  Coding begun
 
-    Coding begun
 """
 
 

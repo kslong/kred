@@ -7,11 +7,14 @@
 KRED - A package to analyze DECam data
 ######################################
 
-Knox Long and Sean Pooints haver  created a series of routines tailored to
-analyse nebulosity in DECAm data (of the Magellanic Clouds. 
+Knox Long and Sean Points have created a series of routines tailored to
+analyse nebulosity in DECam data of the Magellanic Clouds. 
 
 
 .. toctree::
-   :maxdepth: 2
-   :caption: Contents:
+    :maxdepth: 2
+    :caption: Contents:
 
+    installation
+    reduction
+    snapshot
