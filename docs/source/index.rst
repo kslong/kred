@@ -18,3 +18,4 @@ analyse nebulosity in DECam data of the Magellanic Clouds.
     installation
     reduction
     snapshot
+    flux_extraction
