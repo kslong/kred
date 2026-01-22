@@ -56,15 +56,23 @@ The script operates in three modes depending on the inputs:
 
    Where ``snapshots.txt`` contains columns: Source_name, RA, Dec, filename
 
-Options
--------
+**Optional Arguments:**
 
--size arcmin    Size of snapshot cutouts in arcminutes. Required for snapshot modes.
--type suffix    Suffix appended to output filenames (e.g., "ha" -> Source.ha.png).
-                Useful for distinguishing filter/image types.
--o outname      Base name for output file in overview mode (produces outname.png).
--min vmin       Minimum value for image scaling (default: 5th percentile).
--max vmax       Maximum value for image scaling (default: 95th percentile).
+-size arcmin
+    Size of snapshot cutouts in arcminutes. Required for snapshot modes.
+
+-type suffix
+    Suffix appended to output filenames (e.g., "ha" produces Source.ha.png).
+    Useful for distinguishing filter/image types.
+
+-o outname
+    Base name for output file in overview mode (produces outname.png).
+
+-min vmin
+    Minimum value for image scaling. Default: 5th percentile.
+
+-max vmax
+    Maximum value for image scaling. Default: 95th percentile.
 
 Input Tables
 ------------

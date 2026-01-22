@@ -34,14 +34,20 @@ image_type
     Type of image to match (e.g., 'ha', 's2_sub_r'). Must match values in
     the Image_type column of file_tab.
 
-Options
--------
+**Optional Arguments:**
 
--h              Print this documentation and exit.
--out outname    Set output filename. Default: XX_{image_type}.{source_tab}
--sep arcmin     Maximum separation between source and image center in arcmin.
-                Default: 33 arcmin.
--n_closest N    Return up to N closest matches per source. Default: 1.
+-h
+    Print this documentation and exit.
+
+-out outname
+    Set output filename. Default: ``XX_{image_type}.{source_tab}``
+
+-sep arcmin
+    Maximum separation between source and image center in arcmin.
+    Default: 33 arcmin.
+
+-n_closest N
+    Return up to N closest matches per source. Default: 1.
 
 Description
 -----------

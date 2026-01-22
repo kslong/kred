@@ -16,19 +16,38 @@ Command Line Usage
 
 ::
 
-    Usage: Smash.py [-h] [-r size_deg] [-rmag max] [-kfrac frac] [-plot] [-ex] [-out root] ra dec
+    Smash.py [-h] [-r size_deg] [-rmag max] [-kfrac frac] [-plot] [-ex] [-out root] ra dec
 
-where:
+**Required Arguments:**
 
-    -h          Print this help message and exit
-    -r size     Set the cone search radius in degrees (default: 0.5)
-    -rmag max   Set the maximum r-band magnitude (default: 22.0)
-    -kfrac frac Set the fraction of objects to keep (default: 0.5)
-    -plot       Create a scatter plot of selected positions
-    -ex         Run example query (SMC region) without further inputs
-    -out root   Set the output filename root (default: smash_cat)
-    ra          Right Ascension of cone center in degrees
-    dec         Declination of cone center in degrees
+ra
+    Right Ascension of cone center in degrees.
+
+dec
+    Declination of cone center in degrees.
+
+**Optional Arguments:**
+
+-h
+    Print this help message and exit.
+
+-r size
+    Set the cone search radius in degrees. Default: 0.5.
+
+-rmag max
+    Set the maximum r-band magnitude. Default: 22.0.
+
+-kfrac frac
+    Set the fraction of objects to keep. Default: 0.5.
+
+-plot
+    Create a scatter plot of selected positions.
+
+-ex
+    Run example query (SMC region) without further inputs.
+
+-out root
+    Set the output filename root. Default: smash_cat.
 
 Description
 -----------

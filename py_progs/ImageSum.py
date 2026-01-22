@@ -20,16 +20,18 @@ Command Line Usage
 
     ImageSum.py [-h] [-out outname] dirname
 
-Options
--------
+**Required Arguments:**
 
--h            Print this documentation and exit.
--out outname  Set the output filename. Default: Image_Sum_{dirname}.txt
+dirname
+    Directory to search recursively for FITS files.
 
-Arguments
----------
+**Optional Arguments:**
 
-dirname       Directory to search recursively for FITS files.
+-h
+    Print this documentation and exit.
+
+-out outname
+    Set the output filename. Default: ``Image_Sum_{dirname}.txt``
 
 Description
 -----------

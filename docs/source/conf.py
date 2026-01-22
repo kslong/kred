@@ -76,24 +76,23 @@ autodoc_mock_imports = [
 
 import os
 
-def sort_autoapi_toctree(app, exception):
-    """Sort the autoapi index.rst toctree alphabetically after build."""
-    if exception is not None:
-        return  # Build failed, don't process
-    
+def sort_autoapi_toctree(app):
+    """Sort the autoapi index.rst toctree alphabetically.
+
+    This runs after autoapi generates files but before Sphinx reads them.
+    """
     index_path = os.path.join(app.srcdir, 'api', 'index.rst')
     if not os.path.exists(index_path):
         return
-    
+
     with open(index_path, 'r') as f:
         lines = f.readlines()
-    
+
     # Find and sort the toctree entries
     new_lines = []
     in_toctree = False
     toctree_entries = []
-    indent = ''
-    
+
     for line in lines:
         if '.. toctree::' in line:
             in_toctree = True
@@ -113,22 +112,24 @@ def sort_autoapi_toctree(app, exception):
                 new_lines.append(line)
             else:
                 # This is a toctree entry
-                if not indent and line != line.lstrip():
-                    indent = line[:len(line) - len(line.lstrip())]
                 toctree_entries.append(line)
         else:
             new_lines.append(line)
-    
-    # Don't forget remaining entries
+
+    # Don't forget remaining entries at end of file
     if toctree_entries:
         toctree_entries.sort(key=lambda x: x.strip().lower())
         new_lines.extend(toctree_entries)
-    
-    # Write back
+
+    # Write back the sorted file
     with open(index_path, 'w') as f:
         f.writelines(new_lines)
 
-def setup(sphinx):
+    print(f"Sorted API index: {index_path}")
+
+def setup(app):
     """Sphinx setup hook to sort autoapi index."""
-    sphinx.connect('build-finished', sort_autoapi_toctree)
+    # Use env-before-read-docs which fires after autoapi generates files
+    # but before Sphinx reads them for building
+    app.connect('env-before-read-docs', lambda app, env, docnames: sort_autoapi_toctree(app))
 

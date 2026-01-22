@@ -1,45 +1,90 @@
-#!/usr/bin/env python 
+#!/usr/bin/env python
+"""reg2master - Convert DS9 Region File to Master Table
 
-'''
+Space Telescope Science Institute
 
-Synopsis:  
-    This is a simple program to that makes a master file from the 
-    a region file          
+Synopsis
+--------
 
-Description:  
+Convert a DS9 region file into a master table file with standardized
+columns for source positions and region geometry.
 
-    Usage:
+Command Line Usage
+------------------
 
-    reg2master.py regionfile  [masterfile]
+::
 
-    The program requires 1 parameters:
+    reg2master.py [-h] regionfile [masterfile]
 
-        The name of the regionfile
-    
-    The program has 1 optional parameter which is the
-    name of the master file.  If the optional parameter
-    is missing the name will be the same as the regionfile
-    with .txt attached
+**Required Arguments:**
 
+regionfile
+    Input DS9 region file containing source region definitions.
 
-Notes:
+**Optional Arguments:**
 
-                                       
-History:
-090109    ksl    Coded                                             
-111111    ksl    Fixed so would work with pydocs. Routine might 
-        be rewritten to make the main routine smaller
-190507  ksl Modified to read the color in, because Bill often uses this 
-        to indicate something about the source.  This is not currently
-        incorporated into master2reg, because I am not sure exactly how
-        I want to do this, and because I do not need it currently.
-241230  Add box as a type of region.  Note that for a box Theta 
-        corrresponds to the angle E of  N for the 'Minor' axis
-        This is also true for ellipses
-        
+masterfile
+    Output master table filename. If not specified, defaults to
+    ``<regionfile>.txt``.
 
+-h
+    Display this help message and exit.
 
-'''
+Description
+-----------
+
+This program parses a DS9 region file and extracts source positions and
+region geometry into a standardized master table format. The output can
+be used as input for photometry routines or converted back to region
+files using master2reg.py.
+
+Supported region types:
+
+* **circle** - Circular apertures
+* **ellipse** - Elliptical apertures
+* **box** - Rectangular regions
+* **annulus** - Circular annuli
+
+Output
+------
+
+An ASCII table in fixed_width_two_line format with columns:
+
+* Source_name : str - Source identifier (from region label or auto-generated)
+* RA : float - Right Ascension in degrees
+* Dec : float - Declination in degrees
+* RegType : str - Region type
+* Major : float - Major axis/radius in arcseconds
+* Minor : float - Minor axis in arcseconds
+* Theta : float - Position angle in degrees
+* Color : str - Region color from DS9 file
+
+Notes
+-----
+
+* Source names are extracted from the ``text={}`` field in region definitions
+* If no name is provided, names are auto-generated as 'zzz001', 'zzz002', etc.
+* Colors are preserved from the region file for downstream use
+* For boxes, Theta corresponds to the angle E of N for the Minor axis
+* The same convention applies to ellipses
+
+History
+-------
+
+090109 ksl
+    Initial coding
+
+111111 ksl
+    Fixed for pydocs compatibility
+
+190507 ksl
+    Added Color column extraction
+
+241230 ksl
+    Added box region type support
+
+.. moduleauthor:: KSL
+"""
 
 import sys
 import os
@@ -47,10 +92,26 @@ from astropy.table import Table
 import numpy
 
 
-def radec2deg(ra,dec):
-    ''' Convert an ra dec string to degrees.  The string can already
-    be in degrees in which case all that happens is a conversion to
-    a float'''
+def radec2deg(ra, dec):
+    """Convert RA/Dec strings to decimal degrees.
+
+    Parameters
+    ----------
+    ra : str
+        Right Ascension as 'HH:MM:SS' string or decimal degrees string.
+    dec : str
+        Declination as 'DD:MM:SS' string or decimal degrees string.
+
+    Returns
+    -------
+    tuple of (float, float)
+        RA and Dec in decimal degrees.
+
+    Notes
+    -----
+    RA in sexagesimal format is assumed to be in hours and is
+    converted to degrees (multiplied by 15).
+    """
 
     r=ra.split(':')
     d=dec.split(':')
@@ -79,11 +140,26 @@ def radec2deg(ra,dec):
 
 
 def size2arcsec(word):
-    '''
-    Convert a string to arcsec if possible
+    """Convert a size string to arcseconds.
 
-    Otherwise return the value
-    '''
+    Parameters
+    ----------
+    word : str
+        Size value with optional unit suffix ('' for arcsec, ' for arcmin).
+
+    Returns
+    -------
+    float
+        Size in arcseconds.
+
+    Notes
+    -----
+    Recognizes:
+
+    * ``"`` suffix - value is in arcseconds
+    * ``'`` suffix - value is in arcminutes (converted to arcsec)
+    * No suffix - value is returned as-is (assumed arcseconds)
+    """
     if word.count('"')==1: # We have arcsec
         value=float(word.rstrip('"'))
     elif word.count("'")==1: # We have arcsec
@@ -97,11 +173,26 @@ def size2arcsec(word):
 
 
 def read_regions(filename):
-    '''
-    read_regions(filename) reads and parses a region file
+    """Read and parse a DS9 region file.
 
-    170511  ksl Give sources names if they do not have one
-    '''
+    Parameters
+    ----------
+    filename : str
+        Path to the DS9 region file.
+
+    Returns
+    -------
+    tuple of (str, list)
+        Coordinate type ('fk5', 'image', 'physical', or 'unknown') and
+        list of region records. Each record is a list:
+        [name, ra, dec, regtype, major, minor, theta, color].
+
+    Notes
+    -----
+    Parses the following region types: circle, ellipse, box, annulus.
+    Source names are extracted from ``text={}`` fields or auto-generated
+    as 'zzz001', 'zzz002', etc. if not present.
+    """
     f=open(filename,'r')
     type='unknown'
     xcolor='unknown'
@@ -214,15 +305,30 @@ def read_regions(filename):
 
 
 
-def write_masterfile(masterfile,records,source='unknown',type='unknown'):
-    '''
-    write a master file
+def write_masterfile(masterfile, records, source='unknown', type='unknown'):
+    """Write a master table file from parsed region records.
 
-    Notes:
+    Parameters
+    ----------
+    masterfile : str
+        Output filename for the master table.
+    records : list
+        List of region records from read_regions().
+    source : str, optional
+        Source file identifier. Default is 'unknown'.
+    type : str, optional
+        Coordinate type from region file. Default is 'unknown'.
 
-    141102    ksl    Set so that first line was written in a better format 
-            for astropy
-    '''
+    Returns
+    -------
+    None
+        Writes table to disk in ascii.fixed_width_two_line format.
+
+    Notes
+    -----
+    Output columns: Source_name, RA, Dec, RegType, Major, Minor, Theta, Color.
+    Numeric columns are formatted with appropriate precision.
+    """
 
     names=['Source_name','RA','Dec','RegType','Major','Minor','Theta','Color']
 
@@ -248,10 +354,22 @@ def write_masterfile(masterfile,records,source='unknown',type='unknown'):
 
     return
 
-def doit(regionfile,masterfile=''):
-    '''
-    Create a master table from a region file
-    '''
+def doit(regionfile, masterfile=''):
+    """Create a master table from a region file.
+
+    Parameters
+    ----------
+    regionfile : str
+        Input DS9 region file.
+    masterfile : str, optional
+        Output master table filename. If empty, defaults to
+        ``<regionfile>.txt``.
+
+    Returns
+    -------
+    None
+        Writes master table to disk.
+    """
 
     if masterfile=='':
         masterfile=regionfile+'.txt'
@@ -274,9 +392,21 @@ def doit(regionfile,masterfile=''):
 
 
 def steer(argv):
-    regionfile=''
-    root=''
-    i=1
+    """Parse command line arguments and execute conversion.
+
+    Parameters
+    ----------
+    argv : list of str
+        Command line arguments (typically sys.argv).
+
+    Returns
+    -------
+    None
+        Calls doit() to perform the conversion.
+    """
+    regionfile = ''
+    root = ''
+    i = 1
     while i<len(argv):
         if argv[i][:2]=='-h':
             print(__doc__)

@@ -1,87 +1,113 @@
 #!/usr/bin/env python
+"""master2reg - Convert Master Table to DS9 Region File
 
-"""
+Space Telescope Science Institute
 
-Synopsis:  
-    This is a simple program to that makes a region file from the 
-    so-called master file.  At present, it can accepts properly
-    only circles or ellipses, or boxes
+Synopsis
+--------
 
-Description:  
+Convert a master table file containing source positions and region definitions
+into a DS9-compatible region file for visualization and analysis.
 
-    Usage:
+Command Line Usage
+------------------
 
-    master2reg.py [-h] [-r 4.0] [-color red] masterfile  [regionfile]
+::
 
-    The program requires 1 parameters:
+    master2reg.py [-h] [-r radius] [-color color] masterfile [regionfile]
 
-        The name of the masterfile
-    
-    The program has several optional parameters  including the
-    name of the region file.  If the optional parameter
-    is missing the name will be the same as the masterfile
-    with .reg attached
+**Required Arguments:**
 
-    The masterfile is an ascii file which should consist of a
+masterfile
+    Input master table file (ASCII or FITS format) containing source
+    definitions with columns for position and region geometry.
 
-    source_name ra dec regiontype one or more numbers 
+**Optional Arguments:**
 
-    or
+regionfile
+    Output DS9 region file name. If not specified, defaults to
+    ``<masterfile>.reg``.
 
-    source_man ra dec
+-h
+    Display this help message and exit.
 
-    or and astropy table in which case one needs columns named
+-r radius
+    Default radius in arcseconds for circular regions when size is not
+    specified in the input file. Default is 3.0 arcsec.
 
-    Source_name
-    RA
-    Dec
-    RegType
-    Major
-    Minor
-    Theta
+-color color
+    Color for region outlines (e.g., red, green, blue, cyan, magenta).
+    Default is red.
 
-    If only the first three of these are supplied as for example in
-    a coin file then, the RegType is assumed to be a circle and the 
-    defaults are applied
+Description
+-----------
 
+This program reads a master table and converts it to a DS9 region file.
+The master table can be in various formats:
 
-    
-    The numbers depend on the region type
+**Full format (with region geometry):**
 
-    for a circle there is only a radius (which is assumed to be in arcsec)
+The table should contain the following columns:
 
-    for an ellipse, one has a major and minor axis and an angle (in degrees)
+* Source_name : str - Source identifier
+* RA : float - Right Ascension in degrees
+* Dec : float - Declination in degrees
+* RegType : str - Region type ('circle', 'ellipse', 'box', or 'annulus')
+* Major : float - Major axis or radius in arcseconds
+* Minor : float - Minor axis in arcseconds (0 for circles)
+* Theta : float - Position angle in degrees
 
-    -color    allows one to set the color of the region files
-    -r    allows one to set the radius of the circular regions, when one 
-        provides only a name and position
-    -h    prints this information and quits
+**Minimal format (positions only):**
 
+If only Source_name, RA, and Dec are provided, circular regions with
+the default radius (-r option) will be created.
 
-Notes:
+**RA/Dec only format:**
 
-    The routine should also process the output file of ae.py, e.g.
-    all.collated.txt.  130830 - I don't beleive the flag for all.collated
-    is needed anymore.
+If only RA and Dec columns are present, source names will be auto-generated.
 
-    The case where a circular apertue is used but a minor axis is not
-    supplied is probably not handled correctly
+Output
+------
 
-                                       
-History:
-090109    ksl    Coded                                             
-111111    ksl    Modified so pydocs would work.  Routine should be 
-        rewritten to move most of this material out of main
-111216    ksl    Modified so that if it cannot interpret the last few columns, that 
-        it still produces a region file based on the first 3 columns
-121212  ksl    Modified to increase the input options, notably color
-130830    ksl    Modified to allow one to specify a radius for the region file in
-        instances whre it is not defined.
-150220    ksl    Modified so uses astropy to read the masterfile
-251210  ksl Modified for situation where the input file is in fits format, and also
-            to allow for the possibility that we have a Color, but not necessarily
-            a size
+A DS9 region file in FK5 coordinate format with:
 
+* Region shapes (circle, ellipse, box, annulus)
+* Source labels
+* Color specifications
+
+Notes
+-----
+
+Supported region types:
+
+* **circle** - Circular aperture (Major = radius)
+* **ellipse** - Elliptical aperture (Major, Minor = semi-axes, Theta = angle)
+* **box** - Rectangular region (Major, Minor = dimensions, Theta = angle)
+* **annulus** - Circular annulus (Major = outer radius, Minor = inner radius)
+
+History
+-------
+
+090109 ksl
+    Initial coding
+
+111216 ksl
+    Modified to produce region file from first 3 columns if geometry
+    columns cannot be interpreted
+
+121212 ksl
+    Added -color option
+
+130830 ksl
+    Added -r option for default radius
+
+150220 ksl
+    Modified to use astropy for reading master files
+
+251210 ksl
+    Added support for FITS format input and Color column handling
+
+.. moduleauthor:: KSL
 """
 
 import sys
@@ -92,13 +118,27 @@ from astropy.table import Table
 
 
 def radec2deg(ra, dec):
-    """ Convert an ra dec string to degrees.  The string can already
-    be in degrees in which case all that happens is a conversion to
-    a float
+    """Convert RA/Dec strings to decimal degrees.
 
-    If what is transferred is a float, the routine assumes it has been
-    given ra and dec in degrees and just returns ra,dec
-    
+    Handles both sexagesimal (HH:MM:SS, DD:MM:SS) and decimal degree formats.
+
+    Parameters
+    ----------
+    ra : str or float
+        Right Ascension as 'HH:MM:SS' string or decimal degrees.
+    dec : str or float
+        Declination as 'DD:MM:SS' string or decimal degrees.
+
+    Returns
+    -------
+    tuple of (float, float)
+        RA and Dec in decimal degrees.
+
+    Notes
+    -----
+    If inputs are already floats, they are returned unchanged.
+    RA in sexagesimal format is assumed to be in hours and is
+    converted to degrees (multiplied by 15).
     """
 
     try:
@@ -131,20 +171,38 @@ def radec2deg(ra, dec):
 
 
 def read_masterfile(filename, xtype="circle", xmajor=3, xminor=3, xtheta=0.0):
-    """
-    Read the masterfile
+    """Read a master table file and standardize column names.
 
-    100705    ksl    Modified so would accept a file that just contained
-            three columns, a name, and ra and a dec
-    111113    ksl    Comment - While this works it looks like I only partially
-            completed an upgrade of this to make it more general
-    121212    ksl    Modified so will also read a all.collated.txt file and
-            produce a region file form this
-    141102    ksl    Modified so reads master file that can be read by 
-            astropy.io.ascii.  Note that I did not do this by
-            switching to astropy.io which would have been a 
-            better option.  This is very much a kluge now.
-    150220    ksl    Modified to use astropy
+    Reads ASCII or FITS format master tables and ensures all required
+    columns are present, adding defaults where necessary.
+
+    Parameters
+    ----------
+    filename : str
+        Path to the master table file (ASCII or FITS format).
+    xtype : str, optional
+        Default region type if not specified in file. Default is 'circle'.
+    xmajor : float, optional
+        Default major axis/radius in arcseconds. Default is 3.
+    xminor : float, optional
+        Default minor axis in arcseconds. Default is 3.
+    xtheta : float, optional
+        Default position angle in degrees. Default is 0.0.
+
+    Returns
+    -------
+    tuple of (astropy.table.Table, str)
+        Standardized table with columns (Source_name, RA, Dec, RegType,
+        Major, Minor, Theta, Color) and the coordinate type string.
+
+    Notes
+    -----
+    The function handles various input formats:
+
+    * Tables with full column headers
+    * Generic tables with columns named col1, col2, etc.
+    * Tables with only RA/Dec (source names auto-generated)
+    * Tables with only positions and names (default geometry applied)
     """
 
     try:
@@ -280,13 +338,36 @@ def read_masterfile(filename, xtype="circle", xmajor=3, xminor=3, xtheta=0.0):
 def write_regionfile(
     regionfile, records, source="unknown", type="unknown", color="red"
 ):
-    """
-    write_regionfile(regionfile,records):
+    """Write a DS9 region file from a master table.
 
-    101231    ksl    Increased the precision of the radii or major/minor axes
-            to be hundredths of an arcsec for HST images where regions
-            can be very small
-    150220    ksl    Modified to use astrpy tables.
+    Creates a DS9-compatible region file with circles, ellipses, boxes,
+    or annuli based on the input table records.
+
+    Parameters
+    ----------
+    regionfile : str
+        Output filename for the DS9 region file.
+    records : astropy.table.Table
+        Table containing region definitions with columns: Source_name,
+        RA, Dec, RegType, Major, Minor, Theta, Color.
+    source : str, optional
+        Source identifier for header comment. Default is 'unknown'.
+    type : str, optional
+        Coordinate type ('fk5', 'physical', 'image'). Default is 'unknown'
+        which outputs as 'fk5'.
+    color : str, optional
+        Default color for regions. Default is 'red'.
+
+    Returns
+    -------
+    None
+        Writes region file to disk.
+
+    Notes
+    -----
+    If different rows have different colors in the Color column, each
+    region will be written with its individual color. Otherwise, the
+    default color is used for all regions.
     """
 
     # print(records[len(records)/2])
@@ -425,11 +506,25 @@ def write_regionfile(
 
 
 def doit(argv):
-    """
-    Process the command line and call the main routines
-    which are read_masterfile and write_masterfile  
+    """Parse command line and execute master to region file conversion.
 
-    130830 Added extra parameter to allow changing the default radius
+    Parameters
+    ----------
+    argv : list of str
+        Command line arguments (typically sys.argv).
+
+    Returns
+    -------
+    None
+        Writes region file to disk.
+
+    Notes
+    -----
+    Main driver function that:
+
+    1. Parses command line options (-h, -r, -color)
+    2. Reads the master table file
+    3. Writes the DS9 region file
     """
 
     set_color = False
