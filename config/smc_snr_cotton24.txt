@@ -1,7 +1,7 @@
 # File created on 2025-07-19T12:10:17.209453
 # This corrects PA errors in earlier versions
-No. Source_name        Alt_name       RA       Dec RegType Major Minor Theta Diam(pc) S(1483MHz)        alpha Sigma(1GHz)   Notes  Color
---- ----------- --------------- -------- --------- ------- ----- ----- ----- -------- ---------- ------------ ----------- ------- ------
+No. Source_name        Alt_name       RA       Dec RegType Major Minor Theta Diam(pc) S(1483MHz)         alpha Sigma(1GHz)   Notes  Color
+--- ----------- --------------- -------- --------- ------- ----- ----- ----- -------- ---------- ------------- ----------- ------- ------
   1  J0041-7336          DEM S5 10.25708 -73.60844 ellipse 123.0 110.0    15       68      0.156 -0.28 +- 0.01       0.141 R, X, O yellow
   2  J0046-7308   [HFP2000] 414 11.66917 -73.13747 ellipse  92.5  70.0   -55       47     0.1012 -0.37 +- 0.04       0.244 R, X, O yellow
   3  J0047-7308           IKT 2 11.81917 -73.14347 ellipse  55.0  50.0   -45       31     0.3537 -0.54 +- 0.03       2.410 R, X, O yellow
