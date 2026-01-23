@@ -744,6 +744,24 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     return outfile
 
 
+def get_gaia(ra,dec,size):
+    """
+    Retrieve data from a file if possible, but if it is not possible try
+    to get the data from the archive
+    """
+
+    try:
+        outfile=get_gaia_from_file(ra,dec,size)
+    except:
+        print('Could not get data locally, so trying the GaiaArchive')
+        outfile=get_gaiat_from_archive(ra,dec,size)
+
+    return outfile
+    
+        
+
+
+
 def get_gaia_from_archive_old(ra=84.92500000000001, dec=-66.27416666666667,
                                rad_deg=0.3, outroot='', nmax=-1, redo=False):
     """Query the GAIA archive with cone search (legacy version without retry).
