@@ -190,8 +190,16 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     if wcs_output.wcs.cd is None:
         raise ValueError("WCS does not contain a CD matrix, which will cause problems later")
     
-    # Update FITS header with the new WCS information.  relax=Ture keeps wd approach.
+    # Update FITS header with CD matrix convention.
+    # to_header() writes CDELT+PC by default; replace with CD keywords.
     header = wcs_output.to_header(relax=True)
+    cd = wcs_output.wcs.cd
+    for kw in ['CDELT1', 'CDELT2', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2']:
+        header.pop(kw, None)
+    header['CD1_1'] = cd[0, 0]
+    header['CD1_2'] = cd[0, 1]
+    header['CD2_1'] = cd[1, 0]
+    header['CD2_2'] = cd[1, 1]
     
     # Create a new FITS file with the extracted data and updated WCS
     hdu = fits.PrimaryHDU(output_data, header=header)

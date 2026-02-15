@@ -175,14 +175,12 @@ def get_pixel_scale(fits_header):
     If not available, it calculates the scale from the CD matrix via the WCS.
     The returned value is the mean of the two axes' scales.
     """
-    if 'CDELT1' in fits_header and 'CDELT2' in fits_header:
-        cdelt1 = np.abs(fits_header['CDELT1'])
-        cdelt2 = np.abs(fits_header['CDELT2'])
-    else:
-        wcs = WCS(fits_header)
-        cd_matrix = wcs.pixel_scale_matrix
-        cdelt1 = np.sqrt(cd_matrix[0, 0]**2 + cd_matrix[0, 1]**2)
-        cdelt2 = np.sqrt(cd_matrix[1, 0]**2 + cd_matrix[1, 1]**2)
+    # Always use WCS pixel_scale_matrix, which correctly handles
+    # both the CD matrix and CDELT+PC matrix conventions.
+    wcs = WCS(fits_header)
+    cd_matrix = wcs.pixel_scale_matrix
+    cdelt1 = np.sqrt(cd_matrix[0, 0]**2 + cd_matrix[0, 1]**2)
+    cdelt2 = np.sqrt(cd_matrix[1, 0]**2 + cd_matrix[1, 1]**2)
 
     pixel_scale = np.mean([cdelt1, cdelt2]) * 3600
     return pixel_scale
@@ -471,13 +469,19 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
     # Get the pixel scale
     pixel_scale = get_pixel_scale(header)
 
-
-    
     # Convert semi-axes from arcseconds to pixels
     a_pixels = a_arcsec / pixel_scale
     b_pixels = b_arcsec / pixel_scale
     theta_rad = np.deg2rad(theta_deg)
-    
+
+    # Check if the aperture could possibly overlap the image
+    px, py = float(pixel_coord[0]), float(pixel_coord[1])
+    max_radius = max(a_pixels, b_pixels)
+    ny, nx = data.shape
+    if (px + max_radius < 0 or px - max_radius >= nx or
+        py + max_radius < 0 or py - max_radius >= ny):
+        return None
+
     # Determine if this is an annulus or simple aperture
     is_annulus = (a_in_arcsec is not None) and (b_in_arcsec is not None)
     
@@ -518,28 +522,37 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
     # Extract flux
     flux = phot_table['aperture_sum'][0]
 
-    # Calculate pixel counts
+    # Calculate pixel counts and fraction of aperture in image
     aperture_mask = aperture.to_mask()
+    full_aperture_pixels = 0
+    in_image_pixels = 0
+
     if hasattr(aperture_mask, '__len__'):  # Multiple masks for annulus
-        # For annulus, combine all masks
         total_mask_data = np.zeros_like(data, dtype=bool)
         for mask in aperture_mask:
             if mask is not None:
+                full_aperture_pixels += np.sum(mask.data > 0)
                 mask_array = mask.to_image(data.shape)
-                total_mask_data |= (mask_array > 0)
-        num_pixels_total = np.sum(total_mask_data)
+                if mask_array is not None:
+                    total_mask_data |= (mask_array > 0)
+        in_image_pixels = np.sum(total_mask_data)
+        num_pixels_total = in_image_pixels
         masked_pixels_in_aperture = np.sum(bad_pixel_mask & total_mask_data)
     else:
-        # Single mask for simple aperture
         if aperture_mask is not None:
-            num_pixels_total = np.sum(aperture_mask.data.astype(int))
+            full_aperture_pixels = np.sum(aperture_mask.data > 0)
             aperture_mask_array = aperture_mask.to_image(data.shape)
-            masked_pixels_in_aperture = np.sum(bad_pixel_mask & (aperture_mask_array > 0))
+            if aperture_mask_array is not None:
+                in_image_pixels = np.sum(aperture_mask_array > 0)
+                masked_pixels_in_aperture = np.sum(bad_pixel_mask & (aperture_mask_array > 0))
+            else:
+                masked_pixels_in_aperture = 0
+            num_pixels_total = in_image_pixels
         else:
             num_pixels_total = 0
             masked_pixels_in_aperture = 0
 
-
+    frac_in_image = in_image_pixels / full_aperture_pixels if full_aperture_pixels > 0 else 0
     num_pixels_used = num_pixels_total - masked_pixels_in_aperture
     
     # Calculate surface brightness (flux per unit area)
@@ -568,6 +581,7 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
         'num_pixels_used': num_pixels_used,
         'num_pixels_masked': masked_pixels_in_aperture,
         'fraction_pixels_used': num_pixels_used / num_pixels_total if num_pixels_total > 0 else 0,
+        'frac_in_image': frac_in_image,
         
         # Statistical measures
         'mean': aperture_stats.mean,
@@ -1077,9 +1091,15 @@ def do_many(xtab, image_file, create_visualization=False):
 
         x = {'Source_name': one['Source_name'], 'SourceBack': one['SourceBack']}
 
-        if one['RegType'] == 'ellipse':
+        if one['RegType'] in ('ellipse', 'circle'):
+            if one['RegType'] == 'circle':
+                b = a
+                theta = 0
             results = elliptical_region_photometry(fits_file=image_file, ra=ra, dec=dec,
                                                    a_arcsec=a, b_arcsec=b, theta_deg=theta)
+
+            if results is None:
+                continue
 
             # Create visualization for source regions (not background)
             if create_visualization and one['SourceBack'] == 'Source':
@@ -1106,6 +1126,8 @@ def do_many(xtab, image_file, create_visualization=False):
         elif one['RegType'] == 'annulus':
             results = circular_photometry(fits_file=image_file, ra=ra, dec=dec,
                                           radius_arcsec=a, radius_in_arcsec=b)
+            if results is None:
+                continue
         else:
             print('Error: Unknown RegType:', one['RegType'])
             raise ValueError(f"Unknown RegType: {one['RegType']}")
@@ -1149,72 +1171,87 @@ def results2table(results_list):
     return table
 
 
-def rename_columns(xtab, prefix='Src'):
-    """Add a prefix to all column names except Source_name.
+
+def add_net_rows(xtab):
+    """Add background-subtracted Net rows to a photometry table.
+
+    For each source that has both Source and Back entries (matched by
+    Source_name and Image), compute a Net row with background-subtracted
+    flux and statistics. Rows are ordered as Source, Back, Net for each
+    source in each image.
 
     Parameters
     ----------
     xtab : astropy.table.Table
-        Input table to rename columns.
-    prefix : str, optional
-        Prefix to add to column names. Default is 'Src'.
+        Table containing Source and Back entries identified by the
+        SourceBack column.
 
     Returns
     -------
     astropy.table.Table
-        Table with renamed columns.
+        Table with rows grouped as Source, Back, Net per source/image.
+        Net rows have SourceBack='Net' and contain background-subtracted
+        values for flux, mean, and median. The net flux is computed as
+        source_flux - num_pixels_used * back_median.
     """
-    for colname in xtab.colnames:
-        if colname != 'Source_name':
-            xtab.rename_column(colname, '%s_%s' % (prefix, colname))
-    return xtab
+    has_image = 'Image' in xtab.colnames
+
+    # Build lookups keyed by (Source_name, Image)
+    src_lookup = {}
+    back_lookup = {}
+    key_order = []
+
+    for row in xtab:
+        if has_image:
+            key = (row['Source_name'], row['Image'])
+        else:
+            key = (row['Source_name'],)
+
+        if key not in src_lookup and key not in back_lookup:
+            key_order.append(key)
+
+        if row['SourceBack'] == 'Source':
+            src_lookup[key] = row
+        elif row['SourceBack'] == 'Back':
+            back_lookup[key] = row
+
+    # Build output rows: Source, Back, Net for each key
+    out_rows = []
+    for key in key_order:
+        src_row = src_lookup.get(key)
+        back_row = back_lookup.get(key)
+
+        if src_row is not None:
+            out_rows.append(dict(src_row))
+        if back_row is not None:
+            out_rows.append(dict(back_row))
+
+        # Compute Net row if both Source and Back exist
+        if src_row is not None and back_row is not None:
+            net = dict(src_row)
+            net['SourceBack'] = 'Net'
+            net['flux'] = src_row['flux'] - src_row['num_pixels_used'] * back_row['median']
+            net['mean'] = src_row['mean'] - back_row['mean']
+            net['median'] = src_row['median'] - back_row['median']
+            if src_row['area_arcsec2'] > 0:
+                net['surface_brightness_per_arcsec2'] = net['flux'] / src_row['area_arcsec2']
+                net['surface_brightness_per_pixel'] = net['flux'] / src_row['area_pixels']
+            else:
+                net['surface_brightness_per_arcsec2'] = 0
+                net['surface_brightness_per_pixel'] = 0
+            out_rows.append(net)
+
+    result = Table(rows=out_rows)
+    for col_name in result.colnames:
+        if col_name in xtab.colnames and hasattr(xtab[col_name], 'format'):
+            result[col_name].format = xtab[col_name].format
+
+    return result
 
 
 
-
-def get_net(xtab):
-    """Calculate net flux by subtracting background from source measurements.
-
-    Joins source and background measurements and computes background-subtracted
-    flux estimates.
-
-    Parameters
-    ----------
-    xtab : astropy.table.Table
-        Table containing both Source and Back entries for each source,
-        identified by the SourceBack column.
-
-    Returns
-    -------
-    astropy.table.Table
-        Table with net flux calculations including:
-
-        * Net_flux : Source flux minus scaled background
-        * Med_flux : Median-based net flux estimate
-    """
-    s = xtab[xtab['SourceBack'] == 'Source']
-    b = xtab[xtab['SourceBack'] == 'Back']
-
-    ss = s['Source_name', 'flux', 'num_pixels_used', 'mean', 'median', 'mode', 'min', 'max']
-    ss = rename_columns(ss, 'Src')
-
-    bb = b['Source_name', 'num_pixels_used', 'mean', 'median', 'mode', 'min', 'max']
-    bb = rename_columns(bb, 'Back')
-
-    xx = join(ss, bb)
-    xx['Net_flux'] = xx['Src_flux'] - xx['Src_num_pixels_used'] * xx['Back_median']
-    xx['Med_flux'] = (xx['Src_median'] - xx['Back_median']) * xx['Src_num_pixels_used']
-    xx['Net_flux'].format = '.2f'
-    xx['Med_flux'].format = '.2f'
-    return xx
-
-
-
-def do_all(image_file, region_table, outroot='', create_visualization=False):
+def do_all(image_file, region_table, create_visualization=False):
     """Process all sources in a region table for one image.
-
-    Main processing function that reads the region table, performs
-    photometry on all regions, and writes output files.
 
     Parameters
     ----------
@@ -1222,22 +1259,15 @@ def do_all(image_file, region_table, outroot='', create_visualization=False):
         Path to the FITS image file.
     region_table : str
         Path to the region table file.
-    outroot : str, optional
-        Root name for output files. If empty, auto-generated from
-        image and region file names.
     create_visualization : bool, optional
         If True, create visualization plots for each source region.
         Plots are saved to ``Figs_Flux/`` directory. Default is False.
 
     Returns
     -------
-    None
-        Writes two output files:
-
-        * ``SB_<outroot>.txt`` - Full photometry results
-        * ``Net_<outroot>.txt`` - Net flux summary
-
-        If create_visualization=True, also writes PNG files to Figs_Flux/.
+    astropy.table.Table or None
+        Photometry results table with Source and Back rows and an
+        'Image' column, or None if no regions overlap the image.
     """
     import os
 
@@ -1245,33 +1275,26 @@ def do_all(image_file, region_table, outroot='', create_visualization=False):
         xtab = ascii.read(region_table)
     except Exception:
         print('Error: could not read %s' % region_table)
-        return
+        return None
 
-    if outroot == '':
-        iname = image_file.split('/')[-1]
-        iname = iname.replace('.fits', '')
-        iname = iname.replace('.gz', '')
-        rname = region_table.split('/')[-1]
-        fff = '%s.%s' % (iname, rname)
-    else:
-        fff = outroot
-
-    if fff.count('.txt') == 0 and fff.count('.tab') == 0:
-        fff += '.txt'
+    iname = image_file.split('/')[-1]
+    iname = iname.replace('.fits', '')
+    iname = iname.replace('.gz', '')
 
     # Create visualization directory if needed
     if create_visualization:
         os.makedirs('Figs_Flux', exist_ok=True)
 
     results = do_many(xtab, image_file, create_visualization=create_visualization)
-    xresults = results2table(results)
-    xresults.write('SB_%s' % fff, format='ascii.fixed_width_two_line', overwrite=True)
-    print('Wrote SB_%s with %d rows' % (fff, len(xresults)))
 
-    xnet = get_net(xresults)
-    xnet.write('Net_%s' % fff, format='ascii.fixed_width_two_line', overwrite=True)
-    print('Wrote Net_%s with %d rows' % (fff, len(xnet)))
-    return
+    if len(results) == 0:
+        print('  No regions overlap with %s, skipping' % image_file)
+        return None
+
+    xresults = results2table(results)
+    xresults['Image'] = iname
+    print('  %s: %d regions measured' % (iname, len(xresults)))
+    return xresults
 
 
 def steer(argv):
@@ -1349,9 +1372,33 @@ def steer(argv):
     print('Processing %d images with region file %s' % (len(images), reg_file))
     if create_viz:
         print('Visualization enabled - output to Figs_Flux/')
+
+    all_tables = []
     for one_image in images:
         print('Processing %s' % one_image)
-        do_all(one_image, reg_file, create_visualization=create_viz)
+        sb_table = do_all(one_image, reg_file, create_visualization=create_viz)
+        if sb_table is not None:
+            all_tables.append(sb_table)
+
+    # Write single consolidated file with Source, Back, and Net rows
+    if len(all_tables) > 0:
+        from astropy.table import vstack
+
+        rname = reg_file.split('/')[-1]
+        rname = rname.replace('.txt', '').replace('.tab', '')
+
+        all_results = vstack(all_tables)
+        all_results = add_net_rows(all_results)
+        outfile = 'Flux_%s.txt' % rname
+        all_results.write(outfile, format='ascii.fixed_width_two_line', overwrite=True)
+
+        n_src = np.sum(all_results['SourceBack'] == 'Source')
+        n_back = np.sum(all_results['SourceBack'] == 'Back')
+        n_net = np.sum(all_results['SourceBack'] == 'Net')
+        print('\nWrote %s with %d rows (%d Source, %d Back, %d Net) from %d images' %
+              (outfile, len(all_results), n_src, n_back, n_net, len(all_tables)))
+    else:
+        print('\nNo images had overlapping regions - no output written')
 
     return
 
