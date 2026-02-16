@@ -16,7 +16,7 @@ Command Line Usage
 
 ::
 
-    Smash.py [-h] [-r size_deg] [-rmag max] [-kfrac frac] [-plot] [-ex] [-out root] ra dec
+    Smash.py [-h] [-rad size_deg] [-rmag max] [-kfrac frac] [-plot] [-ex] [-out root] ra dec
 
 **Required Arguments:**
 
@@ -31,7 +31,7 @@ dec
 -h
     Print this help message and exit.
 
--r size
+-rad size
     Set the cone search radius in degrees. Default: 0.5.
 
 -rmag max
@@ -606,7 +606,7 @@ def steer(argv):
         if argv[i][:2] == '-h':
             print(__doc__)
             return
-        elif argv[i][:2] == '-r':
+        elif argv[i][:4] == '-rad':
             i += 1
             radius = eval(argv[i])
         elif argv[i][:4] == '-out':
@@ -640,6 +640,15 @@ def steer(argv):
         print('Error: RA and Dec are required')
         print(__doc__)
         return
+
+    print("RA:", ra)
+    print("Dec:", dec)
+    print("Radius (deg):", radius)
+    print("R_mag:", rmag_max)
+    print("Fraction:", keep_frac)
+    print("Out root:", outroot)
+    print("Plot:", plot)
+
 
     do_one(ra, dec, radius=radius, outroot=outroot, rmag_max=rmag_max, keep_frac=keep_frac, plot=plot)
 
