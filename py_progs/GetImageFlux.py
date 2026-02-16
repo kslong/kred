@@ -244,6 +244,51 @@ def create_bad_pixel_mask(data, value_range=None, specific_values=None):
     return mask
 
 
+def load_fits_image(fits_file):
+    """Load a FITS image and return all derived quantities needed for photometry.
+
+    Reads the FITS file once and extracts the data, header, bad pixel mask,
+    WCS, and pixel scale. This avoids redundant I/O when processing multiple
+    regions on the same image.
+
+    Parameters
+    ----------
+    fits_file : str
+        Path to the FITS file containing the image data.
+
+    Returns
+    -------
+    dict
+        Dictionary with keys:
+
+        * data : numpy.ndarray - 2D image data from the primary extension
+        * header : astropy.io.fits.Header - Primary extension header
+        * bad_pixel_mask : numpy.ndarray - Boolean mask (True = bad pixel)
+        * wcs : astropy.wcs.WCS - World Coordinate System object
+        * pixel_scale : float - Pixel scale in arcseconds per pixel
+    """
+    with fits.open(fits_file) as hdul:
+        data = hdul[0].data
+        header = hdul[0].header
+
+        try:
+            bad_pixel_mask = hdul['MASK'].data
+            bad_pixel_mask = bad_pixel_mask.astype('bool')
+        except:
+            bad_pixel_mask = create_bad_pixel_mask(data, value_range=[-100, 100], specific_values=None)
+
+    wcs = WCS(header)
+    pixel_scale = get_pixel_scale(header)
+
+    return {
+        'data': data,
+        'header': header,
+        'bad_pixel_mask': bad_pixel_mask,
+        'wcs': wcs,
+        'pixel_scale': pixel_scale,
+    }
+
+
 def calculate_background_annulus(a_arcsec, b_arcsec, gap=3.0):
     """Calculate background annulus radii to match source ellipse area.
 
@@ -405,7 +450,8 @@ def generate_region_table(input_file, gap=3.0):
 
 
 def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
-                         a_in_arcsec=None, b_in_arcsec=None, include_zero_mask=True):
+                         a_in_arcsec=None, b_in_arcsec=None, include_zero_mask=True,
+                         image_data=None):
     """Perform elliptical aperture photometry at a sky position.
 
     Unified function that handles both simple elliptical apertures and
@@ -433,6 +479,9 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
         Semi-minor axis of inner ellipse in arcseconds.
     include_zero_mask : bool, optional
         Whether to mask pixels with zero values. Default is True.
+    image_data : dict, optional
+        Pre-loaded image data from load_fits_image(). If provided, the FITS
+        file is not opened again. Default is None.
 
     Returns
     -------
@@ -460,30 +509,20 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
     >>> print(f"Flux: {results['flux']:.2e}")
     """
     from photutils.aperture import EllipticalAperture, EllipticalAnnulus
-    
-    # Open the FITS file
-    with fits.open(fits_file) as hdul:
-        data = hdul[0].data
-        header = hdul[0].header
 
-        try:
-            bad_pixel_mask=hdul['MASK'].data
-            bad_pixel_mask=bad_pixel_mask.astype('bool')
-        except:
-            bad_pixel_mask= create_bad_pixel_mask(data, value_range=[-100,100], specific_values=None)
-        
-    
-    # Get the WCS (World Coordinate System) from the FITS header
+    # Load image data (use pre-loaded if provided, otherwise open file)
+    if image_data is None:
+        image_data = load_fits_image(fits_file)
 
-    wcs = WCS(header)
+    data = image_data['data']
+    header = image_data['header']
+    bad_pixel_mask = image_data['bad_pixel_mask']
+    wcs = image_data['wcs']
+    pixel_scale = image_data['pixel_scale']
 
-    
     # Convert the RA and Dec to pixel coordinates
     sky_coord = SkyCoord(ra, dec, unit=(u.deg, u.deg), frame='icrs')
     pixel_coord = wcs.world_to_pixel(sky_coord)
-
-    # Get the pixel scale
-    pixel_scale = get_pixel_scale(header)
 
     # Convert semi-axes from arcseconds to pixels
     a_pixels = a_arcsec / pixel_scale
@@ -628,7 +667,7 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
 
 
 def elliptical_region_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
-                                include_zero_mask=True):
+                                include_zero_mask=True, image_data=None):
     """Perform photometry in a simple elliptical aperture.
 
     Convenience wrapper for elliptical_photometry() for simple apertures
@@ -650,6 +689,8 @@ def elliptical_region_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_d
         Position angle in degrees. Default is 0.
     include_zero_mask : bool, optional
         Whether to mask zero-valued pixels. Default is True.
+    image_data : dict, optional
+        Pre-loaded image data from load_fits_image(). Default is None.
 
     Returns
     -------
@@ -657,11 +698,12 @@ def elliptical_region_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_d
         Photometry results dictionary. See elliptical_photometry().
     """
     return elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg,
-                               include_zero_mask=include_zero_mask)
+                               include_zero_mask=include_zero_mask, image_data=image_data)
 
 
 def elliptical_annulus_photometry(fits_file, ra, dec, a_out_arcsec, b_out_arcsec,
-                                 a_in_arcsec, b_in_arcsec, theta_deg=0, include_zero_mask=True):
+                                 a_in_arcsec, b_in_arcsec, theta_deg=0, include_zero_mask=True,
+                                 image_data=None):
     """Perform photometry in an elliptical annulus.
 
     Convenience wrapper for elliptical_photometry() for annular apertures.
@@ -686,6 +728,8 @@ def elliptical_annulus_photometry(fits_file, ra, dec, a_out_arcsec, b_out_arcsec
         Position angle in degrees. Default is 0.
     include_zero_mask : bool, optional
         Whether to mask zero-valued pixels. Default is True.
+    image_data : dict, optional
+        Pre-loaded image data from load_fits_image(). Default is None.
 
     Returns
     -------
@@ -693,11 +737,12 @@ def elliptical_annulus_photometry(fits_file, ra, dec, a_out_arcsec, b_out_arcsec
         Photometry results dictionary. See elliptical_photometry().
     """
     return elliptical_photometry(fits_file, ra, dec, a_out_arcsec, b_out_arcsec, theta_deg,
-                               a_in_arcsec, b_in_arcsec, include_zero_mask)
+                               a_in_arcsec, b_in_arcsec, include_zero_mask,
+                               image_data=image_data)
 
 
 def circular_photometry(fits_file, ra, dec, radius_arcsec, radius_in_arcsec=None,
-                       include_zero_mask=True):
+                       include_zero_mask=True, image_data=None):
     """Perform circular aperture photometry.
 
     Convenience wrapper using elliptical functions with equal semi-axes.
@@ -717,6 +762,8 @@ def circular_photometry(fits_file, ra, dec, radius_arcsec, radius_in_arcsec=None
         a circular annulus.
     include_zero_mask : bool, optional
         Whether to mask zero-valued pixels. Default is True.
+    image_data : dict, optional
+        Pre-loaded image data from load_fits_image(). Default is None.
 
     Returns
     -------
@@ -725,16 +772,18 @@ def circular_photometry(fits_file, ra, dec, radius_arcsec, radius_in_arcsec=None
     """
     if radius_in_arcsec is not None:
         return elliptical_photometry(fits_file, ra, dec, radius_arcsec, radius_arcsec, 0,
-                                   radius_in_arcsec, radius_in_arcsec, include_zero_mask)
+                                   radius_in_arcsec, radius_in_arcsec, include_zero_mask,
+                                   image_data=image_data)
     else:
         return elliptical_photometry(fits_file, ra, dec, radius_arcsec, radius_arcsec, 0,
-                                   include_zero_mask=include_zero_mask)
+                                   include_zero_mask=include_zero_mask, image_data=image_data)
 
 
 def visualize_aperture_region(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
                             back_outer_arcsec=None, back_inner_arcsec=None,
                             display_size_arcsec=None, output_filename=None,
-                            include_zero_mask=True, show_plot=True, source_name=None):
+                            include_zero_mask=True, show_plot=True, source_name=None,
+                            image_data=None):
     """Create a visualization showing source and background regions on image data.
 
     Generates a three-panel plot showing: (1) original data with source ellipse
@@ -770,6 +819,9 @@ def visualize_aperture_region(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=
         Whether to display plot interactively. Default is True.
     source_name : str, optional
         Name of the source for the plot title.
+    image_data : dict, optional
+        Pre-loaded image data from load_fits_image(). If provided, the FITS
+        file is not opened again. Default is None.
 
     Returns
     -------
@@ -787,16 +839,20 @@ def visualize_aperture_region(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=
     from datetime import datetime
     import os
 
-    # Open the FITS file
-    with fits.open(fits_file) as hdul:
-        data = hdul[0].data
-        header = hdul[0].header
+    # Load image data (use pre-loaded if provided, otherwise open file)
+    if image_data is not None:
+        data = image_data['data']
+        header = image_data['header']
+    else:
+        with fits.open(fits_file) as hdul:
+            data = hdul[0].data
+            header = hdul[0].header
 
-        # Create bad pixel mask
-        if include_zero_mask:
-            bad_pixel_mask = np.isnan(data) | (data == 0)
-        else:
-            bad_pixel_mask = np.isnan(data)
+    # Create display-specific mask (NaN/zero masking for visualization)
+    if include_zero_mask:
+        bad_pixel_mask = np.isnan(data) | (data == 0)
+    else:
+        bad_pixel_mask = np.isnan(data)
 
     # Get WCS and convert coordinates
     wcs = WCS(header)
@@ -1087,6 +1143,9 @@ def do_many(xtab, image_file, create_visualization=False):
     """
     import os
 
+    # Load the FITS image once for all regions
+    image_data = load_fits_image(image_file)
+
     xresults = []
 
     # Build a lookup dictionary for background regions by source name
@@ -1112,7 +1171,8 @@ def do_many(xtab, image_file, create_visualization=False):
                 b = a
                 theta = 0
             results = elliptical_region_photometry(fits_file=image_file, ra=ra, dec=dec,
-                                                   a_arcsec=a, b_arcsec=b, theta_deg=theta)
+                                                   a_arcsec=a, b_arcsec=b, theta_deg=theta,
+                                                   image_data=image_data)
 
             if results is None:
                 continue
@@ -1136,12 +1196,14 @@ def do_many(xtab, image_file, create_visualization=False):
                     a_arcsec=a, b_arcsec=b, theta_deg=theta,
                     back_outer_arcsec=back_outer, back_inner_arcsec=back_inner,
                     output_filename=viz_filename, show_plot=False,
-                    source_name=one['Source_name']
+                    source_name=one['Source_name'],
+                    image_data=image_data
                 )
 
         elif one['RegType'] == 'annulus':
             results = circular_photometry(fits_file=image_file, ra=ra, dec=dec,
-                                          radius_arcsec=a, radius_in_arcsec=b)
+                                          radius_arcsec=a, radius_in_arcsec=b,
+                                          image_data=image_data)
             if results is None:
                 continue
         else:
@@ -1429,17 +1491,18 @@ def steer(argv):
             print('Error: match file missing required columns: %s' % missing)
             return
 
-        unique_images = list(dict.fromkeys(match_tab['filename']))
+        unique_images = sorted(set(match_tab['filename']))
         print('Match mode: %d unique images from %s' % (len(unique_images), match_file))
         print('Region file: %s' % reg_file)
         if create_viz:
             print('Visualization enabled - output to Figs_Flux/')
 
         all_tables = []
-        for one_image in unique_images:
+        n_images = len(unique_images)
+        for i_img, one_image in enumerate(unique_images, 1):
             matched = match_tab[match_tab['filename'] == one_image]
             source_list = list(dict.fromkeys(matched['Source_name']))
-            print('Processing %s' % one_image)
+            print('\nProcessing %s (%d of %d)' % (one_image, i_img, n_images))
             sb_table = do_all(one_image, reg_file, create_visualization=create_viz,
                               source_names=source_list)
             if sb_table is not None:
@@ -1447,13 +1510,15 @@ def steer(argv):
 
     else:
         # Standard mode: explicit image files
+        images.sort()
         print('Processing %d images with region file %s' % (len(images), reg_file))
         if create_viz:
             print('Visualization enabled - output to Figs_Flux/')
 
         all_tables = []
-        for one_image in images:
-            print('Processing %s' % one_image)
+        n_images = len(images)
+        for i_img, one_image in enumerate(images, 1):
+            print('\nProcessing %s (%d of %d)' % (one_image, i_img, n_images))
             sb_table = do_all(one_image, reg_file, create_visualization=create_viz)
             if sb_table is not None:
                 all_tables.append(sb_table)
