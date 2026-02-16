@@ -17,6 +17,7 @@ Command Line Usage
 ::
 
     GetImageFlux.py [-h] [-viz] [-auto_back] [-gap N] image1.fits [image2.fits ...] region_table.txt
+    GetImageFlux.py [-viz] [-auto_back] [-gap N] -match match_file.txt region_table.txt
 
 **Required Arguments:**
 
@@ -48,6 +49,21 @@ region_table.txt
 -gap N
     Gap in arcseconds between the source outer edge and the background
     annulus inner radius. Default is 3.0 arcsec. Only used with ``-auto_back``.
+
+-match match_file.txt
+    Use a match file (output from ``ImageMatch2Source.py``) to drive
+    which source/image combinations are processed. The match file must
+    have columns ``Source_name`` and ``filename``. When ``-match`` is used,
+    no explicit image files are needed on the command line — they come
+    from the match file's ``filename`` column. Only the matched sources
+    are processed for each image, rather than all sources in the region
+    table.
+
+-filter name
+    Insert a filter identifier into the output filename. For example,
+    ``-filter ha`` produces ``Flux_ha_<region>.txt`` instead of
+    ``Flux_<region>.txt``. Useful to avoid overwriting results from
+    different filters.
 
 Description
 -----------
@@ -1250,7 +1266,7 @@ def add_net_rows(xtab):
 
 
 
-def do_all(image_file, region_table, create_visualization=False):
+def do_all(image_file, region_table, create_visualization=False, source_names=None):
     """Process all sources in a region table for one image.
 
     Parameters
@@ -1262,6 +1278,10 @@ def do_all(image_file, region_table, create_visualization=False):
     create_visualization : bool, optional
         If True, create visualization plots for each source region.
         Plots are saved to ``Figs_Flux/`` directory. Default is False.
+    source_names : list of str, optional
+        If provided, only process sources whose Source_name is in this list.
+        Used by ``-match`` mode to restrict processing to matched sources.
+        Default is None (process all sources).
 
     Returns
     -------
@@ -1276,6 +1296,12 @@ def do_all(image_file, region_table, create_visualization=False):
     except Exception:
         print('Error: could not read %s' % region_table)
         return None
+
+    if source_names is not None:
+        xtab = xtab[np.isin(xtab['Source_name'], source_names)]
+        if len(xtab) == 0:
+            print('  No matching sources in region file for %s' % image_file)
+            return None
 
     iname = image_file.split('/')[-1]
     iname = iname.replace('.fits', '')
@@ -1320,12 +1346,16 @@ def steer(argv):
     * ``-viz`` enables visualization output to Figs_Flux/
     * ``-auto_back`` auto-generates background regions from source-only input
     * ``-gap N`` sets the gap between source and background (default 3 arcsec)
+    * ``-match match_file`` uses a match file to drive source/image pairs
+    * ``-filter name`` inserts filter name into output filename
     """
     images = []
     reg_file = ''
     create_viz = False
     auto_back = False
     gap = 3.0
+    match_file = ''
+    filter_name = ''
 
     i = 1
     while i < len(argv):
@@ -1343,6 +1373,12 @@ def steer(argv):
             except (ValueError, IndexError):
                 print('Error: -gap requires a numeric value')
                 return
+        elif argv[i] == '-match':
+            i += 1
+            match_file = argv[i]
+        elif argv[i] == '-filter':
+            i += 1
+            filter_name = argv[i]
         elif argv[i][0] == '-':
             print('Error: unknown option on command line:', argv[i])
             return
@@ -1355,9 +1391,15 @@ def steer(argv):
             return
         i += 1
 
-    if len(images) == 0 or reg_file == '':
+    if match_file == '' and (len(images) == 0 or reg_file == ''):
         print('Error: Not enough arguments')
         print('Usage: GetImageFlux.py [-viz] [-auto_back] [-gap N] image1.fits [image2.fits ...] region_table.txt')
+        print('       GetImageFlux.py [-viz] [-auto_back] [-gap N] -match match_file.txt region_table.txt')
+        return
+
+    if match_file != '' and reg_file == '':
+        print('Error: -match mode requires a region table')
+        print('Usage: GetImageFlux.py [-viz] [-auto_back] [-gap N] -match match_file.txt region_table.txt')
         return
 
     # If auto_back is enabled, generate the region table with background regions
@@ -1369,27 +1411,63 @@ def steer(argv):
             return
         reg_file = generated_file
 
-    print('Processing %d images with region file %s' % (len(images), reg_file))
-    if create_viz:
-        print('Visualization enabled - output to Figs_Flux/')
+    # Determine output name base from the region file
+    rname = reg_file.split('/')[-1]
+    rname = rname.replace('.txt', '').replace('.tab', '')
 
-    all_tables = []
-    for one_image in images:
-        print('Processing %s' % one_image)
-        sb_table = do_all(one_image, reg_file, create_visualization=create_viz)
-        if sb_table is not None:
-            all_tables.append(sb_table)
+    # Match mode: read match file to get image/source pairs
+    if match_file != '':
+        try:
+            match_tab = ascii.read(match_file)
+        except Exception:
+            print('Error: could not read match file %s' % match_file)
+            return
+
+        required_cols = ['Source_name', 'filename']
+        missing = [c for c in required_cols if c not in match_tab.colnames]
+        if missing:
+            print('Error: match file missing required columns: %s' % missing)
+            return
+
+        unique_images = list(dict.fromkeys(match_tab['filename']))
+        print('Match mode: %d unique images from %s' % (len(unique_images), match_file))
+        print('Region file: %s' % reg_file)
+        if create_viz:
+            print('Visualization enabled - output to Figs_Flux/')
+
+        all_tables = []
+        for one_image in unique_images:
+            matched = match_tab[match_tab['filename'] == one_image]
+            source_list = list(dict.fromkeys(matched['Source_name']))
+            print('Processing %s' % one_image)
+            sb_table = do_all(one_image, reg_file, create_visualization=create_viz,
+                              source_names=source_list)
+            if sb_table is not None:
+                all_tables.append(sb_table)
+
+    else:
+        # Standard mode: explicit image files
+        print('Processing %d images with region file %s' % (len(images), reg_file))
+        if create_viz:
+            print('Visualization enabled - output to Figs_Flux/')
+
+        all_tables = []
+        for one_image in images:
+            print('Processing %s' % one_image)
+            sb_table = do_all(one_image, reg_file, create_visualization=create_viz)
+            if sb_table is not None:
+                all_tables.append(sb_table)
 
     # Write single consolidated file with Source, Back, and Net rows
     if len(all_tables) > 0:
         from astropy.table import vstack
 
-        rname = reg_file.split('/')[-1]
-        rname = rname.replace('.txt', '').replace('.tab', '')
-
         all_results = vstack(all_tables)
         all_results = add_net_rows(all_results)
-        outfile = 'Flux_%s.txt' % rname
+        if filter_name:
+            outfile = 'Flux_%s_%s.txt' % (filter_name, rname)
+        else:
+            outfile = 'Flux_%s.txt' % rname
         all_results.write(outfile, format='ascii.fixed_width_two_line', overwrite=True)
 
         n_src = np.sum(all_results['SourceBack'] == 'Source')

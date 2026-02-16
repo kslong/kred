@@ -42,7 +42,13 @@ region file to a master file.
 Running GetImageFlux
 --------------------
 
-The typical use case is to process multiple images at once with automatic background
+There are two ways to run GetImageFlux: by specifying images explicitly on the
+command line, or by using a match file that maps sources to their best images.
+
+Direct mode
+^^^^^^^^^^^
+
+The simplest use case is to process one or more images with automatic background
 generation::
 
     GetImageFlux.py -auto_back masterfile image1.fits image2.fits ...
@@ -50,6 +56,57 @@ generation::
 or using a wildcard::
 
     GetImageFlux.py -auto_back smc_snr_cotton24.txt xdata/*fits
+
+In this mode, **every** source in the masterfile is measured against **every** image.
+Sources that fall outside a given image are silently skipped.
+
+Match mode
+^^^^^^^^^^
+
+When working with many images and many sources spread across them, it is more
+efficient to use a match file that identifies which image(s) are best for each
+source.  This avoids processing all sources against all images.
+
+First, use :doc:`ImageMatch2Source.py <api/ImageMatch2Source/index>` to create the
+match file.  ImageMatch2Source reads an image catalog (produced by
+:doc:`ImageSum.py <api/ImageSum/index>`) and a source catalog, and finds the
+image whose center is closest to each source::
+
+    ImageMatch2Source.py Image_Sum_DECam_SUB2.txt smc_snr_cotton24.txt ha_sub_r
+
+This produces a file (by default ``XX_ha_sub_r.smc_snr_cotton24.txt``) with columns::
+
+    Source_name        RA       Dec  filename                                          separation_arcmin  rank
+    ----------- --------- --------- ------------------------------------------------- ----------------- ----
+     J0041-7336  10.25708 -73.60844 kred_smc/DECam_SUB2/SMC_c06/T06/SMC_c06_T06...              5.23    1
+     J0046-7308  11.66917 -73.13747 kred_smc/DECam_SUB2/SMC_c06/T06/SMC_c06_T06...              8.41    1
+
+You can adjust the maximum search radius with ``-sep`` (default 33 arcmin) and
+request multiple matches per source with ``-n_closest``::
+
+    ImageMatch2Source.py -sep 20 -n_closest 3 Image_Sum_DECam_SUB2.txt smc_snr_cotton24.txt ha_sub_r
+
+Then pass the match file to GetImageFlux with ``-match``::
+
+    GetImageFlux.py -match XX_ha_sub_r.smc_snr_cotton24.txt -auto_back smc_snr_cotton24.txt
+
+In this mode, only the sources that the match file assigns to a given image are
+measured for that image.  The image filenames come from the match file, so no
+explicit ``.fits`` files are needed on the command line.
+
+The ``-filter`` option
+^^^^^^^^^^^^^^^^^^^^^^
+
+By default the output file is named ``Flux_<region_file>.txt``.  When processing
+multiple filters, use ``-filter`` to avoid overwriting results::
+
+    GetImageFlux.py -match XX_ha_sub_r.sources.txt -auto_back -filter ha sources.txt
+    GetImageFlux.py -match XX_s2_sub_r.sources.txt -auto_back -filter s2 sources.txt
+
+This produces ``Flux_ha_<region>.txt`` and ``Flux_s2_<region>.txt`` respectively.
+
+Background regions
+^^^^^^^^^^^^^^^^^^
 
 The ``-auto_back`` flag constructs a circular annulus background region outside of each
 source region and writes out a new region file (``<input>_with_back.txt``) with this
@@ -71,6 +128,14 @@ the region file, convert it back to a masterfile, and run::
 
 without ``-auto_back``.
 
+The gap between the source outer edge and the background inner radius defaults to
+3 arcsec and can be adjusted with ``-gap``::
+
+    GetImageFlux.py -auto_back -gap 5 masterfile image1.fits
+
+Visualization
+^^^^^^^^^^^^^
+
 The routine :doc:`GetImageFlux.py <api/GetImageFlux/index>` has various options, which
 can be explored with::
 
@@ -85,7 +150,8 @@ Output
 
 When processing multiple images, a single consolidated output file is written::
 
-    Flux_<region_file>.txt
+    Flux_<region_file>.txt          (without -filter)
+    Flux_<filter>_<region_file>.txt (with -filter)
 
 This file contains three types of rows for each source in each image, identified by
 the ``SourceBack`` column:
