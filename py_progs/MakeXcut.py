@@ -1,44 +1,61 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""This is a diagnositc routine intended to allow one to
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 This is a diagnositc routine intended to allow one to
 make plots of rows and columns in regions of images
 that show breaks in the apparent flux
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: MakeXcut.py  -filt N662 -exptime 400 -size 200 -ymin 30 -ymax 100 xdir ra dec
 
     where
 
-        -xfilt designates a fileter to use
-        -exptime designates and expousre time to chose
-        -size indicates the size in pixels of the xcuts
-        -ymin and -ymax set the min and maxim y leve
+    -xfilt designates a fileter to use
+    -exptime designates and expousre time to chose
+    -size indicates the size in pixels of the xcuts
+    -ymin and -ymax set the min and maxim y leve
 
-    and 
-        xdir is the directory in which to look for fits files
-        ra and dec are the ra and dec of a position to inspect
+    and
+    xdir is the directory in which to look for fits files
+    ra and dec are the ra and dec of a position to inspect
 
-
-Description:  
+Description
+-----------
 
 Primary routines:
 
     doit
 
-Notes:
-                                       
+Primary Routines
+----------------
+
+doit
+
+Notes
+-----
+
 History:
 
 231018 ksl Coding begun
 
-'''
+Version History
+---------------
+
+231018 ksl
+    Coding begun
+
+"""
+
 
 import os
 from astropy.io import fits,ascii

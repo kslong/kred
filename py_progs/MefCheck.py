@@ -1,47 +1,56 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Check whether one or more fits files have headers
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Check whether one or more fits files have headers
 that conform to the fits standard, by looking at
 the warnings that astropy generates and for certain
 keywrods in the header.
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: MefCheck.py [-np 8] [-all]  -dup_only Field ...
 
-Description:  
+Description
+-----------
 
-    where 
+where
 
         -np 8 imples to run multiple threads, where each
-            thread processes one field 
-        -all implies to do all fields in the DECam_MEF 
+            thread processes one field
+        -all implies to do all fields in the DECam_MEF
             directory
-        -dup_only just check for duplicate files in the MEF 
+        -dup_only just check for duplicate files in the MEF
             directory structure
 
-Primary routines:
+Primary Routines
+----------------
 
-    doit
+doit
 
-Notes:
+Notes
+-----
 
-    Normally, this will not generate any errors.  The
+Normally, this will not generate any errors.  The
     routine generates a table mef_qual.tab in the
     Summary directory for each of the fields.
 
-                                       
-History:
+Version History
+---------------
 
-230706 ksl Coding begun
+230706 ksl
+    Coding begun
 
-'''
+"""
+
 
 import sys
 import warnings

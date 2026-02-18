@@ -2,53 +2,85 @@
 # coding: utf-8
 
 
-'''
-                    Space Telescope Science Institute
+"""ImageSum - Summarize FITS files in a directory
 
-Synopsis:  
+Space Telescope Science Institute
 
-This routine simple allows one to sumarize some information
-from all of the fits files in a particular part of the
-kred directory structure, such as DECam_SUB2. 
+Synopsis
+--------
 
-It is intended to facillitate locating images that 
-include a given RA and Dec on the sky
+Recursively search a directory for FITS files and produce a summary table
+with WCS-derived positions, image sizes, and header metadata. Useful for
+locating images that cover a given RA and Dec.
 
-Command line usage (if any):
+Command Line Usage
+------------------
 
-    usage: ImageSum.py [-h] [-out whatever] dirname 
+::
 
-    where:
+    ImageSum.py [-h] [-out outname] dirname
 
-        -h prints this documentation and exits
-        -out whatever changes the name of the output
-            file that is created.  Without this
-            the name of the output file is based
-            on dirname
-        dir the directory which will be searched
+**Required Arguments:**
 
+dirname
+    Directory to search recursively for FITS files.
 
-Description:  
+**Optional Arguments:**
 
-    The routine simply searches for fits files in
-    a directory and all of its subdirectories 
-    and produces a listing of all of the files,
-    along with certain information derived from
-    the header
+-h
+    Print this documentation and exit.
 
+-out outname
+    Set the output filename. Default: ``Image_Sum_{dirname}.txt``
 
-Primary routines:
+Description
+-----------
 
-   steer - directs the routine 
-   table_create - the main routine 
+Searches for all ``*.fits*`` files (including ``.fits.fz``) in the specified
+directory and subdirectories. For each file, extracts metadata from headers
+and calculates image center and size from WCS information.
 
-Notes:
-                                       
-History:
+Handles multi-extension FITS (MEF) files by processing each image extension
+separately.
 
-250813 ksl Coding begun
+Output Columns
+--------------
 
-'''
+Source_name   Object name from OBJECT header keyword
+Filter        Filter name from FILTER header keyword
+Exptime       Exposure time in seconds
+Image_type    Derived from filename (e.g., "ha", "sii", "r")
+RA            Right ascension of image center (degrees)
+Dec           Declination of image center (degrees)
+width         Image width in degrees (corrected for cos(dec))
+height        Image height in degrees
+mag           Photometric zeropoint (MAGZERO), or -999 if missing
+seeing        Seeing FWHM (SEEING), or -999 if missing
+filename      Full path to the FITS file
+ext           Extension number within the file
+
+Example
+-------
+
+::
+
+    ImageSum.py DECam_SUB2
+    ImageSum.py -out all_tiles.txt DECam_SWARP
+
+Primary Routines
+----------------
+
+table_create                        Main routine that builds the summary table
+list_image_extensions               Identify image extensions in MEF files
+get_image_center_and_size_from_header   Calculate WCS-derived image geometry
+
+History
+-------
+
+240813 ksl  Coding begun
+
+"""
+
 
 import sys
 import os

@@ -1,40 +1,53 @@
 #!/usr/bin/env python 
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Get flux corresponding to 1DN through various filters
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Get flux corresponding to 1DN through various filters
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: ZeroPoint.py xmatch*.txt
 
     where the inputs are one or more xmatch files
 
-Description:  
+Description
+-----------
 
-    This routine estimates the zeropoints based on the
-    ouputs from the PhotCompare routine
+This routine estimates the zeropoints based on the
+    outputs from the PhotCompare routine
 
-Primary routines:
+Primary Routines
+----------------
 
-    doit
+doit
 
-Notes:
+Notes
+-----
 
-    The routine produces or adds to the PhotMaster.txt file 
-    and produces a historgram plot of the derived 
+The routine produces or adds to the PhotMaster.txt file
+    and produces a historgram plot of the derived
     zero points.
-                                       
-History:
 
-240505 ksl Coding begun
+    This routine is the one that was used to estimate
+    sensitivity in Points+24
 
-'''
+Version History
+---------------
+
+240505 ksl
+    Coding begun
+
+"""
+
 
 import sys
 import os
@@ -43,7 +56,6 @@ from astropy.table import Table,vstack
 import numpy as np
 import matplotlib.pyplot as plt
 import random
-
 
 from PhotCompare import get_gaia_spec
 

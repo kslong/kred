@@ -1,21 +1,26 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Create cutout images of objects contained in a "masterfile"
 
-Synopsis:  
+Space Telescope Science Institute
 
-Create cutout images of objects contained in a "masterfile" 
+Synopsis
+--------
+
+Create cutout images of objects contained in a "masterfile"
 in the images contained in a specific directory or set of directories
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: CutOut.py [-r] [-size 10] image_directory object_table
 
-Description:  
+Description
+-----------
 
-    where 
+where
 
         image_directory is the directory to be searched for fits images
         object_table is a list of objects with their positions
@@ -30,25 +35,29 @@ Description:
         -size 10 is an optional parameter that gives the size
         of the cutouts in arc minutes
 
+Primary Routines
+----------------
 
-Primary routines:
+doit
 
-    doit
+Notes
+-----
 
-Notes:
-
-    The object_table should be an astropy table that contains (at least)
+The object_table should be an astropy table that contains (at least)
     the following columns:
 
     Source_name   - the name of the object (one word, with no spaces)
-    RA 
+    RA
     Dec
-                                       
-History:
 
-230930 ksl Coding begun
+Version History
+---------------
 
-'''
+230930 ksl
+    Coding begun
+
+"""
+
 
 
 

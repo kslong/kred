@@ -2,68 +2,78 @@
 # coding: utf-8
 
 
-'''
-                    Space Telescope Science Institute
+"""Calculate a which images obtained with a filter overlap
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Calculate a which images obtained with a filter overlap
 with which others
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: FindOverlaps.py [-all] Field Tile1  Tile2 .....
 
-    where -all implies that the ovelaps for all of the 
+    where -all implies that the ovelaps for all of the
     tiles in afiled will be dound
 
-Description:  
+Description
+-----------
 
-    Find the images that ovelap that have the same
+Find the images that ovelap that have the same
     filter.
 
     The routine calculates overlaps of the same filter,
     regardless of the exposure times.
 
-
-    The overlaps are found based on the RA, DEC corrners 
+    The overlaps are found based on the RA, DEC corrners
     of the immages.
-    
+
     The routine outputs a single file that indicates
     which images overlap subject to thise conditions
 
     The routine DOES NOT calculate fluxes in the
     overlap regions, just that the ovelaps exist
 
+Primary Routines
+----------------
 
-Primary routines:
+do_one_tile
 
-    do_one_tile
+Notes
+-----
 
-Notes:
-
-    It is important to recognize that care has
+It is important to recognize that care has
     been taken to avoid double listing, that is
     to say in separate lines of the output file
-    that 
-    
+    that
+
     file_a matches file_b
     file_b matches file_a
 
     There is no significance to the order of
-    file_a and file_b.  
+    file_a and file_b.
 
     This routine depends on having run either SetupTile or SetupSpecial, but does
     not require SwarpSetup, or Swarp.
-                                       
-History:
 
-230524 ksl Coding begun
-250128 ksl Modified the code so that both exposure times are recorded. Choosing
+Version History
+---------------
+
+230524 ksl
+    Coding begun
+
+250128 ksl
+    Modified the code so that both exposure times are recorded. Choosing
+
     what exposure times to match background to occurs later.
+"""
 
-'''
 
 import sys
 import os

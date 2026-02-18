@@ -1,60 +1,97 @@
 #!/usr/bin/env python
 # coding: utf-8
-'''
-Create one or more images and fits files of
-snapshots of one or more sets of sources in 
-a masterfile
 
+"""XSnap - Create Snapshots of Astronomical Sources
 
+Space Telescope Science Institute
 
-Usaage:
-    XSnap.py [-size 10] [-type ha] [-min -1] [-max 20] -out ha [images or table_of_snaps]   master_table_of_regions
+Synopsis
+--------
 
-    where:
+Create PNG images (and optionally FITS cutouts) of astronomical sources from
+FITS images, with optional region overlays.
 
+Command Line Usage
+------------------
 
-    image.fits   a fitsfile, with the data in the PRIMARY header
-        to create the snaps
-    or 
-    table_of_ naps  a masterfile with positions and sizes of objects in 
-        a standard format
+::
 
-    master_table_of_regions - a table containing the definition of region files
+    XSnap.py [-size arcmin] [-type suffix] [-min vmin] [-max vmax] [-o outname] image.fits master_table
+    XSnap.py [-size arcmin] [-type suffix] [-min vmin] [-max vmax] snapshot_table region_table
 
-    The routine has thre  basic modes, 
-    
-    * if there is a single fits file, and if -size is not proviced a single image will be produced, and if there is
+Modes
+-----
 
-    * if there is a single fits file, and if size is provide and if there is a master table of regions, then one
-        snapshot is provided at each position in the master_table_of_regions.  In this case, all of the region files
-        will be overplotted on the imaes
+The script operates in three modes depending on the inputs:
 
-    * if there is a table of snaps (rather than a single image), then that table can contain the name of each sourcej,
-        the RA and DEC or each snapshot , and one snapshot will be made of for each line in the table.   (See below)
-        
+1. **Overview mode** (FITS file + master table, no -size):
+   Creates a single PNG of the full FITS image with regions from the master
+   table overlaid.
 
-    -out is only relevant when a single image file is provided.  If provided the name it determines
-    the name of the output plot file
+   Example::
 
-    The  fits images associated with each cutout will be placed in the ximage 
-    directory
+       XSnap.py -o lmc_ha_overview DECam_SWARP/LMC_c42_T01.ha.fits config/lmc_snr.txt
 
-    The plots will be in the ximage directory
+   Output: ``lmc_ha_overview.png``
 
-    -type ha  is just used to help name the plots
+2. **Snapshot mode** (FITS file + master table + -size):
+   Creates one PNG snapshot per source in the master table, all extracted from
+   the same FITS image. Also creates FITS cutouts in ``xdata/``.
 
-    In the absence of -min or -max, the images are autoscaled, if -xmin or -xmax
-    are provided then one or the other of these values will replace
-    what the autoscaled values would have been 
+   Example::
 
+       XSnap.py -size 10 -type ha -min -1 -max 20 DECam_SWARP/LMC_c42_T01.ha.fits config/lmc_snr.txt
 
-    More details about creating multiple snapshots and multiple sources:
+   Output: ``ximage/{Source_name}.ha.png`` for each source, plus FITS cutouts
+   in ``xdata/``
 
-    This option requires one to create a table that matches sources to images.  To do that, one needs to use ImageSum to creat
-    a list of images to consider, and ImageMatch2Source to create an input table_of_snaps
+3. **Multi-file snapshot mode** (snapshot table + region table, no FITS file):
+   The snapshot table must contain a ``filename`` column specifying a different
+   FITS file for each source. Creates one PNG per row using the corresponding
+   FITS file.
 
+   Example::
 
-'''
+       XSnap.py -size 10 -type ha snapshots.txt config/lmc_snr.txt
+
+   Where ``snapshots.txt`` contains columns: Source_name, RA, Dec, filename
+
+**Optional Arguments:**
+
+-size arcmin
+    Size of snapshot cutouts in arcminutes. Required for snapshot modes.
+
+-type suffix
+    Suffix appended to output filenames (e.g., "ha" produces Source.ha.png).
+    Useful for distinguishing filter/image types.
+
+-o outname
+    Base name for output file in overview mode (produces outname.png).
+
+-min vmin
+    Minimum value for image scaling. Default: 5th percentile.
+
+-max vmax
+    Maximum value for image scaling. Default: 95th percentile.
+
+Input Tables
+------------
+
+Master/region tables must contain at minimum: Source_name, RA, Dec
+
+For region overlays, tables may also include:
+- RegType: "circle" or "ellipse"
+- Major, Minor: region sizes in arcseconds
+- Theta: position angle for ellipses
+
+Output
+------
+
+- PNG images are written to ``ximage/`` (snapshots) or current directory (overview)
+- FITS cutouts are written to ``xdata/`` (snapshot modes only)
+
+"""
+
 
 # # Create  routine to prodces a Summary Overview of SNRS in MCELS
 
@@ -153,8 +190,16 @@ def extract_region(source_name, ra, dec, size_arcmin, input_fits, outdir='test',
     if wcs_output.wcs.cd is None:
         raise ValueError("WCS does not contain a CD matrix, which will cause problems later")
     
-    # Update FITS header with the new WCS information.  relax=Ture keeps wd approach.
+    # Update FITS header with CD matrix convention.
+    # to_header() writes CDELT+PC by default; replace with CD keywords.
     header = wcs_output.to_header(relax=True)
+    cd = wcs_output.wcs.cd
+    for kw in ['CDELT1', 'CDELT2', 'PC1_1', 'PC1_2', 'PC2_1', 'PC2_2']:
+        header.pop(kw, None)
+    header['CD1_1'] = cd[0, 0]
+    header['CD1_2'] = cd[0, 1]
+    header['CD2_1'] = cd[1, 0]
+    header['CD2_2'] = cd[1, 1]
     
     # Create a new FITS file with the extracted data and updated WCS
     hdu = fits.PrimaryHDU(output_data, header=header)
@@ -245,8 +290,8 @@ def display_fits_image(image_file, scale='linear', ymin=None, ymax=None,invert=T
     # Invert the colors if invert is True
 
     # Create a figure and axes using wcsaxes
-    fig = plt.figure(1,figsize=(10, 10))  # Adjust the figure size as needed
-    fig.clf()
+    plt.close(1)  # Close existing figure 1 if it exists
+    fig = plt.figure(1, figsize=(10, 10))  # Adjust the figure size as needed
     ax = WCSAxes(fig, [0.1, 0.1, 0.8, 0.8], wcs=wcs_info, aspect='equal')  # Set the aspect ratio to 'equal'
     fig.add_axes(ax)
 
@@ -352,7 +397,7 @@ def make_one_image(filename,master,ymin,ymax,outroot=''):
 
     return
 
-def make_many_images(filename,master,xtype,size,ymin,ymax,frac_orr=0.1):
+def make_many_images(filename,master,xtype,size,ymin,ymax,frac_off=0.1):
     '''
     Create cut-outs of an image, one for each source in a masterfile
     and overlay the regions from the master file on each sanpshot.

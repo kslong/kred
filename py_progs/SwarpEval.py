@@ -1,35 +1,16 @@
 #!/usr/bin/env python
 # coding: utf-8
-'''
+"""Create plots of the images that are in the DECam_Swarp  after running Swarp.py, CleanStars.py
 
-Create plots of the images that are in the DECam_Swarp  after running Swarp.py, CleanStars.py 
-etc 
+Space Telescope Science Institute
 
+Command Line Usage
+------------------
 
-Usage:   SwarpEval.py [-all] xdir field [tiles]
+directory.
 
+"""
 
-where -all will cause swarp to be run on all 16 tiles.  With these inputs, the routine will
-use the files ending in _sw.tab to set up run files
-
-and
-    xdir is the top level directory containing subdirectories with fields and tiles
-
-and 
-    filed is a field
-
-If one wants to run only 1 or a few tiles then the command will be something like
-
-SwarpEval.py DECam_SWARP2  LMC_c42  T01 T03 
-
-
-The evaluation imags will be stored in a directory eval, located in this case in DECam_SWARP2/LMC_c42
-
-
-Note: 231009 - This routine and the command line interface to it functions 
-differently from most other routines, in that one specifies a top level
-directory.   
-'''
 
 
 

@@ -1,24 +1,109 @@
 #!/usr/bin/env python
 # coding: utf-8
-"""
+"""GaiaCat - GAIA Database Interaction Module.
+
 Space Telescope Science Institute
 
-Synopsis:
-Routines to handle retrieving information from the GAIA database and to interact
-with data that has been retrieved from the database.
-This is NOT intended to be run from the command line at present but rather
-contains routines that should be called from other routines.
+Synopsis
+--------
+
+Retrieve GAIA catalog data either from the archive or from a local file.
+Can determine the search center from a FITS image WCS or from explicit
+RA/Dec coordinates.
+
+Command Line Usage
+------------------
+
+::
+
+    GaiaCat.py [-h] [-archive] [-gfile FILENAME] [-rad DEGREES] [-out OUTROOT]
+               input.fits or RA Cec
+
+Arguments
+---------
+
+input
+    Either a FITS file (to extract center from WCS), or RA in degrees.
+    If RA is given, dec must also be provided.
+
+RA, Dec  RA and DEC of field center
+
+or
+
+whatever.fits  a fits file with a WCS,  not that size is not taken from WCS
+
+Options
+-------
+
+-h
+    Print this help message and exit
+
+-archive
+    Retrieve from GAIA archive instead of local file. By default,
+    tries local file first, then falls back to archive.
+
+-gfile FILENAME
+    Name of local GAIA catalog file. Searches locally first, then
+    in $KRED/xdata/. Default: Gaia_MagClouds.fits
+
+-rad DEGREES
+    Search radius in degrees. Default: 0.5
+
+-out OUTROOT
+    Output filename root. Default: derived from RA/Dec or FITS filename
+
+Description
+-----------
+
+This module provides functions to retrieve GAIA DR3 photometric data.
+The primary functions are:
+
+- get_gaia_from_archive(): Query the GAIA archive with cone search
+- get_gaia_from_file(): Extract from a local pre-downloaded catalog
+
+Notes
+-----
+
+This module requires the astroquery package for archive access.
+All archive-dependent functions will provide clear error messages if
+astroquery is not available or if GAIA services are unreachable.
 
 History:
-240318 ksl  Coding begun
-240527 ksl  Speed up the catalog matching.
-251105 ksl  Split finding sources in an image from doing photometry on the sources
-251130 ksl  Cleaned up so this is just a routine for interacting with the GAIA catalog
-251130 ksl  Robust handling of astroquery import vs service availability
-251211 ksl  Considerable effort has been expended be abble to deal with a problem
-            to handle an error in get_gaia_spec, that is due to an error in gaiaxpy
-            between versions 2.1.1 1nd 2.1.2.
+
+240318 ksl Coding begun
+240527 ksl Speed up the catalog matching
+251105 ksl Split finding sources in an image from doing photometry
+251130 ksl Cleaned up to focus on GAIA catalog interaction
+251130 ksl Robust handling of astroquery import vs service availability
+251211 ksl Handle gaiaxpy version compatibility (2.1.1 vs 2.1.2)
+250116 ksl Added command-line steering with FITS/WCS support
+
+Example Usage
+-------------
+
+Command line with FITS file::
+
+    $ GaiaCat.py myimage.fits -rad 0.3
+
+Command line with RA/Dec::
+
+    $ GaiaCat.py 84.925 -66.274 -rad 0.5
+
+Force archive retrieval (skip local file)::
+
+    $ GaiaCat.py 84.925 -66.274 -archive -rad 0.3
+
+Use a different local catalog file::
+
+    $ GaiaCat.py 84.925 -66.274 -gfile my_gaia_catalog.fits
+
+Python usage::
+
+    >>> from GaiaCat import get_gaia_from_archive
+    >>> outfile = get_gaia_from_archive(ra=84.925, dec=-66.274, rad_deg=0.3)
+    >>> print(f"Catalog saved to: {outfile}")
 """
+
 
 import os
 import time
@@ -38,31 +123,58 @@ import astropy.units as u
 # --------------------------------------------------------------------------------
 # Gaia loader (astroquery) — distinguishes dependency vs asset/service problems
 # --------------------------------------------------------------------------------
-def load_Gaia(probe_service: bool = True):
-    """
-    Return the astroquery.gaia.Gaia class.
+def load_Gaia(probe_service=True, credentials_file=None):
+    """Return the astroquery.gaia.Gaia class with service validation.
 
-    Raises RuntimeError with a message distinguishing:
-      - astroquery not installed
-      - external Gaia assets/services unavailable
+    This function provides a controlled import of the GAIA query interface,
+    distinguishing between installation issues and service availability problems.
 
     Parameters
     ----------
-    probe_service : bool, default True
-        If True, perform a tiny network-dependent check to detect
-        external service unavailability immediately. If False, only
-        import Gaia and let service failures occur later at first use.
+    probe_service : bool, optional
+        If True (default), perform a minimal network check to verify that
+        external GAIA services are reachable. If False, only import the
+        Gaia class without network validation.
+    credentials_file : str, optional
+        Path to file containing Gaia credentials (username on line 1,
+        password on line 2). If None, defaults to ~/.gaia_credentials
+        if it exists.
 
     Returns
     -------
-    Gaia : type
-        The Gaia class from astroquery.gaia.
+    Gaia : class
+        The Gaia class from astroquery.gaia, ready for use in queries.
 
     Raises
     ------
     RuntimeError
-        With a distinguishing message for the two failure cases.
+        If astroquery is not installed, or if ``probe_service=True`` and
+        the GAIA external services are unavailable or unreachable.
+
+    Notes
+    -----
+    This function also configures astropy logging to reduce verbosity during
+    GAIA operations by setting the log level to ERROR and disabling IERS
+    auto-downloads.
+
+    If a credentials file exists, the function will automatically login
+    to the Gaia archive.
+
+    Examples
+    --------
+    Load GAIA with service validation::
+
+        >>> Gaia = load_Gaia(probe_service=True)
+        >>> # Now safe to use Gaia for queries
+
+    Load GAIA without immediate service check::
+
+        >>> Gaia = load_Gaia(probe_service=False)
+        >>> # Service errors will occur at first query attempt
+
     """
+    import os
+
     # 1) Import-time: distinguish "not installed"
     try:
         from astroquery.gaia import Gaia
@@ -82,7 +194,20 @@ def load_Gaia(probe_service: bool = True):
         # If astropy settings change or aren't present, just continue.
         pass
 
-    # 2) Service probe: distinguish "assets unavailable"
+    # 2) Login using credentials file if available
+    if credentials_file is None:
+        credentials_file = os.path.expanduser('~/.gaia_credentials')
+
+    if os.path.isfile(credentials_file):
+        try:
+            Gaia.login(credentials_file=credentials_file)
+        except Exception as e:
+            print(f"Warning: Gaia login failed: {e}")
+    else:
+        print(f"Note: No Gaia credentials file found at {credentials_file}")
+        print("      Create one with username on line 1, password on line 2")
+
+    # 3) Service probe: distinguish "assets unavailable"
     if probe_service:
         try:
             # Minimal, fast probe (hits TAP briefly):
@@ -101,22 +226,38 @@ def load_Gaia(probe_service: bool = True):
 # Utilities that do not require astroquery
 # --------------------------------------------------------------------------------
 def random_rows(tab, nrows, seed=None):
-    """
-    Randomly select rows from an Astropy Table without duplicates.
+    """Randomly select rows from an Astropy Table without replacement.
 
     Parameters
     ----------
     tab : astropy.table.Table
-        Input table.
+        Input table from which to select rows.
     nrows : int
-        Number of rows to randomly select (must be ≤ len(tab)).
+        Number of rows to randomly select. Must be less than or equal to
+        the length of the table.
     seed : int, optional
-        Random seed for reproducibility.
+        Random seed for reproducibility. If None, uses system entropy.
 
     Returns
     -------
     subtab : astropy.table.Table
-        Table containing the randomly selected rows.
+        New table containing the randomly selected rows.
+
+    Warnings
+    --------
+    If ``nrows`` exceeds the table length, a warning is printed and the
+    entire table is returned unchanged.
+
+    Examples
+    --------
+    Select 10 random rows from a catalog::
+
+        >>> from astropy.table import Table
+        >>> catalog = Table.read('gaia_stars.fits')
+        >>> random_subset = random_rows(catalog, 10, seed=42)
+        >>> len(random_subset)
+        10
+
     """
     if nrows > len(tab):
         print("Requested more rows than available in table")
@@ -127,21 +268,37 @@ def random_rows(tab, nrows, seed=None):
 
 
 def unique_rows_within_tol(tab, tol=0.01):
-    """
-    Return unique rows from an Astropy table based on approximate
-    equality of RA, Dec, and Size within a given tolerance (in degrees).
+    """Return unique rows based on approximate equality of position and size.
+
+    This function identifies and removes duplicate rows where RA, Dec, and Size
+    are within a specified tolerance, keeping one representative row per group.
 
     Parameters
     ----------
     tab : astropy.table.Table
-        Table containing columns 'RA', 'Dec', and 'Size' (in degrees).
+        Table containing at minimum the columns 'RA', 'Dec', and 'Size',
+        all in degrees.
     tol : float, optional
-        Matching tolerance in degrees. Default is 0.01°.
+        Matching tolerance in degrees. Default is 0.01° (~36 arcseconds).
 
     Returns
     -------
     unique_tab : astropy.table.Table
         New table containing one representative row per unique group.
+
+    Notes
+    -----
+    The algorithm uses a greedy approach: rows are processed sequentially,
+    and the first row in each group is kept as the representative.
+
+    Examples
+    --------
+    Remove near-duplicate observations::
+
+        >>> catalog = Table.read('observations.fits')
+        >>> unique_catalog = unique_rows_within_tol(catalog, tol=0.001)
+        >>> print(f"Reduced from {len(catalog)} to {len(unique_catalog)} rows")
+
     """
     # Stack RA, Dec, Size into a NumPy array
     data = np.vstack([tab['RA'], tab['Dec'], tab['Size']]).T
@@ -163,13 +320,56 @@ def unique_rows_within_tol(tab, tol=0.01):
 # --------------------------------------------------------------------------------
 # Gaia XP spectrum helper (does not use astroquery)
 # --------------------------------------------------------------------------------
-def old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
-    """
-    Load or download and load from cache the spectrum of a Gaia star,
-    converted to erg/s/cm^2/Å.
+def old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
+    """Load or download a GAIA XP spectrum and convert to physical units.
 
-    Note:
-    This was 'appropriated' from the lvmdrp.
+    This function retrieves the XP continuous spectrum for a given GAIA source,
+    caching it locally for future use. Spectra are converted from the archive
+    format to erg/s/cm²/Å.
+
+    Parameters
+    ----------
+    gaiaID : int or str
+        GAIA DR3 source identifier.
+    GAIA_CACHE_DIR : str, optional
+        Directory path for caching spectrum files. Default is './GaiaSpec'.
+        Will be created if it doesn't exist.
+    redo : bool, optional
+        If True, re-download the spectrum even if cached. Default is False.
+
+    Returns
+    -------
+    wave : numpy.ndarray
+        Wavelength array in Angstroms.
+    flux : numpy.ndarray
+        Flux array in erg/s/cm²/Å, or empty list ``[]`` if the spectrum
+        cannot be retrieved.
+
+    Notes
+    -----
+    This function was adapted from the lvmdrp package. It handles two different
+    CSV formats produced by different versions of gaiaxpy (2.1.1 vs 2.1.2):
+    - Newer versions use numpy representation strings
+    - Older versions use comma-separated values
+
+    The function requires the ``requests`` and ``gaiaxpy`` packages to download
+    new spectra, but can read cached spectra without these dependencies.
+
+    .. warning::
+       This is the legacy spectrum retrieval function. Consider using
+       :func:`get_gaia_spec` for the current recommended approach.
+
+    Examples
+    --------
+    Retrieve and plot a GAIA spectrum::
+
+        >>> import matplotlib.pyplot as plt
+        >>> wave, flux = old_get_gaia_spec(4658615927801509760)
+        >>> plt.plot(wave, flux)
+        >>> plt.xlabel('Wavelength (Å)')
+        >>> plt.ylabel('Flux (erg/s/cm²/Å)')
+        >>> plt.show()
+
     """
     # create cache dir if it does not exist
     pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
@@ -177,7 +377,7 @@ def old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
     flux_path = f"{GAIA_CACHE_DIR}/gaia_spec_{gaiaID}.csv"
     wave_path = f"{GAIA_CACHE_DIR}/gaia_spec_{gaiaID}_sampling.csv"
 
-    if path.exists(flux_path) and path.exists(wave_path) and redo==False:
+    if path.exists(flux_path) and path.exists(wave_path) and redo == False:
         print('Star is in cache')
         gaiaflux = Table.read(flux_path, format="csv")
         gaiawave = Table.read(wave_path, format="csv")
@@ -233,213 +433,131 @@ def old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
         else:
             raise ValueError("Could not extract enough numeric values")
     except (ValueError, AttributeError):
-        # Fall back to old comma-separated format
-        wave = np.fromstring(wave_str[1:-1], sep=",") * 10  # Angstrom
-        flux = 1e4 * np.fromstring(flux_str[1:-1], sep=",")  # W/s/nm -> erg/s/cm^2/Å
-    
-    results = Table([wave, flux], names=['WAVE', 'FLUX'])
-    return results
+        # Fall back to old CSV format (comma-separated)
+        wave = np.fromstring(wave_str.strip("()"), sep=",") * 10  # Angstrom
+        flux = 1e4 * np.fromstring(flux_str.strip("()"), sep=",")  # W/s/nm -> erg/s/cm^2/Å
+
+    return wave, flux
 
 
+def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
+    """Retrieve a GAIA XP spectrum with robust version handling.
 
-def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec',redo=False):
-    """
-    Load or download and load from cache the spectrum of a Gaia star,
-    converted to erg/s/cm^2/Å.
+    This is the recommended function for retrieving GAIA XP spectra. It provides
+    improved error handling and compatibility with different gaiaxpy versions.
 
-    Note:
-    This was 'appropriated' from the lvmdrp.
-    """
-    # create cache dir if it does not exist
-    pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
-
-    spec_path = f"{GAIA_CACHE_DIR}/gaia_spec_{gaiaID}.fits"
-
-    if path.exists(spec_path) and redo==False:
-        print('Star is in cache')
-        spec_table = Table.read(spec_path, format="fits")
-    else:
-        print('Star must be retrieved')
-        # Deferred imports to keep module import-safe
-        import requests
-        from gaiaxpy import calibrate
-
-        # need to download from Gaia archive
-        CSV_URL = (
-            "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"
-            + str(gaiaID)
-            + "&format=CSV&DATA_STRUCTURE=RAW"
-        )
-        FILE = f"{GAIA_CACHE_DIR}/XP_{gaiaID}_RAW.csv"
-
-        with requests.get(CSV_URL, stream=True) as r:
-            r.raise_for_status()
-            if len(r.content) < 2:
-                return []
-            with open(FILE, "w") as f:
-                f.write(r.content.decode("utf-8"))
-
-        # convert coefficients to sampled spectrum using FITS format
-        _, _ = calibrate(
-            FILE,
-            output_path=GAIA_CACHE_DIR,
-            output_file=f"gaia_spec_{gaiaID}",
-            output_format="fits",
-        )
-
-        # read the spectrum table
-        spec_table = Table.read(spec_path, format="fits")
-
-
-    # Extract wavelength and flux arrays
-    # In FITS format, wavelength is stored as a table parameter (metadata), not a column
-    # Handle both old format (2.1.1: simple arrays) and new format (2.1.2+: numpy repr strings)
-    wave_str = spec_table.meta['SAMPLING']
-
-    # Try new format first (2.1.2+): "(np.float64(336.0), np.float64(338.0), ...)"
-    import re
-    wave_numbers = re.findall(r'np\.float64\(([-+]?\d+\.?\d*(?:[eE][-+]?\d+)?)\)', wave_str)
-
-    if len(wave_numbers) > 0:
-        # New format (2.1.2+)
-        wave = np.array([float(x) for x in wave_numbers]) * 10  # Convert to Angstrom
-    else:
-        # Old format (≤2.1.1): Try simple array or list parsing
-        # Remove brackets/parentheses and parse as comma-separated
-        cleaned = wave_str.strip('[]()').strip()
-        try:
-            # Try direct numpy parsing
-            wave = np.fromstring(cleaned, sep=',') * 10  # Convert to Angstrom
-        except ValueError:
-            # Last resort: extract all valid numbers
-            all_numbers = re.findall(r'[-+]?\d+\.?\d*(?:[eE][-+]?\d+)?', cleaned)
-            if len(all_numbers) > 0:
-                wave = np.array([float(x) for x in all_numbers]) * 10
-            else:
-                raise ValueError(f"Could not parse SAMPLING metadata: {wave_str[:100]}...")
-
-    flux = spec_table['flux'][0] * 1e4  # Convert W/s/nm to erg/s/cm^2/Å
-
-    results = Table([wave, flux], names=['WAVE', 'FLUX'])
-    return results
-
-
-
-def get_gaia_mag28_flux(xid=4658615927801509760, gmag=15, wavelength=6563, dlambda=160):
-    """
-    Get the Gaia flux of a star at a particular wavelength and calculate the
-    total flux in the bandpass if it were the same star at mag 28.
-    """
-    xtab = get_gaia_spec(xid)
-    if len(xtab) == 0:
-        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
-        return None
-
-    i = 0
-    while xtab['WAVE'][i] < wavelength and i < len(xtab):
-        i += 1
-
-    frac = (wavelength - xtab['WAVE'][i - 1]) / (xtab['WAVE'][i] - xtab['WAVE'][i - 1])
-    flux = (1 - frac) * xtab['FLUX'][i - 1] + frac * xtab['FLUX'][i]
-    flux28 = flux * 10 ** (-0.4 * (28 - gmag)) * dlambda
-    return flux28
-
-
-def get_gaia_mag28_ave(xid=4658615927801509760, gmag=15, wavelength=6563, dlambda=160):
-    """
-    Get the average Gaia flux of a star in a particular wavelength band.
-    """
-    xtab = get_gaia_spec(xid)
-    if len(xtab) == 0:
-        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
-        return None
-
-    wmax = wavelength + dlambda / 2.0
-    wmin = wavelength - dlambda / 2.0
-    z = xtab[xtab['WAVE'] < wmax]
-    z = z[z['WAVE'] > wmin]
-    flux = np.average(z['FLUX'])
-    flux28 = flux * 10 ** (-0.4 * (28 - gmag)) * dlambda
-    return flux28
-
-
-def get_gaia_flux(xid=4658604348568208768):
-    """
-    Get the flux for a Gaia star as observed through the various filters.
-    """
-    xtab = get_gaia_spec(xid)
-    if len(xtab) == 0:
-        print('Error: Could not get gaia spectrum for gaia ID %s' % (xid))
-        return
-
-    data_dir = os.path.dirname(__file__).replace('py_progs', 'data')
-    xfilt = ascii.read('%s/%s' % (data_dir, 'n662.txt'))
-    xtab['HA_TRANS'] = np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'], left=0, right=0)
-
-    xfilt = ascii.read('%s/%s' % (data_dir, 'n673.txt'))
-    xtab['S2_TRANS'] = np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'], left=0, right=0)
-
-    xfilt = ascii.read('%s/%s' % (data_dir, 'r.txt'))
-    xtab['R_TRANS'] = np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'], left=0, right=0)
-
-    xfilt = ascii.read('%s/%s' % (data_dir, 'n708.txt'))
-    xtab['N708_TRANS'] = np.interp(xtab['WAVE'], xfilt['WAVE'], xfilt['TRANS'], left=0, right=0)
-
-    xtab.write('foo.txt', format='ascii.fixed_width_two_line', overwrite=True)
-    dw = 20.0
-    r_flux = np.dot(xtab['FLUX'], xtab['R_TRANS']) * dw
-    ha_flux = np.dot(xtab['FLUX'], xtab['HA_TRANS']) * dw
-    s2_flux = np.dot(xtab['FLUX'], xtab['S2_TRANS']) * dw
-    n708_flux = np.dot(xtab['FLUX'], xtab['N708_TRANS']) * dw
-    return ha_flux, s2_flux, r_flux, n708_flux
-
-
-# --------------------------------------------------------------------------------
-# Local-table query (NO astroquery) — THIS IS THE MISSING get_gaia
-# --------------------------------------------------------------------------------
-def get_gaia(
-    ra=84.92500000000001,
-    dec=-66.27416666666667,
-    size_deg=0.3,
-    outroot='',
-    filename='Gaia_MagClouds.fits'
-):
-    """
-    Retrieve entries from a local table containing information about stars
-    in the Gaia catalog.
-
-    Description
+    Parameters
     ----------
-    This routine retrieves information from a local table that must be present
-    either in the directory from which the program is being run, or in a specific
-    directory, namely 'Gaia/', or under the environment variable KRED: $KRED/xdata.
+    gaiaID : int or str
+        GAIA DR3 source identifier.
+    GAIA_CACHE_DIR : str, optional
+        Directory path for caching spectrum files. Default is './GaiaSpec'.
+        Will be created if it doesn't exist.
+    redo : bool, optional
+        If True, re-download the spectrum even if cached. Default is False.
+
+    Returns
+    -------
+    wave : numpy.ndarray
+        Wavelength array in Angstroms.
+    flux : numpy.ndarray
+        Flux array in erg/s/cm²/Å, or empty list if retrieval fails.
 
     Notes
     -----
-    - This function does NOT query the GAIA archive (no astroquery).
-    - The file covering the SMC and LMC can be found on box (per original notes).
-    - The file covers a 'square' region in RA and Dec.
+    This function wraps :func:`old_get_gaia_spec` with additional error handling
+    to gracefully handle failures in spectrum retrieval or conversion.
+
+    Examples
+    --------
+    Retrieve a spectrum with error handling::
+
+        >>> result = get_gaia_spec(4658615927801509760)
+        >>> if isinstance(result, list):
+        ...     print("Spectrum retrieval failed")
+        ... else:
+        ...     wave, flux = result
+        ...     print(f"Retrieved spectrum with {len(wave)} points")
+
+    """
+    try:
+        wave, flux = old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR=GAIA_CACHE_DIR, redo=redo)
+        return wave, flux
+    except Exception as e:
+        print(f'Error retrieving spectrum for GAIA ID {gaiaID}: {e}')
+        return []
+
+
+def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
+                       size_deg=0.3, filename='Gaia_MagClouds.fits', outroot=''):
+    """Extract GAIA sources from a local catalog file within a sky region.
+
+    This function performs a rectangular selection from a pre-downloaded GAIA
+    catalog file, useful when working offline or with large local catalogs.
+
+    Parameters
+    ----------
+    ra : float, optional
+        Right Ascension of the field center in degrees (J2000).
+        Default is 84.925 (approximately LMC).
+    dec : float, optional
+        Declination of the field center in degrees (J2000).
+        Default is -66.274 (approximately LMC).
+    size_deg : float, optional
+        Size of the extraction region in degrees. Default is 0.3°.
+    filename : str, optional
+        Name of the local GAIA catalog file. Searches locally first, then
+        in $KRED/xdata/. Default is 'Gaia_MagClouds.fits'.
+    outroot : str, optional
+        Root name for the output file. If empty, constructs from RA and Dec.
 
     Returns
     -------
     outfile : str
-        Path to the output FITS file written with the selection.
+        Path to the output FITS file containing the extracted sources.
+
+    Raises
+    ------
+    IOError
+        If the input file cannot be located in either the current directory
+        or $KRED/xdata/.
+
+    Notes
+    -----
+    The function performs a rectangular (RA, Dec) selection rather than a
+    cone search. The RA range is adjusted for declination to approximate
+    equal angular sizes in both dimensions.
+
+    Output files are written to a ``Gaia/`` subdirectory in FITS format.
+
+    Examples
+    --------
+    Extract sources from a local catalog::
+
+        >>> outfile = get_gaia_from_file(
+        ...     ra=150.0, dec=-30.0,
+        ...     size_deg=0.5,
+        ...     filename='gaia_dr3_subset.fits'
+        ... )
+        >>> print(f"Extracted catalog: {outfile}")
+
     """
-    # first locate the file
+    # 1) Determine input file path - search locally first, then $KRED/xdata/
+    xfilename = ''
     if os.path.isfile(filename):
         xfilename = filename
-    elif os.path.isfile(f'Gaia/{filename}'):
-        xfilename = f'Gaia/{filename}'
+        print(f'get_gaia_from_file: Using local file {xfilename}')
     else:
         KRED = os.environ.get("KRED")
         if KRED is not None:
             candidate = f"{KRED}/xdata/{filename}"
             if os.path.isfile(candidate):
                 xfilename = candidate
+                print(f'get_gaia_from_file: Using {xfilename}')
             else:
-                raise IOError(f'Could not locate {filename}')
+                raise IOError(f'Could not locate {filename} locally or in $KRED/xdata/')
         else:
-            raise IOError('Environment variable KRED is not set')
+            raise IOError(f'Could not locate {filename} locally and KRED environment variable is not set')
 
     # read the local table
     if xfilename.lower().endswith('.fits'):
@@ -465,27 +583,92 @@ def get_gaia(
     outfile = f'Gaia/Gaia.{outroot}.fits'
 
     ftab.write(outfile, format='fits', overwrite=True)
+    print(f'Wrote {outfile} with {len(ftab)} objects')
     return outfile
 
 
 # --------------------------------------------------------------------------------
 # Gaia archive access (astroquery used only inside these functions via load_Gaia)
 # --------------------------------------------------------------------------------
-def get_gaia_from_archive(
-    ra=84.92500000000001,
-    dec=-66.27416666666667,
-    rad_deg=0.3,
-    outroot='',
-    nmax=-1,
-    redo=False,
-    max_retries=3,
-    retry_delay=5,
-):
-    """
-    Get data from the Gaia photometric catalog with retry logic for network errors
-    by conducting a cone search.
+def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
+                          rad_deg=0.3, outroot='', nmax=-1, redo=False,
+                          max_retries=3, retry_delay=5):
+    """Query the GAIA archive with cone search and automatic retry on errors.
 
-    Returns the output file path or [] if no objects retrieved.
+    This function queries the GAIA DR3 archive for photometric data within a
+    specified cone, with robust handling of network errors through automatic
+    retries.
+
+    Parameters
+    ----------
+    ra : float, optional
+        Right Ascension of the cone center in degrees (J2000).
+        Default is 84.925.
+    dec : float, optional
+        Declination of the cone center in degrees (J2000).
+        Default is -66.274.
+    rad_deg : float, optional
+        Cone search radius in degrees. Default is 0.3°.
+    outroot : str, optional
+        Root name for the output file. If empty, constructs from RA and Dec.
+    nmax : int, optional
+        Maximum number of rows to return. If -1 (default), returns all
+        matching sources.
+    redo : bool, optional
+        If True, re-query even if the output file exists. Default is False.
+    max_retries : int, optional
+        Maximum number of retry attempts for failed queries. Default is 3.
+    retry_delay : float, optional
+        Delay in seconds between retry attempts. Default is 5.
+
+    Returns
+    -------
+    outfile : str
+        Path to the output file containing the catalog, or empty list if
+        no sources were retrieved.
+
+    Raises
+    ------
+    RuntimeError
+        If astroquery is not installed or GAIA services are unavailable.
+    IncompleteRead
+        If max retries are exceeded due to persistent network errors.
+
+    Notes
+    -----
+    The function automatically renames columns to a simplified convention:
+    - ``ra`` → ``RA``
+    - ``dec`` → ``Dec``
+    - ``source_id`` → ``Source_name``
+    - ``phot_g_mean_mag`` → ``G``
+    - ``phot_bp_mean_mag`` → ``B``
+    - ``phot_rp_mean_mag`` → ``R``
+    - ``teff_gspphot`` → ``teff``
+    - ``logg_gspphot`` → ``log_g``
+    - ``distance_gspphot`` → ``D``
+
+    Output is written to ``Gaia/Gaia.<outroot>.fits`` in FITS table format.
+
+    Examples
+    --------
+    Basic cone search with default retry behavior::
+
+        >>> outfile = get_gaia_from_archive(
+        ...     ra=180.0, dec=45.0,
+        ...     rad_deg=0.5,
+        ...     outroot='ngc1234'
+        ... )
+        >>> print(f"Catalog written to: {outfile}")
+
+    Query with custom retry parameters::
+
+        >>> outfile = get_gaia_from_archive(
+        ...     ra=10.0, dec=-5.0,
+        ...     rad_deg=0.1,
+        ...     max_retries=5,
+        ...     retry_delay=10
+        ... )
+
     """
     try:
         Gaia = load_Gaia(probe_service=True)  # set False if you want no network here
@@ -496,7 +679,7 @@ def get_gaia_from_archive(
     if outroot == '':
         outroot = '%05.1f_%05.1f' % (ra, dec)
     os.makedirs('Gaia', exist_ok=True)
-    outfile = 'Gaia/Gaia.%s.txt' % outroot
+    outfile = 'Gaia/Gaia.%s.fits' % outroot
 
     if not redo and os.path.isfile(outfile):
         print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
@@ -508,6 +691,7 @@ def get_gaia_from_archive(
 
     # Retry loop for handling IncompleteRead errors
     r = None
+    start_time = time.time()
     for attempt in range(max_retries):
         try:
             if attempt > 0:
@@ -532,6 +716,8 @@ def get_gaia_from_archive(
             else:
                 print('get_gaia: Max retries reached. Query failed.')
                 raise
+    elapsed_time = time.time() - start_time
+    print(f'get_gaia: Archive query completed in {elapsed_time:.1f} seconds')
 
     if r is None or len(r) == 0:
         print('Error: get_gaia: No objects were retrieved')
@@ -552,25 +738,54 @@ def get_gaia_from_archive(
     r.rename_column('distance_gspphot', 'D')
 
     r['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D'].write(
-        outfile, format='ascii.fixed_width_two_line', overwrite=True
+        outfile, format='fits', overwrite=True
     )
     print('Wrote %s with %d objects' % (outfile, len(r)))
     return outfile
 
 
-def get_gaia_from_archive_old(
-    ra=84.92500000000001,
-    dec=-66.27416666666667,
-    rad_deg=0.3,
-    outroot='',
-    nmax=-1,
-    redo=False,
-):
-    """
-    Get data from the Gaia photometric catalog by executing a cone search on the Gaia archive.
+def get_gaia_from_archive_old(ra=84.92500000000001, dec=-66.27416666666667,
+                               rad_deg=0.3, outroot='', nmax=-1, redo=False):
+    """Query the GAIA archive with cone search (legacy version without retry).
 
-    Notes:
-    The routine raises a RuntimeError if the archive is not available (or if astroquery is not installed).
+    .. deprecated:: 251211
+       Use :func:`get_gaia_from_archive` instead, which includes retry logic
+       for improved reliability.
+
+    This is the original cone search function without automatic retry handling.
+    It is retained for backward compatibility but is not recommended for new code.
+
+    Parameters
+    ----------
+    ra : float, optional
+        Right Ascension of the cone center in degrees (J2000).
+        Default is 84.925.
+    dec : float, optional
+        Declination of the cone center in degrees (J2000).
+        Default is -66.274.
+    rad_deg : float, optional
+        Cone search radius in degrees. Default is 0.3°.
+    outroot : str, optional
+        Root name for the output file. If empty, constructs from RA and Dec.
+    nmax : int, optional
+        Maximum number of rows to return. If -1 (default), returns all sources.
+    redo : bool, optional
+        If True, re-query even if the output file exists. Default is False.
+
+    Returns
+    -------
+    outfile : str
+        Path to the output file, or empty list if no sources retrieved.
+
+    Raises
+    ------
+    RuntimeError
+        If astroquery is not installed or GAIA services are unavailable.
+
+    See Also
+    --------
+    get_gaia_from_archive : Recommended function with retry logic
+
     """
     try:
         Gaia = load_Gaia(probe_service=True)
@@ -615,51 +830,212 @@ def get_gaia_from_archive_old(
     print('Wrote %s with %d objects' % (outfile, len(r)))
     return outfile
 
-def simple_test():
-    '''
-    Check functionality
-    '''
 
+def simple_test():
+    """Run basic functionality tests for GaiaCat module.
+
+    This function performs a simple test of core functionality:
+    1. Retrieves a small catalog from the GAIA archive
+    2. Retrieves a spectrum for a known source
+
+    Returns
+    -------
+    None
+
+    Notes
+    -----
+    This test requires network access and will create files in the
+    ``Gaia/`` and ``GaiaSpec/`` directories.
+
+    Examples
+    --------
+    Run the test suite::
+
+        >>> simple_test()
+        Here we just check if a small amount of the SW works
+        Can we retrieve a catalog of stars
+        ...
+        If there were no errors we have success
+
+    """
     print('Here we just check if a small amount of the SW works')
     print('Can we retrieve a catalog of stars')
     if os.path.isfile('Gaia/Gaia.foo.txt'):
         os.remove('Gaia/Gaia.foo.txt')
         print('Removed Gaia/Gaia.foo.txt, before retrieving catalog from archive')
-    get_gaia_from_archive(rad_deg=0.1,outroot='foo')
+    get_gaia_from_archive(rad_deg=0.1, outroot='foo')
     print('Can we retrieve a spectrum')
-    get_gaia_spec(4658615927801509760,redo=True)
+    get_gaia_spec(4658615927801509760, redo=True)
     print('\nIf there were no errors we have success\n')
     return
 
 
+def get_wcs_center(fitsfile):
+    """Extract the center RA/Dec from a FITS file WCS.
+
+    Parameters
+    ----------
+    fitsfile : str
+        Path to FITS file with valid WCS in header
+
+    Returns
+    -------
+    ra : float
+        Right Ascension of image center in degrees
+    dec : float
+        Declination of image center in degrees
+
+    Raises
+    ------
+    ValueError
+        If WCS cannot be extracted from the FITS file
+    """
+    from astropy.wcs import WCS
+
+    with fits.open(fitsfile) as hdul:
+        header = hdul[0].header
+        data_shape = hdul[0].data.shape
+
+        try:
+            wcs = WCS(header)
+        except Exception as e:
+            raise ValueError(f"Could not extract WCS from {fitsfile}: {e}")
+
+        # Get center pixel
+        ny, nx = data_shape
+        cx, cy = nx / 2.0, ny / 2.0
+
+        # Convert to sky coordinates
+        ra, dec = wcs.wcs_pix2world(cx, cy, 0)
+
+    return float(ra), float(dec)
+
 
 # --------------------------------------------------------------------------------
-# Command-line stub
+# Command-line interface
 # --------------------------------------------------------------------------------
 def steer(argv):
+    """Execute command-line interface for GaiaCat module.
+
+    Parses command-line arguments and retrieves GAIA catalog data.
+    By default, tries local file first, then falls back to archive.
+
+    Parameters
+    ----------
+    argv : list of str
+        Command-line arguments
+
+    Returns
+    -------
+    str
+        Path to output file, or None if error
     """
-    Run the script given choices from the command line.
-    Usage: PhotCompare.py -h -for -unf -dir -nmax -gcat file1
-    """
-    
+    force_archive = False
+    rad_deg = 0.5
+    outroot = ''
+    ra = None
+    dec = None
+    fitsfile = None
+    gaia_file = 'Gaia_MagClouds.fits'
 
-    print('This is not a runtime routine (currently)')
+    i = 1
+    while i < len(argv):
+        if argv[i][:2] == '-h':
+            print(__doc__)
+            return
+        elif argv[i] == '-archive':
+            force_archive = True
+        elif argv[i][:6] == '-gfile':
+            i += 1
+            gaia_file = argv[i]
+        elif argv[i][:4] == '-rad':
+            i += 1
+            rad_deg = float(argv[i])
+        elif argv[i][:4] == '-out':
+            i += 1
+            outroot = argv[i]
+        elif argv[i][0] == '-':
+            print('Error: Unknown option:', argv[i])
+            return
+        elif ra is None:
+            # First positional argument - could be FITS file or RA
+            if argv[i].endswith('.fits') or argv[i].endswith('.fits.gz'):
+                fitsfile = argv[i]
+            else:
+                try:
+                    ra = float(argv[i])
+                except ValueError:
+                    # Assume it's a FITS file without .fits extension
+                    if os.path.isfile(argv[i]):
+                        fitsfile = argv[i]
+                    else:
+                        print(f'Error: Cannot parse {argv[i]} as RA or find as file')
+                        return
+        elif dec is None:
+            try:
+                dec = float(argv[i])
+            except ValueError:
+                print(f'Error: Cannot parse {argv[i]} as Dec')
+                return
+        else:
+            print('Error: Too many arguments:', argv[i])
+            return
+        i += 1
 
-    print(__doc__)
+    # If FITS file provided, extract RA/Dec from WCS
+    if fitsfile is not None:
+        if not os.path.isfile(fitsfile):
+            print(f'Error: FITS file not found: {fitsfile}')
+            return
+        try:
+            ra, dec = get_wcs_center(fitsfile)
+            print(f'Extracted center from {fitsfile}: RA={ra:.5f}, Dec={dec:.5f}')
+        except Exception as e:
+            print(f'Error extracting WCS: {e}')
+            return
 
-    print('Now check for status today')
+        # Default outroot from FITS filename
+        if outroot == '':
+            outroot = os.path.basename(fitsfile).replace('.fits.gz', '').replace('.fits', '')
 
-    simple_test()
+    # Validate we have coordinates
+    if ra is None or dec is None:
+        print('Error: Must provide either a FITS file or RA and Dec')
+        print(__doc__)
+        return
 
+    # Default outroot from coordinates
+    if outroot == '':
+        outroot = '%.2f_%.2f' % (ra, dec)
 
-    return
+    # Print parameters
+    print('         RA : %.5f' % ra)
+    print('        Dec : %.5f' % dec)
+    print('     Radius : %.3f deg' % rad_deg)
+    print('    Outroot : %s' % outroot)
+    print('  Gaia file : %s' % gaia_file)
+
+    # Try local file first (unless -archive specified), then fall back to archive
+    if force_archive:
+        print('Source mode : archive (forced)')
+        outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot)
+    else:
+        print('Source mode : local file (with archive fallback)')
+        try:
+            outfile = get_gaia_from_file(ra=ra, dec=dec, size_deg=rad_deg * 2,
+                                         filename=gaia_file, outroot=outroot)
+        except (IOError, FileNotFoundError) as e:
+            print(f'Local file not available: {e}')
+            print('Falling back to archive...')
+            outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot)
+
+    return outfile
 
 
 # Next lines permit one to run the routine from the command line
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 0:
+    if len(sys.argv) > 1:
         steer(sys.argv)
     else:
         print(__doc__)
-

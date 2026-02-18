@@ -1,35 +1,40 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Setup the directories and identify the files that are required to carry
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Setup the directories and identify the files that are required to carry
 out the initial processing steps to run PrepFiles on a set of data
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: SetupSpecial  -h [-all]  [-field LMC_c40] [-field LMC_c42] source_table.txt  [source_name1] [Source_name]
 
     where:
 
-        source_table.txt is an astropy table with the source names and positions
+    source_table.txt is an astropy table with the source names and positions
 
-    and the optional prameters 
+    and the optional prameters
 
-        -field is that name of a field, e.g LMC_c42.  For multiple files one can add 
-        tile1, tiles are the names of tiles as specified in the MC_tiles.txt file 
-        If no fields are provided all of the data will be searched.
+    -field is that name of a field, e.g LMC_c42.  For multiple files one can add
+    tile1, tiles are the names of tiles as specified in the MC_tiles.txt file
+    If no fields are provided all of the data will be searched.
 
-        -h prints this help 
-        -all  causes the program to create 'tiles'  containing the relevant
-            infomation for all of the sources in the table
+    -h prints this help
+    -all  causes the program to create 'tiles'  containing the relevant
+    infomation for all of the sources in the table
 
-Description:  
+Description
+-----------
 
-    This program reads an astropy table containing at least the following columns
+This program reads an astropy table containing at least the following columns
 
     Source_name  - a string (one_word no space) naming the object
     RA, Dec       - the right ascension and declination of the object in degrees
@@ -39,32 +44,38 @@ Description:
 
     The astropy table can be local, or it can be stored in the config directory
 
-    If the table also contains a column 
+    If the table also contains a column
 
     Size   - a size in degrees
 
-    then the that size will be used in selecting the images that can contribute 
+    then the that size will be used in selecting the images that can contribute
     to the total.  If it does not then a default is assumed.
 
     At present the program does not use the size for anything except what images
     to include in the processing of that tile.
 
-
     The program works by reading the det.tab files created by MefSum.py
 
+Primary Routines
+----------------
 
+doit
 
-Primary routines:
+Notes
+-----
 
-    doit
-
-Notes:
-                                       
 History:
 
 230513 ksl Coding begun
 
-'''
+Version History
+---------------
+
+230513 ksl
+    Coding begun
+
+"""
+
 
 import sys
 from astropy.io import ascii

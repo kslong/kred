@@ -1,30 +1,33 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
+"""Create Combined images of the different filters in the field using swarp
 
-Create Combined images of the different filters in the field using swarp
+Space Telescope Science Institute
 
-This can only be run after PrepFiles, SumFiles and SwarpSetup have benn run.    
-SwarpSetup will have prepared the run directories and the inpus.
+Command Line Usage
+------------------
 
-To run swarp from the command line (one must be in the normal run directory) since
-a particular directory structure is assumed here)
+::
 
-Usage:   Swarp.py [-all] [-bsub] field [tiles]
+    Usage:   Swarp.py [-all] [-bsub] field [tiles]
 
-where -all will cause swarp to be run on all 16 tiles.
+    where -all will cause swarp to be run on all 16 tiles.
 
-and   -bsub will cause swarp to be run in the DECAM_SWARP2 directories, and should
-be operating on files that are in background subtracted DECAM_PREP2 directories
+    and   -bsub will cause swarp to be run in the DECAM_SWARP2 directories, and should
+    be operating on files that are in background subtracted DECAM_PREP2 directories
 
-If one wants to run only 1 or a few tiles then the command will be something like
+    If one wants to run only 1 or a few tiles then the command will be something like
 
-Swarp.py LMC_c42  T01 T03 T05
+    Swarp.py LMC_c42  T01 T03 T05
 
-Notes:
-    It would be sensible to combine SetupSwarp and Swarp
-'''
+Notes
+-----
+
+It would be sensible to combine SetupSwarp and Swarp
+
+"""
+
 
 
 import os, stat

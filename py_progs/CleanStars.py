@@ -1,33 +1,35 @@
 #!/usr/bin/env python 
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""Produce pure emision (and continuum) images via
 
-Synopsis:  
+Space Telescope Science Institute
 
-Produce pure emision (and continuum) images via 
+Synopsis
+--------
+
+Produce pure emision (and continuum) images via
 simple subtraction
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: CleanStars.py [-all] [-bsub] field [tiles]
 
-    where 
-        -all will cause CleanStars to be run on all 16 tiles in a field
-            and if -all is not given, then one or more tiles should be listed
-        -bsub will search for inputs in the DECam_SWARP2 directories which
-            have "better" background matching, while if it is absence
-            one will use the data in the DECam_SWARP directories, which use
-            the background form the overal fields
+    where
+    -all will cause CleanStars to be run on all 16 tiles in a field
+    and if -all is not given, then one or more tiles should be listed
+    -bsub will search for inputs in the DECam_SWARP2 directories which
+    have "better" background matching, while if it is absence
+    one will use the data in the DECam_SWARP directories, which use
+    the background form the overal fields
 
+Description
+-----------
 
-
-
-Description:  
-
-    This routine produces simple images that
+This routine produces simple images that
     have been subtracted to remove the coinuum
     (or from the r-band continuum the emissionlines)
 
@@ -36,51 +38,56 @@ Description:
     The routine is currently hardwired to use the
     longest exposures of a particular filter type.
 
-    
-    The routine is NOT sophisticated.  
+
+    The routine is NOT sophisticated.
 
     For creating the r-band results, we first subtract the two emission
     line images from the r-band images; this should produce an image
     with the emission lines removed.  We then subtract this from the emission
     line images.  There is some scaling involved.
 
-    For creating the N708 results, we do a simple subtraction.  
+    For creating the N708 results, we do a simple subtraction.
 
-
-    (Note that before we actually do the subtractions, we calculated 
+    (Note that before we actually do the subtractions, we calculated
     a background level n the continuum images.   This is intended
     to leave whatever backgrouground level in the emission line images
     unaffected.)
 
-
     The files that are produced are nominally the following (for LMC_c42_T07):
     LMC_c42_T07.ha_sub_r.fits     - pure ha image using r-band for continuum
     LMC_c42_T07.s2_sub_r.fits     - pure s2 image using r-rand for continuum
-    LMC_c42_T07.r_sub.fits        - pure r-band image after emission lines are subtracted       
-    LMC_c42_T07.ha_s2_sub.fits    - the emission line portion of the r-band image 
+    LMC_c42_T07.r_sub.fits        - pure r-band image after emission lines are subtracted
+    LMC_c42_T07.ha_s2_sub.fits    - the emission line portion of the r-band image
 
     LMC_c42_T07.ha_sub_N708.fits  - pure ha image based on subtrcting the n708 image
     LMC_c42_T07.s2_sub_N708.fits  - pure ha image based on subtrcting the n708 image
-    LMC_c42_T07.n708_sub.fits     - n708 image (after subtracting a biased median) 
-
+    LMC_c42_T07.n708_sub.fits     - n708 image (after subtracting a biased median)
 
     The outputs are written to a subdirectory of DECam_SUB
 
+Primary Routines
+----------------
 
-Primary routines:
-
-    doit
+doit
     make_rband_subtractions
     make_n708_subtractions
     make_n540_subtractions
 
-Notes:
-                                       
+Notes
+-----
+
 History:
 
 230717 ksl Coding begun
 
-'''
+Version History
+---------------
+
+230717 ksl
+    Coding begun
+
+"""
+
 
 import sys
 from astropy.io import ascii
@@ -196,13 +203,22 @@ def make_rband_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c4
     x[0].data-=r_pure[0].data
     x[0].header['PROCTYPE']='StarSubtracted'
     x[0].header['SFILTER']=(zr[0].header['FILTER'],'Filter of image used for subtracttion')
-    x.writeto(outroot+'.ha_sub_r.fits',overwrite=True)        
+    outfile_ha=outroot+'.ha_sub_r.fits'
+    x.writeto(outfile_ha,overwrite=True)        
 
     x=fits_deep_copy(zs2)
     x[0].data-=r_pure[0].data
     x[0].header['PROCTYPE']='StarSubtracted'
     x[0].header['SFILTER']=(zr[0].header['FILTER'],'Filter of image used for subtracttion')
-    x.writeto(outroot+'.s2_sub_r.fits',overwrite=True)      
+
+    outfile_s2=outroot+'.s2_sub_r.fits'
+    x.writeto(outfile_s2,overwrite=True)      
+
+    print('ha:    %s' %ha)
+    print('s2:    %s' % s2)
+    print('r:     %s' % r)
+    print('ha sub %s' % outfile_ha)
+    print('s2 sub %s' % outfile_s2)
     
     return
 
@@ -251,8 +267,13 @@ def make_n540_subtractions(o3='data/LMC_c42_T07.N501.t800.fits', n540='data/LMC_
         zo3[0].header['PROCTYPE']='StarSubtracted'
         zo3[0].header['SFILTER']=(zn540[0].header['FILTER'],'Filter of image used for star subtraction')
         zo3[0].data-=zn540[0].data
-        zo3.writeto(outroot+'.o3_sub_N540.fits',overwrite=True)
+        outfile=outroot+'.o3_sub_N540.fits'
+        zo3.writeto(outfile,overwrite=True)
 
+
+    print('o3:      %s' % o3)
+    print('n540:    %s' % n540)
+    print('outfile: %s' % outfile)
 
 
 def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42_T07.N673.t800.fits',n708='data/LMC_c42_T07.N708.t400.fits',outroot='test2'):
@@ -315,14 +336,24 @@ def make_n708_subtractions(ha='data/LMC_c42_T07.N662.t800.fits',s2='data/LMC_c42
         zha[0].header['PROCTYPE']='StarSubtracted'
         zha[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zha[0].data-=zn708[0].data
-        zha.writeto(outroot+'.ha_sub_N708.fits',overwrite=True)
+        outfile_ha=outroot+'.ha_sub_N708.fits'
+
+        zha.writeto(outfile_ha,overwrite=True)
 
     if s2_exists and n708_exists:
         # zs2[0].data-=zn708[0].data
         zs2[0].header['PROCTYPE']='StarSubtracted'
         zs2[0].header['SFILTER']=(zn708[0].header['FILTER'],'Filter of image used for star subtraction')
         zs2[0].data-=zn708[0].data
-        zs2.writeto(outroot+'.s2_sub_N708.fits',overwrite=True)
+        outfile_s2=outroot+'.s2_sub_N708.fits'
+        zs2.writeto(outfile_s2,overwrite=True)
+
+    print('ha:    %s' %ha)
+    print('s2:    %s' % s2)
+    print('n708   %s' % n708)
+    print('ha sub %s' % outfile_ha)
+    print('s2 sub %s' % outfile_s2)
+    
         
 
 def doit(xdir='data',outdir='data'):
@@ -356,6 +387,7 @@ def doit(xdir='data',outdir='data'):
 
 
     r=ha=s2=n708=n540=o3='none'
+    r_s=ha_s=s2_s=n708_s=n540_s=o3_s='none'
     xtab=Table([qfile,qroot,qfilt],names=['Filename','Root','Image'])
     xtab.sort('Image')
     xtab.write('foo.txt',format='ascii.fixed_width_two_line',overwrite=True)
@@ -365,22 +397,38 @@ def doit(xdir='data',outdir='data'):
         if one['Image']=='N662':
             ha=one['Filename']
             zroot=one['Root']
+        elif one['Image']=='N662_s':
+            ha_s=one['Filename']
+            zroot=one['Root']
         elif one['Image']=='N673':
             s2=one['Filename']
+            zroot=one['Root']
+        elif one['Image']=='N673_s':
+            s2_s=one['Filename']
             zroot=one['Root']
         elif one['Image']=='N501':
             o3=one['Filename']
             zroot=one['Root']
+        elif one['Image']=='N501_s':
+            o3_s=one['Filename']
+            zroot=one['Root']
         elif one['Image']=='r':
             r=one['Filename']
+        elif one['Image']=='r_s':
+            r_s=one['Filename']
         elif one['Image']=='N708':
             n708=one['Filename']
+        elif one['Image']=='N708_s':
+            n708_s=one['Filename']
         elif one['Image']=='N540':
             n540=one['Filename']
+        elif one['Image']=='N540_s':
+            n540_s=one['Filename']
         else:
             print('CleanStars: Unknown fits file: %s '% one['Filename'])
 
     print(ha,s2,r,n708,o3,n540)
+    print(ha_s,s2_s,r_s,n708_s,o3_s,n540_s)
 
 
     if r!='none':
@@ -388,15 +436,33 @@ def doit(xdir='data',outdir='data'):
     else:
         print('CleanStars: No r band image found')
 
+    if r_s!='none':
+        make_rband_subtractions(ha_s,s2_s,r_s,outroot='%s/%s.sh' % (outdir,zroot))
+    else:
+        print('CleanStars: No r_s band image found')
+
+
     if n708!='none':
         make_n708_subtractions(ha,s2,r,outroot='%s/%s' % (outdir,zroot))
     else:
         print('CleanStars: No N708 image found')
 
+    if n708_s!='none':
+        make_n708_subtractions(ha_s,s2_s,r_s,outroot='%s/%s.sh' % (outdir,zroot))
+    else:
+        print('CleanStars: No N708_s image found')
+
+
     if n540!='none':
         make_n540_subtractions(o3,n540,outroot='%s/%s' % (outdir,zroot))
     else:
         print('CleanStars: No N540 image found')
+
+    if n540_s!='none':
+        make_n540_subtractions(o3_s,n540_s,outroot='%s/%s.sh' % (outdir,zroot))
+    else:
+        print('CleanStars: No N540_s image found')
+
 
 
 

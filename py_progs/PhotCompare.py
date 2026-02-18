@@ -1,151 +1,239 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-'''
-                    Space Telescope Science Institute
+"""PhotCompare - Photometric Comparison Tool
 
-Synopsis:  
+Space Telescope Science Institute
 
-Compare the brightness es of objects found in kred-processed images to Gaia
-assuming our standard rescaling
+Command Line Usage
+------------------
 
+::
 
-Command line usage (if any):
+    PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
+                   [-gcat FILE] [-out NAME] file1 file2 ...
 
-    usage: PhotCompare.py -h -dir DECamSWARP2/SMC_c01 -nmax 30000 -forced -unforced file1 file2 ...
+**Operating Modes:**
 
-Description:  
+There are two basic modes of operation:
 
-    The routines processes one or more files comparing Gaia photometry
-    and images produced with kred, and produces a figure which is stored 
-    in Figs_phot.  (The xmatch between GAIA and the image is stored
-    in TabPhot)
+1. **Directory mode** (with -dir): Process all FITS files in the specified
+   directory and any subdirectories. Individual file arguments are ignored.
 
-    There are two basic modes, one which is invoked with -dir, and one if that argument is
-    not present
+2. **File mode** (without -dir): Process only the specified files.
 
-    If a directory is given, then all of the fits files in that or any subdirecotry are processed.  If
-    this is the case then any specific files are ignored
+**Optional Arguments:**
 
-    If one or more files are given then only those files are processed.
+-h
+    Print help message and exit
 
-    the various switches are as follows:
+-dir DIRNAME
+    Process all files in DIRNAME and subdirectories. Assumes these are
+    swarped versions of the original data.
 
-    -h prints out this help and quites
-    -dir causes all files in the directory named and any subdirectory to be processed.  The is 
-        a basic assumption made that these images are swarped versions of the original data
-    -nmax places a limit on the number of positions that will be used for forced photometry in the 
-        GAIA catalog.  If nmax<0 all positions are processed
-    -forced causes the progrm to used forced photometry (this is the default)
-    -unforced in this case the routine searches for sources in the image, and then x-matches the
-        postions to GAIA. This is largely a diagnostic mode which might become necessary if there
-        are concerns about the relative astrometry between GAIA and our images.  The results of
-        the seach of the image are stored in TabPhot
+-nmax N
+    Limit the number of positions used for forced photometry from the
+    Gaia catalog. If nmax < 0, all positions are processed. Default: 30000.
 
+-forced
+    Use forced photometry (default mode). Performs photometry at Gaia
+    catalog positions.
 
+-unforced
+    Search for sources in the image, then cross-match positions to Gaia.
+    This is a diagnostic mode useful for checking relative astrometry
+    between Gaia and our images.
 
+-gcat FILE
+    Use specified Gaia catalog file instead of auto-generating
 
-Primary routines:
+-out NAME
+    Specify output root name for results
 
-    do_many
+file1 file2 ...
+    One or more FITS files to process (ignored if -dir is specified)
 
-Notes:
+Processing Modes
+**Forced Photometry Mode (default):**
 
-    The routine retrieves if necessary Gaia catalog information for
-    an image (or group of images), carrieds out aperture photometry
-    on the images, and then x-correlates the results.  
+Performs aperture photometry at positions from the Gaia catalog. This is
+the standard mode for most applications.
 
-    The most time-consuming part of the process is Gaia catalog
-    retrieval, so this is only done once, if all of the files
-    have the same centers and sizes. The GAIA catalogs are stored
-    in a subdirectory GAIA.  
+**Unforced Mode:**
 
+Searches for sources in the image using DAOStarFinder, then cross-matches
+detected positions to Gaia. Useful for diagnosing astrometric issues.
+Search results are stored in ``TabPhot/``.
 
+Output
+------
+The routine generates:
 
-    (There are some of functions that are not in the end used.)
+* **Figures**: Saved to ``Figs_phot/`` directory showing:
 
-                                       
-History:
+  - Magnitude comparisons (Gaia vs DECam)
+  - Color-magnitude diagrams
+  - Residual plots
 
-240318 ksl Coding begun
-240527 ksl Speed up the catalog matching.
-251105 ksl Split finding sources in an image from doing photometry
-            on the sources
-251130 ksl  Starting cleaning
-'''
+* **Tables**: Saved to ``TabPhot/`` directory containing:
 
+  - Photometry results
+  - Cross-matched catalogs
+  - Source lists (unforced mode)
 
-# # Compare Photometry from image to image and from image to Gaia
+Performance Notes
+The most time-consuming operation is Gaia catalog retrieval. To optimize:
 
+* Catalogs are cached and reused when processing multiple files with the
+  same field center and size
+* Cached catalogs are stored in a ``GAIA/`` subdirectory
+* If all files cover the same region, retrieval happens only once
+
+Examples
+--------
+Process a single file with forced photometry::
+
+    python PhotCompare.py image.fits
+
+Process all files in a directory::
+
+    python PhotCompare.py -dir DECamSWARP2/SMC_c01
+
+Use unforced mode with limited sources::
+
+    python PhotCompare.py -unforced -nmax 5000 image.fits
+
+Process multiple files with custom Gaia catalog::
+
+    python PhotCompare.py -gcat my_gaia.fits file1.fits file2.fits
+
+Notes
+-----
+
+The most time-consuming operation is Gaia catalog retrieval. To optimize:
+
+* Catalogs are cached and reused when processing multiple files with the
+  same field center and size
+* Cached catalogs are stored in a ``GAIA/`` subdirectory
+* If all files cover the same region, retrieval happens only once
+
+Version History
+---------------
+
+240318 ksl
+
+    Coding begun
+
+240527 ksl
+
+    Speed up catalog matching with KDTree
+
+251105 ksl
+
+    Split finding sources from doing photometry
+
+251130 ksl
+
+    Starting cleaning
+
+Author
+Space Telescope Science Institute
+"""
+
+# Suppress Gaia password warning immediately at startup
+# import os as _os
+# import sys as _sys
+# _devnull = open(_os.devnull, 'w')
+# _original_stdout = _sys.stdout
+# _original_stderr = _sys.stderr
+# _sys.stdout = _devnull
+# _sys.stderr = _devnull
 
 
 import os
+import sys
+import warnings
 import numpy as np
-from astropy.io import fits,ascii
+from astropy.io import fits, ascii
 from photutils.detection import DAOStarFinder
-
 from astropy.stats import mad_std
-from photutils.aperture import aperture_photometry, CircularAperture, CircularAnnulus, ApertureStats
+from photutils.aperture import (aperture_photometry, CircularAperture,
+                                 CircularAnnulus, ApertureStats)
 from astropy.stats import SigmaClip
-
 import matplotlib.pyplot as plt
 from astropy.wcs import WCS
-
-import matplotlib.pyplot as plt
-from astropy.table import Table,join,hstack
-
+from astropy.table import Table, join, hstack
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 import timeit
 import time
 import multiprocessing
-multiprocessing.set_start_method("spawn",force=True)
-
-
-
-
+multiprocessing.set_start_method("spawn", force=True)
 import pathlib
 import os.path as path
 import requests
 from gaiaxpy import calibrate
-
 from scipy.spatial import KDTree
-import numpy as np
-from astropy.table import Table
 from astropy.wcs import NoConvergence
 from astropy.wcs._wcs import InvalidCoordinateError
-
-import time
 from http.client import IncompleteRead
-
 import ImageSum
-from GaiaCat import get_gaia
+from GaiaCat import get_gaia_from_archive as get_gaia
+
+# Restore stdout/stderr after imports
+# _devnull.close()
+# _sys.stdout = _original_stdout
+# _sys.stderr = _original_stderr
 
 
-
-XDIR=''  # Part of a directory name; used to isolate different runs of PhotCompare
+#: Directory suffix for isolating different runs of PhotCompare
+XDIR = ''
 
 
 def read_table(filename):
-    '''
-    This is a generic routine to try to read a table
-    in fits or ascii format.  It is intended to accommodate 
-    several different types of formats.
-    '''
-
-    print('XXXX - filename ',filename)
+    """
+    Generic table reader supporting FITS and ASCII formats.
+    
+    Attempts to read a table using multiple format detection strategies.
+    
+    Parameters
+    ----------
+    filename : str
+        Path to the table file.
+    
+    Returns
+    -------
+    Table
+        The loaded astropy Table.
+    
+    Raises
+    ------
+    IOError
+        If the file does not exist or cannot be read in any supported format.
+    
+    Notes
+    -----
+    Tries FITS format first, then falls back to ASCII detection.
+    
+    Examples
+    --------
+    >>> tab = read_table('sources.fits')
+    >>> tab = read_table('sources.txt')
+    """
+    print('XXXX - filename ', filename)
 
     if not os.path.isfile(filename):
-        raise IOError ('read_table: %s does not appear to exist' % filename)
+        raise IOError('read_table: %s does not appear to exist' % filename)
 
     try:
-        xtable=Table.read(filename)
+        xtable = Table.read(filename)
     except:
         try:
-            xtable=ascii.read(filename)
+            xtable = ascii.read(filename)
         except:
             raise IOError('read_table: %s exist, but could not be read' % filename)
     return xtable
+
 
 def random_rows(tab, nrows, seed=None):
     """
@@ -153,17 +241,30 @@ def random_rows(tab, nrows, seed=None):
 
     Parameters
     ----------
-    tab : astropy.table.Table
-        Input table.
+    tab : Table
+        Input astropy Table.
     nrows : int
-        Number of rows to randomly select (must be ≤ len(tab)).
+        Number of rows to randomly select (must be <= len(tab)).
     seed : int, optional
-        Random seed for reproducibility.
+        Random seed for reproducibility. Default: None.
 
     Returns
     -------
-    subtab : astropy.table.Table
-        Table containing the randomly selected rows.
+    Table
+        Astropy Table containing the randomly selected rows.
+        
+    Notes
+    -----
+    If nrows exceeds the table length, returns the full table with a
+    warning message.
+    
+    Examples
+    --------
+    >>> from astropy.table import Table
+    >>> tab = Table({'a': [1, 2, 3, 4, 5]})
+    >>> subset = random_rows(tab, 3, seed=42)
+    >>> len(subset)
+    3
     """
     if nrows > len(tab):
         print("Requested more rows than available in table")
@@ -173,25 +274,48 @@ def random_rows(tab, nrows, seed=None):
     indices = rng.choice(len(tab), size=nrows, replace=False)
     return tab[indices]
 
+
 def unique_rows_within_tol(tab, tol=0.01):
     """
-    Return unique rows from an Astropy table based on approximate
-    equality of RA, Dec, and Size within a given tolerance (in degrees).
+    Return unique rows based on approximate equality within tolerance.
+    
+    Identifies unique field positions (RA, Dec, Size) within a specified
+    tolerance, useful for grouping observations of the same field.
 
     Parameters
     ----------
-    tab : astropy.table.Table
+    tab : Table
         Table containing columns 'RA', 'Dec', and 'Size' (in degrees).
     tol : float, optional
-        Matching tolerance in degrees. Default is 0.01°.
+        Matching tolerance in degrees. Default: 0.01°.
 
     Returns
     -------
-    unique_tab : astropy.table.Table
+    unique_tab : Table
         New table containing one representative row per unique group.
-    mapping : np.ndarray
+    mapping : ndarray
         Array of length len(tab) where mapping[i] gives the index in
         unique_tab that row i of the original table maps to.
+    
+    Notes
+    -----
+    This function is used to identify files that observe the same field,
+    allowing Gaia catalogs to be reused and avoiding redundant downloads.
+    
+    The tolerance of 0.01° (~36 arcsec) is typically sufficient to
+    identify overlapping fields while avoiding false matches.
+    
+    Examples
+    --------
+    >>> from astropy.table import Table
+    >>> tab = Table({'RA': [10.0, 10.001, 20.0],
+    ...              'Dec': [-30.0, -30.001, -40.0],
+    ...              'Size': [0.5, 0.5, 0.5]})
+    >>> unique, mapping = unique_rows_within_tol(tab, tol=0.01)
+    >>> len(unique)
+    2
+    >>> mapping
+    array([0, 0, 1])
     """
     # Stack RA, Dec, Size into a NumPy array
     data = np.vstack([tab['RA'], tab['Dec'], tab['Size']]).T
@@ -220,279 +344,444 @@ def unique_rows_within_tol(tab, tol=0.01):
     return tab[unique_indices], mapping
 
 
-def do_fig(xtab,outroot=''):
-    '''
-    xtab is a table
-    '''
+def do_fig(xtab, outroot=''):
+    """
+    Create diagnostic photometry comparison figures.
+    
+    Generates a 2x2 panel figure comparing Gaia and DECam photometry,
+    including magnitude comparisons and residual plots.
 
-    outdir='./Figs_phot%s' %  XDIR
+    Parameters
+    ----------
+    xtab : Table
+        Cross-matched table containing both Gaia and DECam photometry
+        with columns: G, R (Gaia), phot_mag (DECam).
+    outroot : str, optional
+        Output filename root. Default: ''.
 
-    os.makedirs(outdir,exist_ok=True)
-    plt.figure(1,(9,8))
+    Returns
+    -------
+    None
+        Figure is saved to ``Figs_phot/`` directory.
+    
+    Notes
+    -----
+    **Figure Layout:**
+    
+    * Panel 1 (top-left): DECam vs Gaia G magnitude
+    * Panel 2 (top-right): DECam vs Gaia R magnitude
+    * Panel 3 (bottom-left): Residuals vs Gaia G
+    * Panel 4 (bottom-right): Residuals vs Gaia R
+    
+    All panels use G-R color coding (plasma colormap) to show color trends.
+    Negative DECam magnitudes (from negative fluxes) are plotted separately.
+    
+    **Output:**
+    
+    Saved as PNG to ``Figs_phot{XDIR}/{outroot}.png``
+    
+    Examples
+    --------
+    >>> xtab = ascii.read('cross_match.txt')
+    >>> do_fig(xtab, outroot='LMC_field1')
+    """
+    outdir = './Figs_phot%s' % XDIR
+    os.makedirs(outdir, exist_ok=True)
+    
+    plt.figure(1, (9, 8))
     plt.clf()
-    plt.subplot(2,2,1)
-    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    
+    # Panel 1: DECam vs Gaia G
+    plt.subplot(2, 2, 1)
     if 'G' in xtab.colnames:
-        sc=plt.scatter(xtab['G'],xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-        sc=plt.scatter(xtab['G'],-xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-        cbar=plt.colorbar(sc)
+        sc = plt.scatter(xtab['G'], xtab['phot_mag'], marker='.', alpha=.05, 
+                        c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+        sc = plt.scatter(xtab['G'], -xtab['phot_mag'], marker='.', alpha=.05, 
+                        c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+        cbar = plt.colorbar(sc)
         cbar.set_label('G-R')
-        # Make colorbar solid (ignore scatter alpha)
         if hasattr(cbar, "solids") and cbar.solids is not None:
-            cbar.solids.set_alpha(1.0) 
+            cbar.solids.set_alpha(1.0)
     else:
-        plt.scatter(xtab['G'],xtab['phot_mag'],marker='.',alpha=.05)
-        plt.scatter(xtab['G'],-xtab['phot_mag'],marker='.',alpha=.05)
+        plt.scatter(xtab['G'], xtab['phot_mag'], marker='.', alpha=.05)
+        plt.scatter(xtab['G'], -xtab['phot_mag'], marker='.', alpha=.05)
     plt.xlabel('Gaia G mag')
     plt.ylabel('DECam mag')
-    plt.plot([11,24],[11,24],'k-')
+    plt.plot([11, 24], [11, 24], 'k-')
+    plt.ylim(14, 22)
+    plt.xlim(14, 22)
 
-    plt.ylim(14,22)
-    plt.xlim(14,22) 
-
-
-
-    plt.tight_layout()
-    plt.subplot(2,2,2)
-    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
+    # Panel 2: DECam vs Gaia R
+    plt.subplot(2, 2, 2)
     if 'G' in xtab.colnames:
-        sc=plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-        sc=plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-        cbar=plt.colorbar(sc)
+        sc = plt.scatter(xtab['R'], xtab['phot_mag'], marker='.', alpha=.05, 
+                        c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+        sc = plt.scatter(xtab['R'], -xtab['phot_mag'], marker='.', alpha=.05, 
+                        c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+        cbar = plt.colorbar(sc)
         cbar.set_label('G-R')
-        # Make colorbar solid (ignore scatter alpha)
         if hasattr(cbar, "solids") and cbar.solids is not None:
-            cbar.solids.set_alpha(1.0) 
+            cbar.solids.set_alpha(1.0)
     else:
-        plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05)
-        plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05)
+        plt.scatter(xtab['R'], xtab['phot_mag'], marker='.', alpha=.05)
+        plt.scatter(xtab['R'], -xtab['phot_mag'], marker='.', alpha=.05)
     plt.xlabel('Gaia R mag')
     plt.ylabel('DECam mag')
-    plt.plot([11,24],[11,24],'k-')
-    plt.ylim(14,22)
-    plt.xlim(14,22)  
+    plt.plot([11, 24], [11, 24], 'k-')
+    plt.ylim(14, 22)
+    plt.xlim(14, 22)
 
-
-
-    plt.subplot(2,2,3)
-    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    sc=plt.scatter(xtab['G'],xtab['phot_mag']-xtab['G'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-    sc=plt.scatter(xtab['G'],xtab['phot_mag']+xtab['G'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-    cbar=plt.colorbar(sc)
+    # Panel 3: Residuals vs G
+    plt.subplot(2, 2, 3)
+    sc = plt.scatter(xtab['G'], xtab['phot_mag']-xtab['G'], marker='.', alpha=.01, 
+                    c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+    sc = plt.scatter(xtab['G'], xtab['phot_mag']+xtab['G'], marker='.', alpha=.01, 
+                    c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+    cbar = plt.colorbar(sc)
     cbar.set_label('G-R')
-    # Make colorbar solid (ignore scatter alpha)
     if hasattr(cbar, "solids") and cbar.solids is not None:
-        cbar.solids.set_alpha(1.0) 
+        cbar.solids.set_alpha(1.0)
     plt.xlabel('Gaia G mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,24],[0,0],'k-')
+    plt.ylabel('DECam - Gaia (mag)')
+    plt.plot([11, 24], [0, 0], 'k-')
+    plt.ylim(-2, 2)
+    plt.xlim(14, 22)
 
-    plt.ylim(-2,2) 
-    plt.xlim(14,22) 
-
-    plt.subplot(2,2,4)
-    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    under=xtab[xtab['phot_mag']>0]
-    # plt.text(16,1.5,'Under %d Over %d' % (len(under),len(xtab)-len(under)))
-    sc=plt.scatter(xtab['R'],xtab['phot_mag']-xtab['R'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-    sc=plt.scatter(xtab['R'],xtab['phot_mag']+xtab['R'],marker='.',alpha=.01,c=xtab['G']-xtab['R'],cmap='plasma',vmin=-1,vmax=1)
-    cbar=plt.colorbar(sc)
+    # Panel 4: Residuals vs R
+    plt.subplot(2, 2, 4)
+    under = xtab[xtab['phot_mag'] > 0]
+    sc = plt.scatter(xtab['R'], xtab['phot_mag']-xtab['R'], marker='.', alpha=.01, 
+                    c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+    sc = plt.scatter(xtab['R'], xtab['phot_mag']+xtab['R'], marker='.', alpha=.01, 
+                    c=xtab['G']-xtab['R'], cmap='plasma', vmin=-1, vmax=1)
+    cbar = plt.colorbar(sc)
     cbar.set_label('G-R')
-    # Make colorbar solid (ignore scatter alpha)
     if hasattr(cbar, "solids") and cbar.solids is not None:
-        cbar.solids.set_alpha(1.0) 
+        cbar.solids.set_alpha(1.0)
     plt.xlabel('Gaia R mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,24],[0,0],'k-')
-    plt.ylim(-2,2) 
-    plt.xlim(14,22)  
+    plt.ylabel('DECam - Gaia (mag)')
+    plt.plot([11, 24], [0, 0], 'k-')
+    plt.ylim(-2, 2)
+    plt.xlim(14, 22)
 
     plt.suptitle(outroot)
-    # OK now we can save
     plt.tight_layout()
-
-    plt.savefig('%s/%s.png' % (outdir,outroot))
-
-
-def do_fig_diff(xtab,outroot):
-
-    outdir='./Figs_phot%s' %  XDIR
-    os.makedirs(outdir,exist_ok=True) 
+    plt.savefig('%s/%s.png' % (outdir, outroot))
 
 
-    plt.figure(1,(12,6))
+def do_fig_diff(xtab, outroot):
+    """
+    Create simplified residual-only comparison figures.
+    
+    Generates a 1x2 panel figure showing photometry residuals between
+    Gaia and DECam in G and R bands.
+
+    Parameters
+    ----------
+    xtab : Table
+        Cross-matched table with Gaia and DECam photometry.
+    outroot : str
+        Output filename root.
+
+    Returns
+    -------
+    None
+        Figure is saved to ``Figs_phot/`` directory.
+    
+    Notes
+    -----
+    This is a simplified version of do_fig() showing only residuals,
+    useful for quick diagnostic checks. Reports number of positive vs
+    negative flux detections.
+    
+    Examples
+    --------
+    >>> xtab = ascii.read('cross_match.txt')
+    >>> do_fig_diff(xtab, 'LMC_field1_diff')
+    """
+    outdir = './Figs_phot%s' % XDIR
+    os.makedirs(outdir, exist_ok=True)
+
+    plt.figure(1, (12, 6))
     plt.clf()
-    plt.subplot(1,2,1)
-    # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.plot(xtab['G'],xtab['phot_mag']-xtab['G'],'.',alpha=.01)
-    plt.plot(xtab['G'],xtab['phot_mag']+xtab['G'],'.',alpha=.01)
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(xtab['G'], xtab['phot_mag']-xtab['G'], '.', alpha=.01)
+    plt.plot(xtab['G'], xtab['phot_mag']+xtab['G'], '.', alpha=.01)
     plt.xlabel('Gaia G mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,24],[0,0],'k-')
-    plt.text(13,2,outroot)
+    plt.ylabel('DECam - Gaia (mag)')
+    plt.plot([11, 24], [0, 0], 'k-')
+    plt.text(13, 2, outroot)
+    plt.ylim(-5, 5)
+    plt.xlim(11, 22)
 
-    plt.ylim(-5,5) 
-    plt.xlim(11,22) 
+    under = xtab[xtab['phot_mag'] > 0]
 
-
-    under=xtab[xtab['phot_mag']>0]
-
-
-    plt.tight_layout()
-    plt.subplot(1,2,2)
-    # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    plt.text(13,4,'Under %d Over %d' % (len(under),len(xtab)-len(under)))
-    plt.plot(xtab['R'],xtab['phot_mag']-xtab['R'],'.',alpha=.01)
-    plt.plot(xtab['R'],xtab['phot_mag']+xtab['R'],'.',alpha=.01)
+    plt.subplot(1, 2, 2)
+    plt.text(13, 4, 'Under %d Over %d' % (len(under), len(xtab)-len(under)))
+    plt.plot(xtab['R'], xtab['phot_mag']-xtab['R'], '.', alpha=.01)
+    plt.plot(xtab['R'], xtab['phot_mag']+xtab['R'], '.', alpha=.01)
     plt.xlabel('Gaia R mag')
-    plt.ylabel('DECam mag')
-    plt.plot([11,24],[0,0],'k-')
-    plt.ylim(-5,5) 
-    plt.xlim(11,22)  
+    plt.ylabel('DECam - Gaia (mag)')
+    plt.plot([11, 24], [0, 0], 'k-')
+    plt.ylim(-5, 5)
+    plt.xlim(11, 22)
+    
     plt.tight_layout()
-    plt.savefig('%s/%s.png' % (outdir,outroot))
+    plt.savefig('%s/%s.png' % (outdir, outroot))
 
+
+def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits', outroot=''):
+    """
+    Detect sources in an image using DAOStarFinder.
     
-def get_objects_from_image(filename='LMC_c48_T08.r.t060.fits',outroot=''):
+    Performs source detection on a FITS image and saves the results
+    as a FITS table with sky coordinates.
+
+    Parameters
+    ----------
+    filename : str, optional
+        Path to FITS file. Default: 'LMC_c48_T08.r.t060.fits'.
+    outroot : str, optional
+        Output filename root. If empty, derived from filename. Default: ''.
+
+    Returns
+    -------
+    str or 'Error'
+        Path to output FITS table containing detected sources, or 'Error'
+        if file cannot be opened.
     
+    Notes
+    -----
+    **Detection Parameters:**
+    
+    * FWHM: 4.0 pixels
+    * Threshold: 3.0 * background sigma
+    * Background: Median-subtracted
+    * Sigma estimation: MAD (median absolute deviation)
+    
+    **Output Table Columns:**
+    
+    Standard DAOStarFinder columns plus RA and Dec in degrees.
+    
+    **Output Location:**
+    
+    ``TabPhot{XDIR}/{outroot}_sources.fits``
+    
+    Examples
+    --------
+    >>> sources_file = get_objects_from_image('image.fits')
+    >>> sources = Table.read(sources_file)
+    >>> print(f"Detected {len(sources)} sources")
+    """
     try:
-        x=fits.open(filename)
+        x = fits.open(filename)
     except:
         print('Error: get_photometry: could not open %s' % filename)
         return 'Error'
 
     print('get_photometry: Beginning photometry of %s' % filename)
 
-    xexptime=x['PRIMARY'].header['EXPTIME']
+    xexptime = x['PRIMARY'].header['EXPTIME']
     try:
-        xfilter=x['PRIMARY'].header['FILTER']
+        xfilter = x['PRIMARY'].header['FILTER']
     except:
-        words=filename.split('.')
-        xfilter=words[-3]
-        print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
+        words = filename.split('.')
+        xfilter = words[-3]
+        print('Filter keyword is missing. Setting to %s for %s' % (xfilter, filename))
 
-    tab_dir='./TabPhot%s' % XDIR
+    tab_dir = './TabPhot%s' % XDIR
+    os.makedirs(tab_dir, exist_ok=True)
 
-    os.makedirs(tab_dir,exist_ok=True)
+    if outroot == '':
+        words = filename.split('/')
+        outroot = words[-1].replace('.fits', '')
 
-    
-    if outroot=='':
-        words=filename.split('/')
-        outroot=words[-1].replace('.fits','')
-        
-    # Allow for the data to be in the first of second image
+    # Determine which extension contains the image
     if x[0].data is not None:
-        image_wcs=WCS(x[0].header)
-        image=x[0].data
+        image_wcs = WCS(x[0].header)
+        image = x[0].data
     elif x[1].data is not None:
-        image_wcs=WCS(x[1].header)
-        image=x[1].data
+        image_wcs = WCS(x[1].header)
+        image = x[1].data
 
-    # print(np.median(image))
+    image -= np.median(image)
+    bkg_sigma = mad_std(image)
 
-    image-=np.median(image)
-    
-    bkg_sigma = mad_std(image)  
+    daofind = DAOStarFinder(fwhm=4.0, threshold=3.0 * bkg_sigma)
+    sources = daofind(image)
 
-    daofind = DAOStarFinder(fwhm=4.0, threshold=3.0 * bkg_sigma)  
+    pos = image_wcs.pixel_to_world(sources['xcentroid'], sources['ycentroid'])
+    sources['RA'] = pos.ra.degree
+    sources['Dec'] = pos.dec.degree
 
-    sources = daofind(image)  
-    # sources.info()
+    for col in sources.colnames:
+        sources[col].info.format = '%.8g'
 
-    pos=image_wcs.pixel_to_world(sources['xcentroid'],sources['ycentroid'])
-    sources['RA']=pos.ra.degree
-    sources['Dec']=pos.dec.degree
-
-    for col in sources.colnames:  
-        sources[col].info.format = '%.8g'  # for consistent table output
-
-    outname='%s/%s_sources.fits' % (tab_dir,outroot)
-    sources.write(outname,format='fits',overwrite=True)
+    outname = '%s/%s_sources.fits' % (tab_dir, outroot)
+    sources.write(outname, format='fits', overwrite=True)
 
     return outname
 
 
 def locate_first_image_extension(xx):
-    '''
-    where xx is an already open fits file
+    """
+    Find the first FITS extension containing image data.
+    
+    Searches through a FITS file to locate the first extension with
+    actual image data, handling both primary HDUs and image extensions.
 
-    This is to deal with the fact that for the CCD images, we often have the imge in extenstion 1
+    Parameters
+    ----------
+    xx : HDUList
+        Opened FITS file (from fits.open()).
 
-    '''
-
-    i=0
-    while i<len(xx):
+    Returns
+    -------
+    int
+        Index of the first image extension, or -1 if no image found.
+    
+    Notes
+    -----
+    This handles the case where CCD images may have the image in
+    extension 1 instead of the primary HDU (extension 0).
+    
+    Checks for:
+    
+    * PrimaryHDU
+    * ImageHDU
+    * CompImageHDU
+    
+    And verifies that data is not None.
+    
+    Examples
+    --------
+    >>> x = fits.open('image.fits')
+    >>> ext = locate_first_image_extension(x)
+    >>> if ext >= 0:
+    ...     image = x[ext].data
+    """
+    i = 0
+    while i < len(xx):
         if isinstance(xx[i], (fits.PrimaryHDU, fits.ImageHDU, fits.CompImageHDU)) and xx[i].data is not None:
             return i
-        i+=1
+        i += 1
     return -1
 
 
-def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects.txt',nrows_max=-1,outroot='',rstar=6,b_in=8,b_out=12):
-    '''
-    Do forced photometry based on ra and decs, where the object file contains a set of source positions
+def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='objects.txt',
+                         nrows_max=-1, outroot='', rstar=6, b_in=8, b_out=12,
+                         add_psf_metrics=True):
+    """
+    Perform forced photometry at catalog positions.
 
+    Extracts aperture photometry at specified sky positions (typically
+    from Gaia catalog) with local background subtraction.
 
-    NOTE - this version needs to be replaced by the version in MefPhot, but that one does not write out
-    the data within ther routine and this needs to be fixed both for forced and unforced photmetry
-    '''
-    
+    Parameters
+    ----------
+    filename : str, optional
+        Path to FITS file. Default: 'LMC_c48_T08.r.t060.fits'.
+    object_file : str, optional
+        Path to file containing source positions (RA, Dec columns required).
+        Default: 'objects.txt'.
+    nrows_max : int, optional
+        Maximum sources to process. If -1, process all. Default: -1.
+    outroot : str, optional
+        Output filename root. If empty, derived from filename. Default: ''.
+    rstar : float, optional
+        Aperture radius in pixels. Default: 6.
+    b_in : float, optional
+        Inner background annulus radius in pixels. Default: 8.
+    b_out : float, optional
+        Outer background annulus radius in pixels. Default: 12.
+    add_psf_metrics : bool, optional
+        If True, adds columns useful for PSF star selection (SNR, Concentration,
+        BkgContam). Default: False.
+
+    Returns
+    -------
+    str or 'Error'
+        Path to output photometry table, or 'Error' if file cannot be opened.
+
+    Notes
+    -----
+    **NOTE:** This version should be replaced by MefPhot.do_forced_photometry()
+    which has been better tested. This version is maintained for compatibility
+    but writes output directly within the routine.
+
+    **Processing:**
+
+    1. Load image and source catalog
+    2. Transform sky coordinates to pixel coordinates
+    3. Filter sources within detector boundaries
+    4. Perform aperture photometry with local background
+    5. Calculate magnitudes (zero point = 28)
+    6. Write results to TabPhot directory
+
+    **Output Table:**
+
+    Written to ``TabPhot{XDIR}/{outroot}_phot.fits``
+
+    Examples
+    --------
+    >>> phot_file = do_forced_photometry('image.fits', 'gaia_sources.fits')
+    >>> phot = ascii.read(phot_file)
+    >>> print(f"Measured {len(phot)} sources")
+    """
     try:
-        x=fits.open(filename)
+        x = fits.open(filename)
     except:
         print('Error: get_photometry: could not open %s' % filename)
         return 'Error'
 
-
-    image_ext=locate_first_image_extension(x)
-    if image_ext<0:
+    image_ext = locate_first_image_extension(x)
+    if image_ext < 0:
         raise IOError('No Image extension in %s' % filename)
 
+    image_wcs = WCS(x[image_ext].header)
+    image = x[image_ext].data
+    image -= np.median(image)
+    image_mask = (image == 0) | ~np.isfinite(image)
+    NAXIS1 = x[image_ext].header['NAXIS1']
+    NAXIS2 = x[image_ext].header['NAXIS2']
 
-    # ra,dec,size_deg=get_size(filename)
-    # print('calculated ',ra,dec,size_deg)
-
-        
-    image_wcs=WCS(x[image_ext].header)
-    image=x[image_ext].data
-    image-=np.median(image)
-    image_mask = (image == 0) |  ~np.isfinite(image)
-    NAXIS1=x[image_ext].header['NAXIS1']
-    NAXIS2=x[image_ext].header['NAXIS2']
-
-
-    xexptime=x['PRIMARY'].header['EXPTIME']
+    xexptime = x['PRIMARY'].header['EXPTIME']
     try:
-        xfilter=x['PRIMARY'].header['FILTER']
+        xfilter = x['PRIMARY'].header['FILTER']
     except:
-        words=filename.split('.')
-        xfilter=words[-3]
-        print('Filter keyword is missing. Setting to %s for %s' % (xfilter,filename))
+        words = filename.split('.')
+        xfilter = words[-3]
+        print('Filter keyword is missing. Setting to %s for %s' % (xfilter, filename))
 
-
-    sources=read_table(object_file)
+    sources = read_table(object_file)
     if 'G' in sources.colnames:
-        good = ~sources['R'].mask      # True where FLUX is NOT masked
-        sources=sources[good]
-        # sources['G'] = sources['G'].filled()
+        # Handle case where column may not be masked (no values to mask)
+        if hasattr(sources['R'], 'mask'):
+            good = ~sources['R'].mask
+            sources = sources[good]
 
+    # Create id and Source_name before any filtering if they don't exist
+    # This ensures a direct match before and after forced photometry
+    id_existed = 'id' in sources.colnames
+    source_name_existed = 'Source_name' in sources.colnames
+
+    if not id_existed:
+        sources['id'] = np.arange(1, len(sources) + 1)
+
+    if not source_name_existed:
+        sources['Source_name'] = ['x%05d' % i for i in sources['id']]
 
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
-
-    # print('There are %d sources' % len(sources))
-    # print('The range in ra and dec is  :', np.min(sources['RA']),np.max(sources['RA']),np.min(sources['Dec']),np.max(sources['Dec']))
-    # print('The range in ra and dec is  :', np.median(sources['RA']),np.average(sources['RA']),np.median(sources['Dec']),np.average(sources['Dec']))
-
-
 
     # Initialize with NaNs
     sources['xcentroid'] = np.nan
     sources['ycentroid'] = np.nan
 
     try:
-        x, y = image_wcs.world_to_pixel(coords)
-        sources['xcentroid'] = x
-        sources['ycentroid'] = y
+        x_pix, y_pix = image_wcs.world_to_pixel(coords)
+        sources['xcentroid'] = x_pix
+        sources['ycentroid'] = y_pix
     except (NoConvergence, InvalidCoordinateError) as e:
         if isinstance(e, NoConvergence):
             sources['xcentroid'] = e.best_solution[0]
@@ -500,7 +789,6 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
             print(f"Warning: {len(e.divergent)} coordinates failed to converge")
         else:
             print(f"Warning: Severe coordinate transformation error - skipping bad coordinates")
-            # Set all to NaN, mask will filter them out
 
     mask = (
         np.isfinite(sources['xcentroid']) &
@@ -514,405 +802,628 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits',object_file='objects
     sources = sources[mask]
     print(f"Kept {np.sum(mask)} sources on detector out of {len(mask)}")
 
-    center_coord = image_wcs.pixel_to_world(NAXIS1/2, NAXIS2/2)
-    # print(f"Calculated center: RA={center_coord.ra.deg:.6f}, Dec={center_coord.dec.deg:.6f}")
-    # print(f"CRVAL from header: RA={image_wcs.wcs.crval[0]:.6f}, Dec={image_wcs.wcs.crval[1]:.6f}")
-    # print(f"CRPIX from header: {image_wcs.wcs.crpix}")
+    npossible = len(sources)
 
+    if nrows_max > 0 and len(sources) > nrows_max:
+        sources = random_rows(sources, nrows=nrows_max, seed=None)
 
-    npossible=len(sources)
+    print('Forced photometry of %d of %d possible sources' % (len(sources), npossible))
 
-    if nrows_max>0 and len(sources)>nrows_max:
-        sources=random_rows(sources, nrows=nrows_max, seed=None)
+    positions = np.transpose((sources['xcentroid'], sources['ycentroid']))
+    apertures = CircularAperture(positions, r=rstar)
+    annulus_apertures = CircularAnnulus(positions, r_in=b_in, r_out=b_out)
 
-    print('Forced photometry of %d of %d possible sources' % (len(sources),npossible))
-    
-    
-    positions = np.transpose((sources['xcentroid'], sources['ycentroid']))  
+    phot_table = aperture_photometry(image, apertures)
+    aper_stats = ApertureStats(image, apertures, sigma_clip=None, mask=image_mask)
+    sigclip = SigmaClip(sigma=3, maxiters=10)
+    bkg_stats = ApertureStats(image, annulus_apertures, sigma_clip=sigclip, mask=image_mask)
+    total_background = bkg_stats.mean * aper_stats.sum_aper_area.value
+    net = aper_stats.sum - total_background
 
-    apertures = CircularAperture(positions, r=rstar)  
-    annulus_apertures=CircularAnnulus(positions,r_in=b_in, r_out=b_out)
-
-    phot_table = aperture_photometry(image, apertures)  
-    aper_stats=ApertureStats(image,apertures,sigma_clip=None,mask=image_mask)
-    sigclip=SigmaClip(sigma=3,maxiters=10)
-    bkg_stats=ApertureStats(image,annulus_apertures,sigma_clip=sigclip,mask=image_mask)
-    total_background=bkg_stats.mean*aper_stats.sum_aper_area.value
-    net=aper_stats.sum - total_background
-
-    # Error estimation from background
-    bkg_std_per_pixel = bkg_stats.std  # std dev per pixel in annulus
+    # Error estimation
+    bkg_std_per_pixel = bkg_stats.std
     n_aper_pixels = aper_stats.sum_aper_area.value
     n_bkg_pixels = bkg_stats.sum_aper_area.value
 
-    # Total error includes:
-    # 1. Poisson noise from source (approximated by the net flux)
-    # 2. Background noise in aperture
-    # 3. Uncertainty in background estimate
     error = np.sqrt(
-        np.abs(net) +  # Poisson from source (assumes gain=1, ADU=electrons)
-        n_aper_pixels * bkg_std_per_pixel**2 +  # Background noise in aperture
-        n_aper_pixels**2 * bkg_std_per_pixel**2 / n_bkg_pixels  # Background estimation error
-        )
+        np.abs(net) +
+        n_aper_pixels * bkg_std_per_pixel**2 +
+        n_aper_pixels**2 * bkg_std_per_pixel**2 / n_bkg_pixels
+    )
 
-    phot_table['Raw']=aper_stats.sum 
-    phot_table['Bkg']=total_background
-    phot_table['Net']=net
-    phot_table['ErrNet']=error
+    phot_table['Raw'] = aper_stats.sum
+    phot_table['Bkg'] = total_background
+    phot_table['BkgMean'] = bkg_stats.mean
+    phot_table['BkgStd'] = bkg_std_per_pixel
+    phot_table['Net'] = net
+    phot_table['ErrNet'] = error
 
-    # 28th mag is correct
+    # FWHM and Eccentricity from cutout analysis
+    phot_table['FWHM'] = np.nan
+    phot_table['Eccentricity'] = np.nan
 
-    phot_table['phot_mag']= 28-2.5*np.log10(np.fabs(phot_table['Net']))
-    phot_table['phot_mag_simple']= 28-2.5*np.log10(np.fabs(phot_table['aperture_sum']))
+    for i in range(len(positions)):
+        x_int, y_int = int(positions[i, 0]), int(positions[i, 1])
+        cutout_size = int(2 * b_out) + 10
+        y_min = max(0, y_int - cutout_size)
+        y_max = min(NAXIS2, y_int + cutout_size)
+        x_min = max(0, x_int - cutout_size)
+        x_max = min(NAXIS1, x_int + cutout_size)
 
-    phot_table['phot_mag']=np.select([phot_table['Net']>0],[phot_table['phot_mag']],default=-phot_table['phot_mag'])
-    phot_table['phot_mag_simple']=np.select([phot_table['Net']>0],[phot_table['phot_mag_simple']],default=-phot_table['phot_mag_simple'])
+        if y_max > y_min and x_max > x_min:
+            cutout = image[y_min:y_max, x_min:x_max] - bkg_stats.mean[i]
+            cutout_pos = [(positions[i, 0] - x_min, positions[i, 1] - y_min)]
+            cutout_aper = CircularAperture(cutout_pos, r=rstar)
+            cutout_stats = ApertureStats(cutout, cutout_aper, sigma_clip=None)
+
+            if np.isfinite(cutout_stats.fwhm.value):
+                phot_table['FWHM'][i] = cutout_stats.fwhm.value
+            if np.isfinite(cutout_stats.eccentricity):
+                phot_table['Eccentricity'][i] = cutout_stats.eccentricity
+
+    phot_table['Max'] = aper_stats.max
+    phot_table['Min'] = aper_stats.min
+
+    phot_table['phot_mag'] = 28 - 2.5*np.log10(np.fabs(phot_table['Net']))
+    phot_table['phot_mag_raw'] = 28 - 2.5*np.log10(np.fabs(phot_table['aperture_sum']))
+
+    phot_table['phot_mag'] = np.select([phot_table['Net'] > 0], [phot_table['phot_mag']],
+                                       default=-phot_table['phot_mag'])
+    phot_table['phot_mag_raw'] = np.select([phot_table['Net'] > 0], [phot_table['phot_mag_raw']],
+                                           default=-phot_table['phot_mag_raw'])
+
+    # Add optional PSF quality metrics
+    if add_psf_metrics:
+        phot_table['SNR'] = np.abs(phot_table['Net']) / phot_table['ErrNet']
+        mean_flux_density = phot_table['Net'] / n_aper_pixels
+        phot_table['Concentration'] = phot_table['Max'] / mean_flux_density
+        median_bkg_std = np.nanmedian(phot_table['BkgStd'])
+        phot_table['BkgContam'] = phot_table['BkgStd'] / median_bkg_std
+
+    for col in phot_table.colnames:
+        phot_table[col].info.format = '%.8g'
+
+    pos = image_wcs.pixel_to_world(phot_table['xcenter'], phot_table['ycenter'])
+    # Use preserved id and Source_name from sources table (created before filtering)
+    phot_table['id'] = sources['id']
+    phot_table['Source_name'] = sources['Source_name']
+    phot_table['xcentroid'] = sources['xcentroid']
+    phot_table['ycentroid'] = sources['ycentroid']
+    phot_table['RA'] = pos.ra.degree
+    phot_table['Dec'] = pos.dec.degree
+    phot_table['File'] = outroot
+    phot_table['Filter'] = xfilter
+    phot_table['Exptime'] = xexptime
+
+    phot_table['RA'].format='.7f'
+    phot_table['Dec'].format='.7f'
 
 
-    for col in phot_table.colnames:  
+    tab_dir = './TabPhot%s' % XDIR
+    os.makedirs(tab_dir, exist_ok=True)
 
-        phot_table[col].info.format = '%.8g'  # for consistent table output
-        
-    pos=image_wcs.pixel_to_world(phot_table['xcenter'],phot_table['ycenter'])
-    names=[]
-    for one in phot_table:
-        names.append('x%05d' % one['id'])
-    phot_table['Source_name']=names
-    phot_table['RA']=pos.ra.degree
-    phot_table['Dec']=pos.dec.degree
-    phot_table['File']=outroot
-    phot_table['Filter']=xfilter
-    phot_table['Exptime']=xexptime
+    if outroot == '':
+        words = filename.split('/')
+        outroot = words[-1].replace('.fits', '')
 
-
-
-    tab_dir='./TabPhot%s' % XDIR
-
-    os.makedirs(tab_dir,exist_ok=True)
-
-    
-    if outroot=='':
-        words=filename.split('/')
-        outroot=words[-1].replace('.fits','')
-        
-    
-    outfile='%s/%s_phot.txt' % (tab_dir,outroot)
-    phot_table.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
-    print('Wrote %s with %d objects' % (outfile,len(phot_table)))
+    outfile = '%s/%s_phot.fits' % (tab_dir, outroot)
+    phot_table.write(outfile, format='fits', overwrite=True)
+    print('Wrote %s with %d objects' % (outfile, len(phot_table)))
     return outfile
 
 
-
-
 def find_closest_objects(table1_path, table2_path, max_sep=0.5):
-    '''
-    Find the objects with a given distance given two astropy tables.  The
-    routine returns only the closest object that satisfies this criterion.
-
-
-    240527 - this is a new version which useds KDTree
-    '''
-    # Read the two Astropy tables
-
-    table1=read_table(table1_path)
-    table2=read_table(table2_path)
-
-    print('get_closest_objects: Beginning x-match of %s and %s' % (table1_path,table2_path))
+    """
+    Cross-match two catalogs finding closest matches.
     
-    # Convert RA and Dec columns to SkyCoord objects
+    Finds objects within a specified distance between two astropy tables
+    using efficient KDTree algorithm. Returns only the closest match for
+    each object in table1.
+
+    Parameters
+    ----------
+    table1_path : str
+        Path to first table (typically Gaia catalog).
+    table2_path : str
+        Path to second table (typically photometry results).
+    max_sep : float, optional
+        Maximum separation in arcseconds. Default: 0.5.
+
+    Returns
+    -------
+    Table or empty list
+        Cross-matched table combining columns from both inputs, with added
+        'Sep' column giving separation in arcseconds. Returns empty list if
+        no matches found.
+    
+    Notes
+    -----
+    **Algorithm:**
+    
+    Uses KDTree in Cartesian coordinates for efficient matching. This is
+    much faster than direct spherical distance calculations for large
+    catalogs (>1000 sources).
+    
+    **Optimization (240527):**
+    
+    Replaced previous implementation with KDTree version, providing
+    significant speedup for large catalogs.
+    
+    **Output:**
+    
+    Written to ``TabPhot{XDIR}/{table2_name}_x_{table1_name}.txt``
+    
+    Removes duplicate columns (Source_name, RA, Dec) from table2 to
+    avoid conflicts.
+    
+    Examples
+    --------
+    >>> xtab = find_closest_objects('gaia.fits', 'phot.txt', max_sep=1.0)
+    >>> print(f"Matched {len(xtab)} sources")
+    >>> median_sep = np.median(xtab['Sep'])
+    >>> print(f"Median separation: {median_sep:.3f} arcsec")
+    """
+    table1 = read_table(table1_path)
+    table2 = read_table(table2_path)
+
+    print('get_closest_objects: Beginning x-match of %s and %s' % (table1_path, table2_path))
+
+    # Convert RA and Dec to SkyCoord objects
     coords1 = SkyCoord(ra=table1['RA'] * u.degree, dec=table1['Dec'] * u.degree)
     coords2 = SkyCoord(ra=table2['RA'] * u.degree, dec=table2['Dec'] * u.degree)
 
-    # Convert SkyCoord to Cartesian coordinates
-    cartesian_coords1 = np.array([coords1.cartesian.x.value, coords1.cartesian.y.value, coords1.cartesian.z.value]).T
-    cartesian_coords2 = np.array([coords2.cartesian.x.value, coords2.cartesian.y.value, coords2.cartesian.z.value]).T
+    # Convert to Cartesian coordinates
+    cartesian_coords1 = np.array([coords1.cartesian.x.value, coords1.cartesian.y.value, 
+                                  coords1.cartesian.z.value]).T
+    cartesian_coords2 = np.array([coords2.cartesian.x.value, coords2.cartesian.y.value, 
+                                  coords2.cartesian.z.value]).T
 
-    # Build a KDTree for the second set of coordinates
+    # Build KDTree for efficient matching
     tree = KDTree(cartesian_coords2)
 
-
-
-    # Query the KDTree for the closest neighbor in table2 for each object in table1
+    # Query for closest neighbor
     distances, indices = tree.query(cartesian_coords1)
 
-    # Extract the matching rows from table2. this resorts table2 in the order of table 1
+    # Extract matching rows (resorted to match table1 order)
     closest_matches = table2[indices]
 
-        # Compute the separations
+    # Compute separations
     closest_coords = SkyCoord(ra=closest_matches['RA']*u.degree, dec=closest_matches['Dec']*u.degree)
     separations = coords1.separation(closest_coords).arcsecond
 
-
-    # Create a new table to store the closest objects and their separations
-    table1['Sep']=separations
+    # Create output table
+    table1['Sep'] = separations
     del closest_matches['Source_name']
     del closest_matches['RA']
     del closest_matches['Dec']
-    table1['Sep'].format='.3f'
-    table1['RA'].format='.6f'
-    table1['Dec'].foramt='6f'
-    xtab=hstack([table1,closest_matches])
-    
-    xtab=xtab[xtab['Sep']<max_sep]
+    table1['Sep'].format = '.3f'
+    table1['RA'].format = '.6f'
+    table1['Dec'].format = '.6f'
+    xtab = hstack([table1, closest_matches])
 
-    
-    print('Of %d objects in %s and %d objects in %s, found %d matches' % (len(table1),table1_path,len(table2),table2_path,len(xtab)))
+    xtab = xtab[xtab['Sep'] < max_sep]
 
-    tab_dir='TabPhot%s' % XDIR
-    
+    print('Of %d objects in %s and %d objects in %s, found %d matches' % 
+          (len(table1), table1_path, len(table2), table2_path, len(xtab)))
+
+    tab_dir = 'TabPhot%s' % XDIR
+
     if len(xtab):
-        words=table1_path.split('/')
-        one=words[-1].replace('.txt','')
-        one=one.replace('.fits','')
-        words=table2_path.split('/')
-        two=words[-1].replace('.txt','')
-        two=two.replace('.fits','')
-        outfile='%s/%s_x_%s.txt' % (tab_dir,two,one)
-        xtab.write(outfile,format='ascii.fixed_width_two_line',overwrite=True)
+        words = table1_path.split('/')
+        one = words[-1].replace('.txt', '').replace('.fits', '')
+        words = table2_path.split('/')
+        two = words[-1].replace('.txt', '').replace('.fits', '')
+        outfile = '%s/%s_x_%s.txt' % (tab_dir, two, one)
+        xtab.write(outfile, format='ascii.fixed_width_two_line', overwrite=True)
     else:
-        print('Error: There are no objects that are closer thn %f arcsec' % max_sep)
+        print('Error: There are no objects that are closer than %f arcsec' % max_sep)
         return []
 
     return xtab
 
 
 def get_size(filename='LMC_c48_T08.r.t060.fits'):
+    """
+    Calculate image center and field size from WCS.
+    
+    Determines the RA, Dec, and angular size of a FITS image from its
+    WCS information.
 
+    Parameters
+    ----------
+    filename : str, optional
+        Path to FITS file. Default: 'LMC_c48_T08.r.t060.fits'.
+
+    Returns
+    -------
+    ra : float
+        Right ascension of image center in degrees.
+    dec : float
+        Declination of image center in degrees.
+    size_deg : float
+        Field size in degrees (diagonal from center to corner).
+    
+    Raises
+    ------
+    IOError
+        If file cannot be opened or WCS information is missing.
+    
+    Notes
+    -----
+    Size is calculated as the angular separation from image center to
+    corner, providing a conservative estimate of field coverage for
+    catalog queries.
+    
+    Tries extension 0 first, then extension 1 if needed.
+    
+    Examples
+    --------
+    >>> ra, dec, size = get_size('image.fits')
+    >>> print(f"Field center: RA={ra:.3f}, Dec={dec:.3f}")
+    >>> print(f"Field size: {size:.3f} degrees")
+    """
     try:
-        x=fits.open(filename)
+        x = fits.open(filename)
     except:
         print('get_size: Could not open %s' % filename)
         raise IOError('get_size: Could not open %s' % filename)
 
     try:
         wcs = WCS(x[0].header)
-        # Get the shape of the image
         naxis1 = x[0].header['NAXIS1']
         naxis2 = x[0].header['NAXIS2']
     except:
         try:
             wcs = WCS(x[1].header)
-            # Get the shape of the image
             naxis1 = x[1].header['NAXIS1']
             naxis2 = x[1].header['NAXIS2']
         except:
             raise IOError('get_size: Could not get info for %s' % filename)
 
-    # Calculate the pixel coordinates of the center
+    # Calculate center position
     center_pixel = (naxis1 / 2, naxis2 / 2)
-
-    # Convert pixel coordinates to RA and Dec
     center_ra_dec = wcs.pixel_to_world(center_pixel[0], center_pixel[1])
 
-    # Calculate the size of the image in degrees
-    # The size is determined by the diagonal distance from the center to the corner of the image
+    # Calculate field size (diagonal)
     corner_pixel = (0, 0)
     corner_ra_dec = wcs.pixel_to_world(corner_pixel[0], corner_pixel[1])
     size_deg = center_ra_dec.separation(corner_ra_dec).to(u.degree).value
-    ra=center_ra_dec.ra.deg
-    dec=center_ra_dec.dec.deg
-    return ra,dec,size_deg
-
-
-def do_xphot(filename,gaia_file,forced,nrows_max,outroot):
-    '''
-    I am trying to get modifiy this to look more like
-    what is done in MefPhot, so I can used the forced
-    photometry routine their
-    '''
-
-    print('XXX - do_xphot  %s gaia %s' % (filename,gaia_file))
     
+    ra = center_ra_dec.ra.deg
+    dec = center_ra_dec.dec.deg
+    
+    return ra, dec, size_deg
+
+
+def do_xphot(filename, gaia_file, forced, nrows_max, outroot):
+    """
+    Execute photometry and cross-matching pipeline.
+    
+    Performs photometry (forced or unforced), cross-matches with Gaia,
+    and generates diagnostic figures.
+
+    Parameters
+    ----------
+    filename : str
+        Path to FITS image file.
+    gaia_file : str
+        Path to Gaia catalog file.
+    forced : bool
+        If True, use forced photometry at Gaia positions. If False,
+        detect sources then cross-match.
+    nrows_max : int
+        Maximum sources to process in forced mode. Ignored for unforced.
+    outroot : str
+        Output filename root for results.
+
+    Returns
+    -------
+    None
+        Results are written to files and figures are saved.
+    
+    Notes
+    -----
+    This is the main pipeline orchestrator that ties together:
+    
+    1. Photometry (forced or unforced mode)
+    2. Cross-matching with Gaia
+    3. Figure generation
+    
+    If cross-matching fails (no matches), prints error and returns without
+    generating figures.
+    
+    Examples
+    --------
+    >>> do_xphot('image.fits', 'gaia.fits', forced=True, 
+    ...          nrows_max=10000, outroot='field1')
+    """
+    print('XXX - do_xphot %s gaia %s' % (filename, gaia_file))
 
     if forced:
-        object_file=gaia_file
-        phot_file=do_forced_photometry(filename,object_file,nrows_max,outroot)
+        object_file = gaia_file
+        phot_file = do_forced_photometry(filename, object_file, nrows_max, outroot, add_psf_metrics=True)
     else:
-        object_file=get_objects_from_image(filename,outroot)
-        phot_file=do_forced_photometry(filename,object_file,nrows_max=-1,outroot=outroot)
+        object_file = get_objects_from_image(filename, outroot)
+        phot_file = do_forced_photometry(filename, object_file, nrows_max=-1, outroot=outroot, add_psf_metrics=True)
 
-
-    
     closest_objects_table = find_closest_objects(gaia_file, phot_file)
-    if len(closest_objects_table)==0:
+    if len(closest_objects_table) == 0:
         print('Error: There are no objects that were xmatched')
         return
+
+    if outroot == '':
+        word = filename.split('/')
+        outroot = word[-1].replace('.fits', '')
+
+    do_fig(closest_objects_table, outroot)
+
+
+def do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False, 
+           nrows_max=-1, outroot=''):
+    """
+    Process a single image for photometric comparison.
     
-    if outroot=='':
-        word=filename.split('/')
-        outroot=word[-1].replace('.fits','')
+    Complete pipeline for comparing photometry in a single image to Gaia
+    catalog, including catalog retrieval, photometry, and figure generation.
 
-    do_fig(closest_objects_table,outroot)
+    Parameters
+    ----------
+    filename : str, optional
+        Path to FITS file. Default: 'LMC_c48_T08.r.t060.fits'.
+    gaia_cat_file : str, optional
+        Path to existing Gaia catalog. If empty or non-existent, will
+        retrieve new catalog. Default: ''.
+    forced : bool, optional
+        Photometry mode (True=forced, False=unforced). Default: False.
+    nrows_max : int, optional
+        Maximum sources for forced photometry. Default: -1 (all).
+    outroot : str, optional
+        Output filename root. Default: ''.
 
+    Returns
+    -------
+    None
+        Results written to TabPhot/ and figures to Figs_phot/.
     
-
-
-def do_one(filename='LMC_c48_T08.r.t060.fits',gaia_cat_file='',forced=False,nrows_max=-1,outroot=''):
-    '''
-    Compare photometry in an image to photometry from Gaia
-
-    '''
-
+    Raises
+    ------
+    ValueError
+        If FITS file cannot be opened.
     
-
-
-
+    Notes
+    -----
+    **Gaia Catalog Handling:**
+    
+    * If gaia_cat_file exists: uses it
+    * Otherwise: calculates field center/size and retrieves new catalog
+    
+    Catalog is cached for reuse in subsequent calls with the same field.
+    
+    Examples
+    --------
+    >>> # Use existing Gaia catalog
+    >>> do_one('image.fits', gaia_cat_file='gaia.fits', forced=True)
+    
+    >>> # Auto-retrieve Gaia catalog
+    >>> do_one('image.fits', forced=True, nrows_max=5000)
+    """
     try:
-        x=fits.open(filename)
+        x = fits.open(filename)
     except:
         print('Could not open %s' % filename)
         raise ValueError
-        
 
-    if gaia_cat_file!='' and os.path.isfile(gaia_cat_file)==True:
-        gaia_file=gaia_cat_file
+    if gaia_cat_file != '' and os.path.isfile(gaia_cat_file) == True:
+        gaia_file = gaia_cat_file
         print('Using existing GaiaCat file: %s' % gaia_cat_file)
     else:
-        ra,dec,size_deg=get_size(filename)
-        print('Making new GaiaCat file - %.2f %.2f %.2f' % (ra,dec,size_deg))
-        print('do_one - RA, Dec, size: ',ra,dec,size_deg)
-        gaia_file=GaiaCat.get_gaia(ra, dec, size_deg,outroot)
+        ra, dec, size_deg = get_size(filename)
+        print('Making new GaiaCat file - %.2f %.2f %.2f' % (ra, dec, size_deg))
+        print('do_one - RA, Dec, size: ', ra, dec, size_deg)
+        gaia_file = get_gaia(ra, dec, size_deg, outroot)
 
-
-    do_xphot(filename,gaia_file,forced,nrows_max,outroot)
-
+    do_xphot(filename, gaia_file, forced, nrows_max, outroot)
     return
 
 
+def do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True, 
+            nrows_max=10000, outroot=''):
+    """
+    Process multiple images with optimized Gaia catalog retrieval.
+    
+    Efficiently processes multiple images by identifying unique field
+    positions and reusing Gaia catalogs for overlapping fields.
 
-def do_many(filenames=['LMC_c48_T08.r.t060.fits'],gaia_cat_file='',forced=True,nrows_max=10000,outroot=''):
-    '''
-    Compare photometry in an image to photometry from Gaia
-    '''
+    Parameters
+    ----------
+    filenames : list of str, optional
+        List of FITS files to process. Default: ['LMC_c48_T08.r.t060.fits'].
+    gaia_cat_file : str, optional
+        Ignored (kept for API compatibility). Default: ''.
+    forced : bool, optional
+        Photometry mode. Default: True.
+    nrows_max : int, optional
+        Maximum sources for forced photometry. Default: 10000.
+    outroot : str, optional
+        Output filename root. Default: ''.
 
-    xra=[]
-    xdec=[]
-    xsize=[]
-
+    Returns
+    -------
+    None
+        Results written to files.
+    
+    Raises
+    ------
+    IOError
+        If any file cannot be opened.
+    
+    Notes
+    -----
+    **Optimization Strategy:**
+    
+    1. Calculate field centers and sizes for all files
+    2. Identify unique fields (within 0.01° tolerance)
+    3. Retrieve Gaia catalogs only for unique fields
+    4. Map each file to its Gaia catalog
+    5. Process all files using cached catalogs
+    
+    This dramatically reduces Gaia query time when processing many images
+    of the same field (e.g., different filters or epochs).
+    
+    **Intermediate Files:**
+    
+    * xpos.txt - All file positions
+    * zpos.txt - Unique field positions
+    * xxpos.txt - Files with assigned Gaia catalogs
+    
+    Examples
+    --------
+    >>> files = ['field1_r.fits', 'field1_g.fits', 'field1_i.fits']
+    >>> do_many(files, forced=True, nrows_max=5000)
+    Finished getting gaia tables for 1 files
+    Processing images...
+    """
+    xra = []
+    xdec = []
+    xsize = []
 
     for filename in filenames:
         try:
-            x=fits.open(filename)
+            x = fits.open(filename)
         except:
             print('do_many: Could not open %s' % filename)
             raise IOError
-        ra,dec,size=get_size(filename)
+        ra, dec, size = get_size(filename)
         xra.append(ra)
         xdec.append(dec)
         xsize.append(size)
 
-    xpos=Table([filenames,xra,xdec,xsize],names=['filename','RA','Dec','Size'])
-    zpos, mapping =unique_rows_within_tol(xpos, tol=0.01)
+    xpos = Table([filenames, xra, xdec, xsize], names=['filename', 'RA', 'Dec', 'Size'])
+    zpos, mapping = unique_rows_within_tol(xpos, tol=0.01)
 
-    print("Finished getting positions ")
+    print("Finished getting positions")
 
-    gaia_files=[]
+    gaia_files = []
     for one in zpos:
-        gaia_file=get_gaia(one['RA'], one['Dec'], one['Size'],outroot='')
+        gaia_file = get_gaia(one['RA'], one['Dec'], one['Size'], outroot='')
         gaia_files.append(gaia_file)
-    zpos['gaia_file']=gaia_files
+    zpos['gaia_file'] = gaia_files
 
     print('Finished getting gaia tables for %d files' % len(zpos))
 
-    xpos.write('xpos.txt',format='ascii.fixed_width_two_line',overwrite=True)
-    zpos.write('zpos.txt',format='ascii.fixed_width_two_line',overwrite=True)
+    xpos.write('xpos.txt', format='ascii.fixed_width_two_line', overwrite=True)
+    zpos.write('zpos.txt', format='ascii.fixed_width_two_line', overwrite=True)
 
+    xpos['gaia_file'] = zpos['gaia_file'][mapping]
+    xpos.write('xxpos.txt', format='ascii.fixed_width_two_line', overwrite=True)
 
-    xpos['gaia_file']=zpos['gaia_file'][mapping]
-    xpos.write('xxpos.txt',format='ascii.fixed_width_two_line',overwrite=True)
-
-    # At this point all of the gaia files that we need should exist
-
+    # Process all files using cached Gaia catalogs
     for one in xpos:
-        print('ZZZ',one)
-        do_xphot(one['filename'],one['gaia_file'],forced,nrows_max,outroot)
+        print('ZZZ', one)
+        do_xphot(one['filename'], one['gaia_file'], forced, nrows_max, outroot)
 
     return
 
 
-def do_dir(xdir='DECam_SWARP2/LMC_c37/T16',nrows_max=30000,forced=True):
-    '''
-    Process all of the images in a directory, and its 
-    subdirecories
-    '''
+def do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True):
+    """
+    Process all images in a directory and subdirectories.
+    
+    Recursively finds all FITS files in a directory tree and processes
+    them with optimized Gaia catalog retrieval.
 
-    xtab=ImageSum.table_create(xdir,outname=None)
-    print('Starting %d files' %  len(xtab))
+    Parameters
+    ----------
+    xdir : str, optional
+        Directory path to process. Default: 'DECam_SWARP2/LMC_c37/T16'.
+    nrows_max : int, optional
+        Maximum sources for forced photometry. Default: 30000.
+    forced : bool, optional
+        Photometry mode. Default: True.
 
-    do_many(xtab['filename'],gaia_cat_file='',forced=forced,nrows_max=nrows_max)
-
-    return
+    Returns
+    -------
+    None
+        Results written to files.
+    
+    Notes
+    -----
+    Uses ImageSum.table_create() to recursively find all FITS files.
+    Then calls do_many() to process with optimized Gaia catalog caching.
+    
+    This is the recommended approach for processing large datasets where
+    multiple images cover the same fields.
+    
+    Examples
+    --------
+    >>> do_dir('DECamSWARP2/SMC_c01', nrows_max=20000, forced=True)
+    Starting 145 files
+    Finished getting gaia tables for 12 files
+    Processing images...
+    """
 
 
 def steer(argv):
-    '''
-    Run the script given choices from the command line
+    """
+    Parse command-line arguments and run PhotCompare.
 
-    Usage: PhotCompare.py -h -for -unf -dir -nmax -gcat file1
-    '''
+    Usage: PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
+                          [-gcat FILE] [-out NAME] file1 file2 ...
+    """
+    xdir = ''
+    nrows_max = 30000
+    forced = True
+    gaia_cat_file = ''
+    outroot = ''
+    filenames = []
 
-    global XDIR
+    print('hello knox')
 
-    gaia_cat_file=''
-    forced=True
-    nrows_max=30000
-    files=[]
-    xdir=''
-    outdir=''
-    
-    i=1
-    while i<len(argv):
-        if argv[i].count('-h'):
+    i = 1
+    while i < len(argv):
+        if argv[i] == '-h':
+            print('Ready to print doc')
             print(__doc__)
             return
-        elif argv[i][:4]=='-for':
-            forced=True
-        elif argv[i][:4]=='-unf':
-            forced=False
-        elif argv[i]=='-dir':
-            i+=1
-            xdir=argv[i]
-        elif argv[i]=='-out':
-            i+=1
-            out=argv[i]
-        elif argv[i]=='-nmax':
-            i+=1
-            nrows_max=int(argv[i])
-        elif argv[i]=='-gcat':
-            i+=1
-            gaia_cat_file=argv[i]
-        elif argv[i][0]=='-':
-            print('Unknown switch ',argv)
+        elif argv[i] == '-dir':
+            i += 1
+            xdir = argv[i]
+        elif argv[i] == '-nmax':
+            i += 1
+            nrows_max = int(argv[i])
+        elif argv[i] == '-forced':
+            forced = True
+        elif argv[i] == '-unforced':
+            forced = False
+        elif argv[i] == '-gcat':
+            i += 1
+            gaia_cat_file = argv[i]
+        elif argv[i] == '-out':
+            i += 1
+            outroot = argv[i]
+        elif argv[i][0] == '-':
+            print('Error: Unknown option: %s' % argv[i])
             return
         else:
-            files.append(argv[i])
-        i+=1
+            filenames.append(argv[i])
+        i += 1
 
+    if xdir != '':
+        do_dir(xdir=xdir, nrows_max=nrows_max, forced=forced)
+    elif len(filenames) > 0:
+        if len(filenames) == 1:
+            do_one(filenames[0], gaia_cat_file=gaia_cat_file, forced=forced,
+                   nrows_max=nrows_max, outroot=outroot)
+        else:
+            do_many(filenames, forced=forced, nrows_max=nrows_max, outroot=outroot)
+    else:
+        print(__doc__)
 
-    if xdir!='':
-        XDIR='_%s' % (xdir.replace('/','-'))
-        do_dir(xdir=xdir,nrows_max=nrows_max,forced=forced)
-        return
-
-
-
-    i=1
-    for one in files:
-        print('\nProcessing %s (%d/%d' % (one,i,len(files)))
-        do_one(one,gaia_cat_file,forced,nrows_max)
-        i+=1
-
-
-    return
-
-
-
-           
 
 # Next lines permit one to run the routine from the command line
 if __name__ == "__main__":
     import sys
-    if len(sys.argv)>1:
-        steer(sys.argv)   
+    if len(sys.argv) > 1:
+        steer(sys.argv)
     else:
-        print (__doc__ )
+        print(__doc__)

@@ -1,9 +1,11 @@
 #!/usr/bin/env python 
 
-'''
-                    Space Telescope Science Institute
+"""Sumarize mef files that constitute the raw data from
 
-Synopsis:  
+Space Telescope Science Institute
+
+Synopsis
+--------
 
 Sumarize mef files that constitute the raw data from
 DECam observations of the LMC and SMC
@@ -12,35 +14,38 @@ This routines assume a standard setup with the a
 local link to the raw DECam mef files (or part of
 them with the same format as on Box
 
+Command Line Usage
+------------------
 
-Command line usage (if any):
+::
 
     usage: MefSum.py [-h] [-all] [-np 3]  [-det] [-mef] field1 field2 ...
 
-    where 
-        -h prints the documentation
-        -np 3  causes the processing to be carried out with a a given no of threads
-        -all causes all files in the MEF directories to be processed. This should
-        only be used with caution since it will take considerable time, and so
-        the user is asked to confirm this option.
-        -det just runs the individual ccd portion of the process (this is diagnostic)
-        -mef just runs the overall mef portions (this is diagnostic)
-        -sigma_clipped (Causes some statitics to be calculaed using sigma clipping).
-            This is a diagnostic mode and is not normally used.  The estimates
-            are now based on the mode
+    where
+    -h prints the documentation
+    -np 3  causes the processing to be carried out with a a given no of threads
+    -all causes all files in the MEF directories to be processed. This should
+    only be used with caution since it will take considerable time, and so
+    the user is asked to confirm this option.
+    -det just runs the individual ccd portion of the process (this is diagnostic)
+    -mef just runs the overall mef portions (this is diagnostic)
+    -sigma_clipped (Causes some statitics to be calculaed using sigma clipping).
+    This is a diagnostic mode and is not normally used.  The estimates
+    are now based on the mode
 
     and fields comprise one or more fields e.g LMC_c42  to be processed
 
-Description:  
+Description
+-----------
 
-    The routine reads the MEF files and summarizes information from
+The routine reads the MEF files and summarizes information from
     the headers in two tables, a mef.tab file and a det.tab file
     The routine also calculates some statstics associated with the
     counts in each detector, that are used to carry out an
     intial background subtraction.
 
-Primary routines:
-
+Primary Routines
+----------------
 
 Notes:
 
@@ -53,13 +58,26 @@ Notes:
     Note that this does not read the  file produced by MefCheck, which is
     really u
 
+Notes
+-----
 
-                                       
-History:
+At present this does not check that a field has been processed
 
-230513 ksl Coding begun
+    Here multiple processors are used only to handle individual files
+    so it makes sense to us multiple threads even if only one
+    field is being processed.,
 
-'''
+    Note that this does not read the  file produced by MefCheck, which is
+    really u
+
+Version History
+---------------
+
+230513 ksl
+    Coding begun
+
+"""
+
 
 import sys
 import os
