@@ -74,7 +74,28 @@ a region table. For each source, it calculates:
 * Source flux from the defined elliptical region
 * Background flux from the corresponding annular region
 * Net flux (source minus scaled background)
+* An estimate of the flux error due to background uncertainty
 * Statistical measures (mean, median, mode, std)
+
+The net flux is computed as::
+
+    net_flux = source_flux - num_pixels_used * back_median
+
+where ``source_flux`` is the summed pixel values in the source aperture
+(containing both the real source signal and background), ``back_median``
+is the median pixel value in the background annulus, and
+``num_pixels_used`` is the number of unmasked pixels in the source
+aperture. The median is used because it is robust to contaminating
+sources within the background region.
+
+The flux error is estimated by splitting the background annulus into
+radial sub-annuli (default 4), computing the median in each, and taking
+the standard deviation of those medians. This measures how the
+background level varies with distance from the source, which is the
+dominant source of uncertainty for extended-source photometry. The
+per-pixel uncertainty is then scaled to the source aperture::
+
+    flux_err = num_pixels_used * std(sub_annulus_medians)
 
 The region table must contain the following columns:
 
@@ -90,10 +111,25 @@ The region table must contain the following columns:
 Output
 ------
 
-For each image, two output files are created:
+A single consolidated output file is written containing three row types
+for each source/image combination, identified by the ``SourceBack`` column:
 
-* ``SB_<image>.<region>.txt`` - Full photometry results for all regions
-* ``Net_<image>.<region>.txt`` - Net flux summary for each source
+* **Source** -- photometry of the source region
+* **Back** -- photometry of the background region
+* **Net** -- background-subtracted values
+
+Key output columns:
+
+* ``flux`` -- total flux (DN) in the aperture; for Net rows this is background-subtracted
+* ``flux_err`` -- for Back rows, the per-pixel background uncertainty (std of
+  radial sub-annulus medians); for Net rows, the total flux error
+  (num_pixels_used * back_flux_err); 0 for Source rows
+* ``mean``, ``median`` -- per-pixel statistics; for Net rows, source minus background
+* ``std`` -- standard deviation of pixel values in the aperture
+* ``surface_brightness_per_arcsec2`` -- flux per square arcsecond
+* ``num_pixels_used`` -- number of unmasked pixels in the aperture
+* ``frac_in_image`` -- fraction of the aperture within the image (1.0 = fully contained)
+* ``Image`` -- which FITS file the measurement came from
 
 If ``-viz`` is specified, visualization plots are saved to:
 
@@ -628,9 +664,6 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
         # Areas
         'area_pixels': area_total,
         'area_arcsec2': area_total * pixel_scale**2,
-        'area_outer_pixels': area_outer,
-        'area_inner_pixels': area_inner,
-        
         # Pixel statistics
         'num_pixels_total': num_pixels_total,
         'num_pixels_used': num_pixels_used,
@@ -664,6 +697,52 @@ def elliptical_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
     }
 
     return results
+
+
+def background_uncertainty(pixel_coord, r_inner_pix, r_outer_pix, data, bad_pixel_mask, n_sub=4):
+    """Estimate background uncertainty by radially subsampling an annulus.
+
+    Splits the background annulus into concentric sub-annuli and computes
+    the median in each. The standard deviation of these medians measures
+    how the background level varies with radius, which is the dominant
+    source of uncertainty for extended source photometry.
+
+    Parameters
+    ----------
+    pixel_coord : tuple
+        (x, y) pixel coordinates of the annulus center.
+    r_inner_pix : float
+        Inner radius of the background annulus in pixels.
+    r_outer_pix : float
+        Outer radius of the background annulus in pixels.
+    data : numpy.ndarray
+        2D image data array.
+    bad_pixel_mask : numpy.ndarray
+        Boolean mask where True indicates bad pixels.
+    n_sub : int, optional
+        Number of radial sub-annuli. Default is 4.
+
+    Returns
+    -------
+    float
+        Standard deviation of the sub-annulus medians (per-pixel
+        background uncertainty). Returns 0.0 if fewer than 2
+        sub-annuli have valid data.
+    """
+    from photutils.aperture import CircularAnnulus, ApertureStats
+
+    edges = np.linspace(r_inner_pix, r_outer_pix, n_sub + 1)
+    medians = []
+    for j in range(n_sub):
+        sub_ann = CircularAnnulus(pixel_coord, r_in=edges[j], r_out=edges[j + 1])
+        stats = ApertureStats(data, sub_ann, mask=bad_pixel_mask)
+        if np.isfinite(stats.median):
+            medians.append(stats.median)
+
+    if len(medians) < 2:
+        return 0.0
+
+    return float(np.std(medians))
 
 
 def elliptical_region_photometry(fits_file, ra, dec, a_arcsec, b_arcsec, theta_deg=0,
@@ -1206,9 +1285,23 @@ def do_many(xtab, image_file, create_visualization=False):
                                           image_data=image_data)
             if results is None:
                 continue
+
+            # Estimate per-pixel background uncertainty via radial sub-annuli
+            pixel_scale = image_data['pixel_scale']
+            sky_coord = SkyCoord(ra, dec, unit=(u.deg, u.deg), frame='icrs')
+            pixel_coord = image_data['wcs'].world_to_pixel(sky_coord)
+            r_inner_pix = b / pixel_scale  # Minor = inner radius for annulus
+            r_outer_pix = a / pixel_scale  # Major = outer radius for annulus
+            results['flux_err'] = background_uncertainty(
+                pixel_coord, r_inner_pix, r_outer_pix,
+                image_data['data'], image_data['bad_pixel_mask'])
         else:
             print('Error: Unknown RegType:', one['RegType'])
             raise ValueError(f"Unknown RegType: {one['RegType']}")
+
+        # Source/ellipse rows get flux_err=0
+        if 'flux_err' not in results:
+            results['flux_err'] = 0.0
 
         results = x | results
         xresults.append(results)
@@ -1229,7 +1322,8 @@ def results2table(results_list):
     -------
     astropy.table.Table
         Table with formatted columns. Float columns use '.2f' format,
-        and None values are converted to -99.0.
+        and None values are converted to -99.0. The ``flux_err`` column
+        is placed immediately after ``flux``.
     """
     table = Table(rows=results_list)
 
@@ -1246,6 +1340,20 @@ def results2table(results_list):
         if table[col_name].dtype in [np.float64, np.float32] or np.issubdtype(table[col_name].dtype, np.floating):
             table[col_name].format = '.2f'
 
+    for col_name in ['mean', 'median', 'mode', 'std',
+                     'surface_brightness_per_pixel', 'surface_brightness_per_arcsec2',
+                     'flux_err']:
+        if col_name in table.colnames:
+            table[col_name].format = '.3f'
+
+    # Place flux_err immediately after flux
+    if 'flux_err' in table.colnames and 'flux' in table.colnames:
+        cols = table.colnames
+        cols.remove('flux_err')
+        idx = cols.index('flux') + 1
+        cols.insert(idx, 'flux_err')
+        table = table[cols]
+
     return table
 
 
@@ -1258,6 +1366,26 @@ def add_net_rows(xtab):
     flux and statistics. Rows are ordered as Source, Back, Net for each
     source in each image.
 
+    The net flux is computed as::
+
+        net_flux = source_flux - num_pixels_used_source * back_median
+
+    where ``source_flux`` is the total (summed) flux in the source
+    aperture (which includes both the real source signal and the
+    background contribution), ``back_median`` is the median pixel value
+    in the background annulus, and ``num_pixels_used_source`` is the
+    number of unmasked pixels that contributed to the source flux.
+    The median is used rather than the mean because it is robust to
+    contaminating sources within the background annulus.
+
+    The flux error is propagated from the per-pixel background
+    uncertainty measured by ``background_uncertainty()``::
+
+        net_flux_err = num_pixels_used_source * back_flux_err
+
+    where ``back_flux_err`` is the standard deviation of the median
+    pixel values measured in radial sub-annuli of the background region.
+
     Parameters
     ----------
     xtab : astropy.table.Table
@@ -1268,9 +1396,9 @@ def add_net_rows(xtab):
     -------
     astropy.table.Table
         Table with rows grouped as Source, Back, Net per source/image.
-        Net rows have SourceBack='Net' and contain background-subtracted
-        values for flux, mean, and median. The net flux is computed as
-        source_flux - num_pixels_used * back_median.
+        The ``flux_err`` column contains: 0 for Source rows, the
+        per-pixel background uncertainty for Back rows, and the
+        propagated total flux error for Net rows.
     """
     has_image = 'Image' in xtab.colnames
 
@@ -1317,6 +1445,8 @@ def add_net_rows(xtab):
             else:
                 net['surface_brightness_per_arcsec2'] = 0
                 net['surface_brightness_per_pixel'] = 0
+            # Propagate background uncertainty to net flux error
+            net['flux_err'] = src_row['num_pixels_used'] * back_row['flux_err']
             out_rows.append(net)
 
     result = Table(rows=out_rows)
@@ -1529,6 +1659,19 @@ def steer(argv):
 
         all_results = vstack(all_tables)
         all_results = add_net_rows(all_results)
+
+        # Reorder output to match the input region table's source order
+        reg_tab = ascii.read(reg_file)
+        source_order = list(dict.fromkeys(reg_tab['Source_name']))
+        order_map = {name: i for i, name in enumerate(source_order)}
+        sort_key = [order_map.get(name, len(source_order)) for name in all_results['Source_name']]
+        sb_map = {'Source': 0, 'Back': 1, 'Net': 2}
+        sb_key = [sb_map.get(sb, 3) for sb in all_results['SourceBack']]
+        all_results['_src_order'] = sort_key
+        all_results['_sb_order'] = sb_key
+        all_results.sort(['_src_order', '_sb_order'])
+        all_results.remove_columns(['_src_order', '_sb_order'])
+
         if filter_name:
             outfile = 'Flux_%s_%s.txt' % (filter_name, rname)
         else:

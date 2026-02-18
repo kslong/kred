@@ -7,6 +7,62 @@ such as SNRs.  The basic idea is that one defines regions for the source and bac
 and uses the routine :doc:`GetImageFlux.py <api/GetImageFlux/index>` to extract the
 fluxes.
 
+Algorithm
+---------
+
+Net flux
+^^^^^^^^
+
+For each source, the routine measures the total (summed) pixel values in the source
+aperture and the median pixel value in a surrounding background annulus.  The net
+(background-subtracted) flux is then::
+
+    net_flux = source_flux - num_pixels_used * back_median
+
+where:
+
+* ``source_flux`` is the total (summed) pixel values in the source aperture,
+  which includes both the real source signal and the underlying background
+* ``back_median`` is the median pixel value in the background annulus
+* ``num_pixels_used`` is the number of unmasked pixels that contributed to the
+  source flux sum
+
+The background median (rather than the mean) is used because it is robust to
+contamination by faint stars or other sources that may fall within the background
+annulus.  The background level per pixel is then scaled by the actual number of
+unmasked source pixels to estimate the total background contribution, which is
+subtracted from the source flux.
+
+The net mean and median are simply the source value minus the background value.
+
+Flux error estimation
+^^^^^^^^^^^^^^^^^^^^^
+
+For extended-source photometry, the dominant uncertainty is not the statistical
+(Poisson) noise per pixel but rather the systematic uncertainty in the background
+level estimate.  A small error in the per-pixel background gets multiplied by the
+large number of source pixels, producing a large net flux error.
+
+To estimate this uncertainty, the background annulus is split into concentric radial
+sub-annuli (4 by default).  The median pixel value is computed independently in each
+sub-annulus, and the standard deviation of these medians measures how the background
+level varies with distance from the source::
+
+    back_flux_err = std(sub_annulus_medians)
+
+This radial subsampling approach captures background gradients and structure that
+would affect the result if a different annulus were chosen.  It is preferred over
+azimuthal (sector-based) subsampling because the latter would be dominated by
+localized contamination (e.g. a bright neighbor on one side of the source) rather
+than the true background uncertainty.
+
+The per-pixel uncertainty is then propagated to the net flux::
+
+    net_flux_err = num_pixels_used * back_flux_err
+
+Input
+-----
+
 The basic input, aside from the fits images for which one wishes to extract the flux,
 are 'masterfiles', which minimally must have at least the following columns::
 
@@ -160,27 +216,34 @@ the ``SourceBack`` column:
 * **Back** -- photometry of the background region
 * **Net** -- background-subtracted values
 
-The rows are grouped as Source, Back, Net for each source in each image.  An ``Image``
-column identifies which FITS file each measurement came from.
+The rows are grouped as Source, Back, Net for each source in each image, with sources
+ordered to match the input region table.  An ``Image`` column identifies which FITS
+file each measurement came from.
 
 The key columns in the output are:
 
 * ``flux`` -- total flux (DN) in the aperture; for Net rows this is the background-subtracted flux
+* ``flux_err`` -- estimate of the flux uncertainty due to background level determination
+  (see `Flux error estimation`_); 0 for Source rows
 * ``mean``, ``median`` -- mean and median pixel values; for Net rows these are source minus background
+* ``std`` -- standard deviation of pixel values in the aperture
 * ``surface_brightness_per_arcsec2`` -- flux per square arcsecond
 * ``num_pixels_used`` -- number of unmasked pixels in the aperture
 * ``frac_in_image`` -- fraction of the aperture that falls within the image (1.0 = fully contained)
 
 Example output (abbreviated)::
 
-    Source_name SourceBack      flux   mean median frac_in_image                           Image
-    ----------- ---------- --------- ------ ------ ------------- -------------------------------
-     J0041-7336     Source 515630.51  48.52  39.88          1.00 SMC_c06_T06.ha_sub_r
-     J0041-7336       Back 321620.23  14.75  11.60          1.00 SMC_c06_T06.ha_sub_r
-     J0041-7336        Net 457170.07  33.77  28.28          1.00 SMC_c06_T06.ha_sub_r
+    Source_name SourceBack      flux  flux_err   mean median frac_in_image                  Image
+    ----------- ---------- --------- --------- ------ ------ ------------- ----------------------
+     J0041-7336     Source 515630.51     0.000 48.520 39.880          1.00 SMC_c06_T06.ha_sub_r
+     J0041-7336       Back 321620.23     0.120 14.750 11.600          1.00 SMC_c06_T06.ha_sub_r
+     J0041-7336        Net 457170.07  1276.800 33.770 28.280          1.00 SMC_c06_T06.ha_sub_r
 
-The Net flux is computed as: ``source_flux - num_pixels_used * back_median``.  The Net
-mean and median are simply the source value minus the background value.
+In the output table:
+
+* **Back rows**: ``flux_err`` is the per-pixel background uncertainty
+* **Net rows**: ``flux_err`` is the total flux error (scaled by source pixel count)
+* **Source rows**: ``flux_err`` is 0 (not applicable)
 
 Sources that fall entirely outside an image are silently skipped.  For sources that are
 only partially within an image, ``frac_in_image`` will be less than 1.0, and the
