@@ -57,27 +57,59 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 
-from PhotCompare import get_gaia_spec
+from GaiaCat import get_gaia_spec 
+from GaiaCat import old_get_gaia_spec
+#from PhotCompare import get_gaia_spec
 
 
                                                             
 
-def get_flux(xtab , wavelength=6563):
-    '''
-     Get the flux of a star at a particular wavelength
+#def get_flux(xtab , wavelength=6563):
+    #'''
+     #Get the flux of a star at a particular wavelength
      
-    '''
-    
-    i=0
-    while xtab['WAVE'][i] < wavelength and i<len(xtab):
-        i+=1
+    #'''
+    #print("In get_flux")
+    #print("Xtab Type:", type(xtab))
+    #print("xtab:", xtab)
+    #rows = len(xtab)
+    #cols = len(xtab[0])
+    #print(rows, cols)
+    #i=0
+    #while xtab['WAVE'][i] < wavelength and i<len(xtab):
+        #i+=1
     #print(xtab['WAVE'][i])
-    frac=(wavelength-xtab['WAVE'][i-1])/(xtab['WAVE'][i]-xtab['WAVE'][i-1])
+    #frac=(wavelength-xtab['WAVE'][i-1])/(xtab['WAVE'][i]-xtab['WAVE'][i-1])
     # print(frac)
-    flux=(1-frac) * xtab['FLUX'][i-1]+frac*xtab['FLUX'][i]
+    #flux=(1-frac) * xtab['FLUX'][i-1]+frac*xtab['FLUX'][i]
     # print(flux)
 
-    return flux
+    #return flux
+
+def get_flux(xtab, wavelength=6563):
+    '''
+    Get the flux of a star at a particular wavelength
+    '''
+    print("In get_flux")
+    print("Xtab Type:", type(xtab))
+
+    wave, flux = xtab   # <-- unpack tuple
+
+    n = len(wave)
+    print("Length:", n)
+
+    i = 0
+    while i < n and wave[i] < wavelength:
+        i += 1
+
+    # guard against edges
+    if i == 0 or i == n:
+        raise ValueError("Wavelength out of bounds")
+
+    frac = (wavelength - wave[i-1]) / (wave[i] - wave[i-1])
+    f = (1 - frac) * flux[i-1] + frac * flux[i]
+
+    return f
 
 
 
@@ -140,14 +172,23 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
     while i<len(xtab):
         one=xtab[i]
         xtest='%s' % one['Source_name']
+        print('Using:', xtest)
         try:
-            spec_tab=get_gaia_spec(xtest)
+            #spec_tab=get_gaia_spec(xtest)
+            spec_tab = get_gaia_spec(xtest)
+            print("In get_gaia_flux")
+            print("SpecTab Type:",type(spec_tab))
+            print("SpecTab:", spec_tab)
+            #print("Xtab Type:", type(xtab))
+            #print("xtab:", xtab)
         except:
             spec_tab=[]
             print('Failed calling get_gaia_spec  for ',  one['Source_name'])
             return None
 
         if len(spec_tab)>0:
+            #print(spec_tab.shape)
+            #print(spec_tab[:5])
             f_ha=get_flux(spec_tab,6563)
             ha_values.append(f_ha)
             f_s2=get_flux(spec_tab,6720)
@@ -229,7 +270,9 @@ def steer(argv):
     xave_s2=[]
     xstd_s2=[]
     for one in files:
+        print("Starting routine")
         print(one)
+        print("Using file:", one)
         final=do_one(one)
         xfile=one.split('/')[-1]
         names.append(xfile)

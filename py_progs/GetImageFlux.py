@@ -311,7 +311,8 @@ def load_fits_image(fits_file):
             bad_pixel_mask = hdul['MASK'].data
             bad_pixel_mask = bad_pixel_mask.astype('bool')
         except:
-            bad_pixel_mask = create_bad_pixel_mask(data, value_range=[-100, 100], specific_values=None)
+            bad_pixel_mask = create_bad_pixel_mask(data, value_range=[-10, 8000], specific_values=None)
+#           bad_pixel_mask = create_bad_pixel_mask(data, value_range=[-100, 8000], specific_values=None)
 
     wcs = WCS(header)
     pixel_scale = get_pixel_scale(header)

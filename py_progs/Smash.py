@@ -553,6 +553,7 @@ def do_one(ra, dec, radius=0.5, outroot='smash_cat', rmag_max=22.0, keep_frac=0.
     table.rename_column('umag', 'U')
     table.rename_column('gmag', 'G')
     table.rename_column('rmag', 'R')
+    table.rename_column('imag', 'I')
     table.rename_column('zmag', 'Z')
 
     if outroot == '':
