@@ -53,6 +53,7 @@ import sys
 import os
 from astropy.io import ascii
 from astropy.table import Table,vstack
+from astropy.stats import sigma_clip
 import numpy as np
 import matplotlib.pyplot as plt
 import random
@@ -61,8 +62,28 @@ from GaiaCat import get_gaia_spec
 from GaiaCat import old_get_gaia_spec
 #from PhotCompare import get_gaia_spec
 
+import numpy as np
+from astropy.stats import sigma_clip
 
-                                                            
+def clean_stats(x):
+    # If masked → remove masked values
+    if hasattr(x, 'mask'):
+        x = x.compressed()
+    else:
+        x = np.array(x)
+
+    # Remove NaN / inf
+    x = x[np.isfinite(x)]
+
+    # Optional clipping
+    x = sigma_clip(x, sigma=3, maxiters=5)
+
+    return (
+        np.median(x),
+        np.mean(x),
+        np.std(x)
+    )
+
 
 #def get_flux(xtab , wavelength=6563):
     #'''
@@ -90,13 +111,13 @@ def get_flux(xtab, wavelength=6563):
     '''
     Get the flux of a star at a particular wavelength
     '''
-    print("In get_flux")
-    print("Xtab Type:", type(xtab))
+    #print("In get_flux")
+    #print("Xtab Type:", type(xtab))
 
     wave, flux = xtab   # <-- unpack tuple
 
     n = len(wave)
-    print("Length:", n)
+    #print("Length:", n)
 
     i = 0
     while i < n and wave[i] < wavelength:
@@ -169,6 +190,7 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
     select=[]
     ha_values=[]
     s2_values=[]
+    o3_values=[]
     while i<len(xtab):
         one=xtab[i]
         xtest='%s' % one['Source_name']
@@ -176,9 +198,9 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
         try:
             #spec_tab=get_gaia_spec(xtest)
             spec_tab = get_gaia_spec(xtest)
-            print("In get_gaia_flux")
-            print("SpecTab Type:",type(spec_tab))
-            print("SpecTab:", spec_tab)
+            #print("In get_gaia_flux")
+            #print("SpecTab Type:",type(spec_tab))
+            #print("SpecTab:", spec_tab)
             #print("Xtab Type:", type(xtab))
             #print("xtab:", xtab)
         except:
@@ -193,8 +215,10 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
             ha_values.append(f_ha)
             f_s2=get_flux(spec_tab,6720)
             s2_values.append(f_s2)
+            f_o3=get_flux(spec_tab,5007)
+            o3_values.append(f_o3)
             select.append(i)
-            print('Succeeded for ', one['Source_name'],f_ha,f_s2)
+            print('Succeeded for ', one['Source_name'],f_ha,f_s2,f_o3)
         # else:
         #    print('Failed    for ',  one['Source_name'])
         i+=1
@@ -203,6 +227,7 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
     ztab=xtab[select]
     ztab['Ha']=ha_values
     ztab['S2']=s2_values
+    ztab['O3']=o3_values
     if len(ztab)>0:
         return ztab
     else:
@@ -241,7 +266,10 @@ def do_one(xmatch_file,Rmin=14,Rmax=18,tmin=8000,tmax=15000, nmax=1000):
     except:
         print('Error could not make plots for %s' % (xmatch_file))
     print('test -- final')
+    print("Printing final")
     print(final)
+    print("Done printing final")
+    final.write('/Volumes/ExtSSD/data/DeMCELS/SMC/DECam_SWARP2/final.txt', format='ascii.fixed_width_two_line', overwrite=True)
     return final
         
         
@@ -269,26 +297,55 @@ def steer(argv):
     xmed_s2=[]
     xave_s2=[]
     xstd_s2=[]
+    xmed_o3=[]
+    xave_o3=[]
+    xstd_o3=[]
     for one in files:
         print("Starting routine")
         print(one)
         print("Using file:", one)
         final=do_one(one)
         xfile=one.split('/')[-1]
+        print("Xfile:", xfile)
         names.append(xfile)
         ha=final['Ha']/final['Net']
         s2=final['S2']/final['Net']
+        o3=final['O3']/final['Net']
 
-        xmed_ha.append(np.median(ha))
-        xave_ha.append(np.average(ha))
-        xstd_ha.append(np.std(ha))
+        #print("Ha:", ha)
+        #print("S2:", s2)
+
+        #ha_clean = ha.compressed()
+        #ha_clean = ha_clean[np.isfinite(ha_clean)]
+        #s2_clean = s2.compressed()
+        #s2_clean = s2_clean[np.isfinite(s2_clean)]
+        #print("min, max:", ha_clean.min(), ha_clean.max())
+        #print("min, max:", s2_clean.min(), s2_clean.max())
 
 
-        xmed_s2.append(np.median(s2))
-        xave_s2.append(np.average(s2))
-        xstd_s2.append(np.std(s2))
+        m, a, s = clean_stats(ha)
+        xmed_ha.append(m)
+        xave_ha.append(a)
+        xstd_ha.append(s)
 
-        xtab=Table([names,xmed_ha,xave_ha,xstd_ha,xmed_s2,xave_s2,xstd_s2],names=['Filename','Ha(Med)','Ha(Ave)','Ha(Std)','S2(Med)','S2(Ave)','S2(Std)'])
+        m, a, s, = clean_stats(s2)
+        xmed_s2.append(m)
+        xave_s2.append(a)
+        xstd_s2.append(s)
+
+        m, a, s, = clean_stats(o3)
+        xmed_o3.append(m)
+        xave_o3.append(a)
+        xstd_o3.append(s)
+
+        print("Xmed_Ha", xmed_ha)
+        print("Xave_Ha", xave_ha)
+        print("Xstd_Ha", xstd_ha)
+        print("Xmed_S2", xmed_s2)
+        print("Xave_S2", xave_s2)
+        print("Xstd_S2", xstd_s2)
+
+        xtab=Table([names,xmed_ha,xave_ha,xstd_ha,xmed_s2,xave_s2,xstd_s2,xmed_o3,xave_o3,xstd_o3],names=['Filename','Ha(Med)','Ha(Ave)','Ha(Std)','S2(Med)','S2(Ave)','S2(Std)','O3(Med)','O3(Ave)','O3(Std)'])
 
         if os.path.isfile('PhotMaster.txt'):
             xmaster=ascii.read('PhotMaster.txt')
