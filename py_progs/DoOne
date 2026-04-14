@@ -1,3 +1,4 @@
+ulimit -n 4096
 FIELD=$1
 MefCheck.py $FIELD
 MefSum.py  -np 8 $FIELD

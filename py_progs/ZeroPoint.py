@@ -76,7 +76,7 @@ def clean_stats(x):
     x = x[np.isfinite(x)]
 
     # Optional clipping
-    x = sigma_clip(x, sigma=3, maxiters=5)
+    x = sigma_clip(x, sigma=3, maxiters=1)
 
     return (
         np.median(x),
@@ -260,6 +260,8 @@ def do_one(xmatch_file,Rmin=14,Rmax=18,tmin=8000,tmax=15000, nmax=1000):
     final=get_gaia_flux(xtab=ztab,key='Ha',wave=6563)
 
     words=xmatch_file.split('/')
+    print("Xmatch file:", xmatch_file)
+    print("Words[-1]:", words[-1])
     outroot='Figs_phot/%s' % (words[-1])
     try:
         do_plot(final,outroot)
@@ -269,7 +271,9 @@ def do_one(xmatch_file,Rmin=14,Rmax=18,tmin=8000,tmax=15000, nmax=1000):
     print("Printing final")
     print(final)
     print("Done printing final")
-    final.write('/Volumes/ExtSSD/data/DeMCELS/SMC/DECam_SWARP2/final.txt', format='ascii.fixed_width_two_line', overwrite=True)
+    tabout = './ZeroPt_Tab/'
+    os.makedirs(tabout, exist_ok=True)
+    final.write(tabout + 'zpt_' + words[-1] , format='ascii.fixed_width_two_line', overwrite=True)
     return final
         
         
