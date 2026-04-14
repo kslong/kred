@@ -4,8 +4,64 @@ Fluxes Estimates of extended sources
 
 Kred contains a tool for estimating fluxes, or more properly, DN, for extended sources
 such as SNRs.  The basic idea is that one defines regions for the source and background
-and uses the routine :doc:`GetImageFlux.py <api/GetImageFlux/index>` to extract the 
+and uses the routine :doc:`GetImageFlux.py <api/GetImageFlux/index>` to extract the
 fluxes.
+
+Algorithm
+---------
+
+Net flux
+^^^^^^^^
+
+For each source, the routine measures the total (summed) pixel values in the source
+aperture and the median pixel value in a surrounding background annulus.  The net
+(background-subtracted) flux is then::
+
+    net_flux = source_flux - num_pixels_used * back_median
+
+where:
+
+* ``source_flux`` is the total (summed) pixel values in the source aperture,
+  which includes both the real source signal and the underlying background
+* ``back_median`` is the median pixel value in the background annulus
+* ``num_pixels_used`` is the number of unmasked pixels that contributed to the
+  source flux sum
+
+The background median (rather than the mean) is used because it is robust to
+contamination by faint stars or other sources that may fall within the background
+annulus.  The background level per pixel is then scaled by the actual number of
+unmasked source pixels to estimate the total background contribution, which is
+subtracted from the source flux.
+
+The net mean and median are simply the source value minus the background value.
+
+Flux error estimation
+^^^^^^^^^^^^^^^^^^^^^
+
+For extended-source photometry, the dominant uncertainty is not the statistical
+(Poisson) noise per pixel but rather the systematic uncertainty in the background
+level estimate.  A small error in the per-pixel background gets multiplied by the
+large number of source pixels, producing a large net flux error.
+
+To estimate this uncertainty, the background annulus is split into concentric radial
+sub-annuli (4 by default).  The median pixel value is computed independently in each
+sub-annulus, and the standard deviation of these medians measures how the background
+level varies with distance from the source::
+
+    back_flux_err = std(sub_annulus_medians)
+
+This radial subsampling approach captures background gradients and structure that
+would affect the result if a different annulus were chosen.  It is preferred over
+azimuthal (sector-based) subsampling because the latter would be dominated by
+localized contamination (e.g. a bright neighbor on one side of the source) rather
+than the true background uncertainty.
+
+The per-pixel uncertainty is then propagated to the net flux::
+
+    net_flux_err = num_pixels_used * back_flux_err
+
+Input
+-----
 
 The basic input, aside from the fits images for which one wishes to extract the flux,
 are 'masterfiles', which minimally must have at least the following columns::
@@ -18,9 +74,10 @@ are 'masterfiles', which minimally must have at least the following columns::
      J0047-7309  11.902080 -73.155560 ellipse    90.00    60.00   -15.00 yellow
      J0048-7319  12.081670 -73.327670 ellipse    82.50    65.00     0.00 yellow
 
-to define the area contained by the source.  Various RegTypes are allowed, as detailed
-in the routine.  Extra columns are allowed.  Generally, the routines (read and) write out 
-astropy tables in 'ascii.fixed_width_two_line' format. 
+to define the area contained by the source.  The supported RegTypes are ``ellipse``,
+``circle``, and ``annulus``.  For ``circle`` regions, only the ``Major`` column is used
+(as the radius) and ``Theta`` is ignored.  Extra columns are allowed.  Generally, the
+routines (read and) write out astropy tables in 'ascii.fixed_width_two_line' format.
 
 If you have defined region files by hand on ds9, and saved the region files in a format
 similar to::
@@ -35,57 +92,163 @@ similar to::
     ellipse(11.902080,-73.155560,90.00",60.00",-15.0) # color=yellow text={J0047-7309}
     ellipse(12.081670,-73.327670,82.50",65.00",0.0) # color=yellow text={J0048-7319}
 
-then you can use the routine  :doc:`reg2master.py <api/reg2master/index>` to comvert the 
+then you can use the routine  :doc:`reg2master.py <api/reg2master/index>` to comvert the
 region file to a master file.
 
+Running GetImageFlux
+--------------------
 
-Now if you run::
-    
-    GetImageFlux.py -autoback whatever.fits masterfile
+There are two ways to run GetImageFlux: by specifying images explicitly on the
+command line, or by using a match file that maps sources to their best images.
 
-the routine will constuct a circular region file outside of the source region and use
-this for creating a background, and calculate fluxes.  It will also write out a new
-master file, with this kind of format::
+Direct mode
+^^^^^^^^^^^
+
+The simplest use case is to process one or more images with automatic background
+generation::
+
+    GetImageFlux.py -auto_back masterfile image1.fits image2.fits ...
+
+or using a wildcard::
+
+    GetImageFlux.py -auto_back smc_snr_cotton24.txt xdata/*fits
+
+In this mode, **every** source in the masterfile is measured against **every** image.
+Sources that fall outside a given image are silently skipped.
+
+Match mode
+^^^^^^^^^^
+
+When working with many images and many sources spread across them, it is more
+efficient to use a match file that identifies which image(s) are best for each
+source.  This avoids processing all sources against all images.
+
+First, use :doc:`ImageMatch2Source.py <api/ImageMatch2Source/index>` to create the
+match file.  ImageMatch2Source reads an image catalog (produced by
+:doc:`ImageSum.py <api/ImageSum/index>`) and a source catalog, and finds the
+image whose center is closest to each source::
+
+    ImageMatch2Source.py Image_Sum_DECam_SUB2.txt smc_snr_cotton24.txt ha_sub_r
+
+This produces a file (by default ``XX_ha_sub_r.smc_snr_cotton24.txt``) with columns::
+
+    Source_name        RA       Dec  filename                                          separation_arcmin  rank
+    ----------- --------- --------- ------------------------------------------------- ----------------- ----
+     J0041-7336  10.25708 -73.60844 kred_smc/DECam_SUB2/SMC_c06/T06/SMC_c06_T06...              5.23    1
+     J0046-7308  11.66917 -73.13747 kred_smc/DECam_SUB2/SMC_c06/T06/SMC_c06_T06...              8.41    1
+
+You can adjust the maximum search radius with ``-sep`` (default 33 arcmin) and
+request multiple matches per source with ``-n_closest``::
+
+    ImageMatch2Source.py -sep 20 -n_closest 3 Image_Sum_DECam_SUB2.txt smc_snr_cotton24.txt ha_sub_r
+
+Then pass the match file to GetImageFlux with ``-match``::
+
+    GetImageFlux.py -match XX_ha_sub_r.smc_snr_cotton24.txt -auto_back smc_snr_cotton24.txt
+
+In this mode, only the sources that the match file assigns to a given image are
+measured for that image.  The image filenames come from the match file, so no
+explicit ``.fits`` files are needed on the command line.
+
+The ``-filter`` option
+^^^^^^^^^^^^^^^^^^^^^^
+
+By default the output file is named ``Flux_<region_file>.txt``.  When processing
+multiple filters, use ``-filter`` to avoid overwriting results::
+
+    GetImageFlux.py -match XX_ha_sub_r.sources.txt -auto_back -filter ha sources.txt
+    GetImageFlux.py -match XX_s2_sub_r.sources.txt -auto_back -filter s2 sources.txt
+
+This produces ``Flux_ha_<region>.txt`` and ``Flux_s2_<region>.txt`` respectively.
+
+Background regions
+^^^^^^^^^^^^^^^^^^
+
+The ``-auto_back`` flag constructs a circular annulus background region outside of each
+source region and writes out a new region file (``<input>_with_back.txt``) with this
+kind of format::
 
     No. Source_name    RA     Dec RegType  Major  Minor Theta Color  SourceBack
     --- ----------- -----  ------ ------ ------ -----_ ------ ----------
       1  J0041-7336 10.26 -73.61 ellipse 123.00 110.00    15 yellow     Source
       1  J0041-7336 10.26 -73.61 annulus 171.48 126.00    15 yellow       Back
-      1  J0041-7336 10.26 -73.61 annulus 281.00 158.00    15  green     Source
-      1  J0041-7336 10.26 -73.61 annulus 353.63 284.00    15  green       Back
       2  J0046-7308 11.67 -73.14 ellipse  92.50  70.00   -55 yellow     Source
       2  J0046-7308 11.67 -73.14 annulus 124.88  95.50   -55 yellow       Back
 
-
-Some editing may be requred, but then one can convert this into a region file, with the 
+Some editing may be requred, but then one can convert this into a region file, with the
 routine  :doc:`master2reg.py <api/master2reg/index>` which can be displayed in ds9, and
 modified as desired.  Once one is satisfied with the choices of background, one can save
 the region file, convert it back to a masterfile, and run::
 
-    GetImageFlux.py whatever.fits new_masterfile
+    GetImageFlux.py masterfile_with_back image1.fits image2.fits ...
 
-without -autoback.  
+without ``-auto_back``.
 
-The routine :doc:`GetImageFlux.py <api/GetImageFlux/index>` has various options, which can be explored with::
+The gap between the source outer edge and the background inner radius defaults to
+3 arcsec and can be adjusted with ``-gap``::
+
+    GetImageFlux.py -auto_back -gap 5 masterfile image1.fits
+
+Visualization
+^^^^^^^^^^^^^
+
+The routine :doc:`GetImageFlux.py <api/GetImageFlux/index>` has various options, which
+can be explored with::
 
     GetImageFlux.py -h
 
-
-If one includes the -viz option figures are produced that show the soruce and background regions in a local Figs\_flux directory
-
-The output that is produced has the following format::
-
-    Source_name   Src_flux Src_num_pixels_used Src_mean Src_median Src_mode  Src_min Src_max Back_num_pixels_used Back_mean Back_median Back_mode Back_min Back_max   Net_flux   Med_flux
-    ----------- ---------- ------------------- -------- ---------- -------- -------- ------- -------------------- --------- ----------- --------- -------- -------- ---------- ----------
-     J0041-7336  515630.51                5041    48.52      39.88    22.60  -196.59  422.03                21992     14.75       11.60      5.30 -1056.70  4373.91  457170.07  142568.93
-     J0046-7308 1637613.09                2389   322.97     264.74   148.28  -146.48 4063.22                15016    457.00      258.00   -140.01 -1228.32  4402.29 1021251.81   16100.82
-     J0047-7308 2578933.54                1037  1194.03    1138.03  1026.03    58.42 3840.28                 3852    637.29      485.58    182.16 -1462.81  4332.35 2075383.92  676590.43
-     J0047-7309 4544013.48                2247  1071.19    1051.90  1013.32   488.10 3687.06                10122    583.66      390.00      2.68 -1042.10  4332.35 3667689.86 1487290.79
-     J0048-7133  499304.77               22417    11.00      10.60     9.80  -486.80 3660.66               104763      7.35        7.18      6.84 -2094.51  2970.70  338334.11   76649.03
-     J0048-7319 2055453.84                1977   488.06     278.01  -142.09  -536.73 2240.81                 8645    319.37      144.11   -206.40 -1376.09  4399.86 1770546.53  264713.95
-     J0049-7314 1843292.78                2824   260.07     231.82   175.33 -1305.88 1644.70                19154    266.97      170.37    -22.84 -1771.55  3942.05 1362180.20  173553.41
+If one includes the ``-viz`` option, figures are produced that show the source and
+background regions in a local ``Figs_Flux/`` directory.
 
 
-which need to be examined in detail.  Src refers to measurements of the source region, while Back of course refers to the Background region. Net\_flux and Med\_flux are two ways of obtaining
-the total background subtracted flux.  Net\_flux is based on the median value of the background and is the more accurate.  Med\flux uses the median of the source and background regions 
-instead. 
+Output
+------
+
+When processing multiple images, a single consolidated output file is written::
+
+    Flux_<region_file>.txt          (without -filter)
+    Flux_<filter>_<region_file>.txt (with -filter)
+
+This file contains three types of rows for each source in each image, identified by
+the ``SourceBack`` column:
+
+* **Source** -- photometry of the source region
+* **Back** -- photometry of the background region
+* **Net** -- background-subtracted values
+
+The rows are grouped as Source, Back, Net for each source in each image, with sources
+ordered to match the input region table.  An ``Image`` column identifies which FITS
+file each measurement came from.
+
+The key columns in the output are:
+
+* ``flux`` -- total flux (DN) in the aperture; for Net rows this is the background-subtracted flux
+* ``flux_err`` -- estimate of the flux uncertainty due to background level determination
+  (see `Flux error estimation`_); 0 for Source rows
+* ``mean``, ``median`` -- mean and median pixel values; for Net rows these are source minus background
+* ``std`` -- standard deviation of pixel values in the aperture
+* ``surface_brightness_per_arcsec2`` -- flux per square arcsecond
+* ``num_pixels_used`` -- number of unmasked pixels in the aperture
+* ``frac_in_image`` -- fraction of the aperture that falls within the image (1.0 = fully contained)
+
+Example output (abbreviated)::
+
+    Source_name SourceBack      flux  flux_err   mean median frac_in_image                  Image
+    ----------- ---------- --------- --------- ------ ------ ------------- ----------------------
+     J0041-7336     Source 515630.51     0.000 48.520 39.880          1.00 SMC_c06_T06.ha_sub_r
+     J0041-7336       Back 321620.23     0.120 14.750 11.600          1.00 SMC_c06_T06.ha_sub_r
+     J0041-7336        Net 457170.07  1276.800 33.770 28.280          1.00 SMC_c06_T06.ha_sub_r
+
+In the output table:
+
+* **Back rows**: ``flux_err`` is the per-pixel background uncertainty
+* **Net rows**: ``flux_err`` is the total flux error (scaled by source pixel count)
+* **Source rows**: ``flux_err`` is 0 (not applicable)
+
+Sources that fall entirely outside an image are silently skipped.  For sources that are
+only partially within an image, ``frac_in_image`` will be less than 1.0, and the
+photometry will be based only on the pixels that fall on the image.  Users should
+examine this column to decide whether to trust partial measurements.
+
+If no regions in the region file overlap with a given image, that image is skipped
+with a message, and it does not contribute to the output file.

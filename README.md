@@ -1,6 +1,8 @@
 This repository contains tools developed to reduce a set
-of DECam images acquired to map SII and Ha emission in the 
+of DECam images acquired to map SII and Ha emission in the
 Magellanic Clouds
+
+**Documentation:** [https://kred.readthedocs.io/en/latest/](https://kred.readthedocs.io/en/latest/)
 
 
 To use these tools this directory should be placed both

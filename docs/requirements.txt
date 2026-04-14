@@ -1,0 +1,10 @@
+sphinx
+sphinx-rtd-theme
+sphinx-autoapi
+astropy
+numpy
+scipy
+photutils
+astroquery
+matplotlib
+gaiaxpy
