@@ -1,57 +1,76 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-"""Calculate the ZeroPoint for an image
+"""Calculate the magnitude zero point for an image
 
 Space Telescope Science Institute
 
 Synopsis
 --------
 
-Calculate the ZeroPoint for an image
-given one or more tables containing
-forced photometry based on the Gaia
-catalog
+Given one or more forced-photometry tables (output of MefPhot), fit a
+linear model to determine the magnitude zero point and color term that
+place instrumental magnitudes on the Gaia or SMASH photometric scale.
+The derived zero point can be compared directly to the MAGZERO keyword
+carried in the MEF file header.
 
 Command Line Usage
 ------------------
 
 ::
 
-    usage: ZeroCalc.py [-h] [-R] [-G] file1.fits file2.fits ...
+    ZeroCalc.py [-h] [-R] [-G] [-smash] [-out ROOT] file1.fits file2.fits ...
 
-    where:
-
-    -h prints this help documenation and quits
-    -R indicates that the fit should be to the Gaia R mags
-    -G indicates that it should be to Gaia (G) which is
-    what the DECam pipeline usgses
-
-    and this should be followed by a list of files
+    -h        Print this help and exit
+    -R        Fit to the reference catalog R band (default)
+    -G        Fit to the reference catalog G band
+    -smash    Input tables were produced with SMASH as the reference catalog
+    -out ROOT Output table root name (default: MagZero)
 
 Description
 -----------
 
-The routine uses the masured magnitudes in
-    images and cculates a model to correct these
-    to a Gaia Band
+The routine fits the model::
 
-    The results of the fits are written to a table
-    whose name depends in part on which band is used,
-    and plots are created to illutrate the resuls
+    m_ref = m_inst + c_0 + c_1 * (G - R)
+
+where ``m_inst = 28 - 2.5 * log10(flux)`` and ``m_ref`` is the magnitude
+from the reference catalog in the chosen band.  The fitted ``c_0`` gives
+the zero-point correction: ``ZP_derived = 28 + c_0``.
+
+Output files encode the reference band and catalog to avoid overwriting
+when both Gaia and SMASH runs are performed on the same data::
+
+    MagZero.<band>.gaia.txt    (default)
+    MagZero.<band>.smash.txt   (with -smash)
+
+Each row in the summary table contains: Filter, Exptime, Root, MagZero
+(= 28 + c_0), c_0, c_1, rms, HdrZero (pipeline MAGZERO from the MEF
+header), Catalog, and Filename.
+
+Diagnostic plots are written to ``FigZero/`` with matching suffixes::
+
+    FigZero/<band>_<root>.gaia.png
+    FigZero/<band>_<root>.smash.png
 
 Primary Routines
 ----------------
 
 do_one
-    do_many
+    Process a single photometry table and return fit results.
+
+do_many
+    Process multiple tables and accumulate results into a summary file.
 
 Notes
 -----
 
-This is one of the routines developed to see how
-    consistent MAGZERO is as delivered by the community
-    pipeline.
+This routine was developed to assess the consistency of MAGZERO as
+delivered by the DECam community pipeline.  Comparing the HdrZero column
+(pipeline MAGZERO) with the MagZero column (28 + c_0) across many
+exposures reveals systematic trends with filter, time, or CCD.  Running
+with both Gaia and SMASH provides an additional cross-check because the
+SMASH color term should be close to zero for r-band data.
 
 Version History
 ---------------
@@ -60,7 +79,12 @@ Version History
     Coding begun
 
 251228 ksl
-    Updated to allow matching to the Gaia G band
+    Updated to allow fitting to the Gaia G band
+
+260414 ksl
+    Added SMASH support (-smash flag).
+    Output filenames now include catalog suffix (.gaia / .smash).
+    Plot axis labels and titles reflect the reference catalog used.
 
 """
 
@@ -144,10 +168,10 @@ def fit_magnitude_model(data):
 
 
 
-def do_fig(xtab,band='R',outroot=''):
+def do_fig(xtab, band='R', outroot='', catalog='gaia'):
     '''
-    Plot results.  The top two panels plot the 
-    magnitudes as measured by aperstats, assuming 
+    Plot results.  The top two panels plot the
+    magnitudes as measured by aperstats, assuming
     a zeropoint of 28
 
     The bottom two panels plot the fitted
@@ -155,6 +179,8 @@ def do_fig(xtab,band='R',outroot=''):
     '''
 
     # outdir='./Figs_phot%s' %  XDIR
+
+    ref_label = 'SMASH' if catalog.lower() == 'smash' else 'Gaia'
 
     if band=='G':
         color_label='B-R'
@@ -174,12 +200,12 @@ def do_fig(xtab,band='R',outroot=''):
         cbar.set_label(color_label)
         # Make colorbar solid (ignore scatter alpha)
         if hasattr(cbar, "solids") and cbar.solids is not None:
-            cbar.solids.set_alpha(1.0) 
-        plt.xlabel('Gaia G mag')
+            cbar.solids.set_alpha(1.0)
+        plt.xlabel(f'{ref_label} G mag')
     else:
         plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05)
         plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05)
-        plt.xlabel('Gaia R mag')
+        plt.xlabel(f'{ref_label} R mag')
     plt.ylabel('DECam mag')
     plt.plot([11,24],[11,24],'k-')
 
@@ -203,11 +229,11 @@ def do_fig(xtab,band='R',outroot=''):
     else:
         plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05)
         plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05)
-    plt.xlabel('Gaia R mag')
+    plt.xlabel(f'{ref_label} R mag')
     plt.ylabel('Corrected DECam mag')
     plt.plot([11,24],[11,24],'k-')
     plt.ylim(14,22)
-    plt.xlim(14,22)  
+    plt.xlim(14,22)
 
 
 
@@ -219,13 +245,13 @@ def do_fig(xtab,band='R',outroot=''):
     cbar.set_label(color_label)
     # Make colorbar solid (ignore scatter alpha)
     if hasattr(cbar, "solids") and cbar.solids is not None:
-        cbar.solids.set_alpha(1.0) 
-    plt.xlabel('Gaia G mag')
+        cbar.solids.set_alpha(1.0)
+    plt.xlabel(f'{ref_label} G mag')
     plt.ylabel('DECam mag')
     plt.plot([11,24],[0,0],'k-')
 
-    plt.ylim(-2,2) 
-    plt.xlim(14,22) 
+    plt.ylim(-2,2)
+    plt.xlim(14,22)
 
     plt.subplot(2,2,4)
     # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
@@ -237,22 +263,23 @@ def do_fig(xtab,band='R',outroot=''):
     cbar.set_label(color_label)
     # Make colorbar solid (ignore scatter alpha)
     if hasattr(cbar, "solids") and cbar.solids is not None:
-        cbar.solids.set_alpha(1.0) 
-    plt.xlabel('Gaia R mag')
+        cbar.solids.set_alpha(1.0)
+    plt.xlabel(f'{ref_label} R mag')
     plt.ylabel('Corrected DECam mag')
     plt.plot([11,24],[0,0],'k-')
-    plt.ylim(-2,2) 
-    plt.xlim(14,22)  
+    plt.ylim(-2,2)
+    plt.xlim(14,22)
 
     if outroot!='':
-        plt.suptitle('Band %s photometry of %s' %( band,outroot))
+        plt.suptitle('Band %s photometry of %s (%s)' % (band, outroot, ref_label))
 
     os.makedirs('FigZero',exist_ok=True)
 
     plt.tight_layout()
 
     if outroot!='':
-        plt.savefig('FigZero/%s_%s.png' % (band,outroot))
+        cat_suffix = '.smash' if catalog.lower() == 'smash' else '.gaia'
+        plt.savefig('FigZero/%s_%s%s.png' % (band, outroot, cat_suffix))
     plt.close()
 
 
@@ -264,9 +291,21 @@ def get_filter_from_filename(filename):
 
 
 
-def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits',option='R'):
+def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits', option='R',
+           catalog='gaia'):
     '''
-    The routine processes a single file and returns the result of the fits 
+    The routine processes a single file and returns the result of the fits.
+
+    Parameters
+    ----------
+    filename : str
+        Path to photometry FITS table (output of MefPhot).
+    option : str
+        Gaia band to fit against: 'R' (default) or 'G'.
+    catalog : str
+        Reference catalog used to produce the photometry table:
+        'gaia' (default) or 'smash'.  Affects plot axis labels and the
+        Catalog column in the summary table written by do_many.
     '''
     try:
         xtab=Table.read(filename)
@@ -322,14 +361,19 @@ def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits',option='R'):
     fitted_table = results['table']
 
     outroot=filename.split('/')[-1].replace('.fits','')
+    # Strip catalog suffix if already present (from MefPhot output filenames)
+    # so do_fig can re-append it cleanly without doubling up.
+    for _sfx in ('.gaia', '.smash'):
+        if outroot.endswith(_sfx):
+            outroot = outroot[:-len(_sfx)]
+            break
+
+    do_fig(fitted_table, option, outroot, catalog=catalog)
+
+    return 28.+results['c_0'],results['c_0'],results['c_1'],results['rms'],phot_zero,xfilt,xtime
 
 
-    do_fig(fitted_table,option,outroot)
-
-    return 28.+results['c_0'],results['c_0'],results['c_1'],results['rms'],phot_zero,xfilt,xtime  
-
-
-def do_many(filenames,band='G',outroot='MagZero'):
+def do_many(filenames, band='G', outroot='MagZero', catalog='gaia'):
     zz=[]
     cc0=[]
     cc1=[]
@@ -340,7 +384,7 @@ def do_many(filenames,band='G',outroot='MagZero'):
     root=[]
     for one in filenames:
         try:
-            zero,c_0,c_1,rms,hzero,xfilt,xt=do_one(one,band)
+            zero,c_0,c_1,rms,hzero,xfilt,xt=do_one(one, band, catalog=catalog)
             zz.append(zero)
             cc0.append(c_0)
             cc1.append(c_1)
@@ -354,13 +398,17 @@ def do_many(filenames,band='G',outroot='MagZero'):
             print('Failed on %s' % (one))
             print(f'Exception: {e}')
 
-    xtab=Table([xfilter,xtime,root,zz,cc0,cc1,rrms,header_zero,filenames],names=['Filter','Exptime','Root','MagZero','c_0','c_1','rms','HdrZero','Filename'])
+    cat_label = 'smash' if catalog.lower() == 'smash' else 'gaia'
+    xtab=Table([xfilter,xtime,root,zz,cc0,cc1,rrms,header_zero,
+                [cat_label]*len(root),filenames],
+               names=['Filter','Exptime','Root','MagZero','c_0','c_1','rms',
+                      'HdrZero','Catalog','Filename'])
     xtab['MagZero'].format='.3f'
     xtab['c_0'].format='.3f'
     xtab['c_1'].format='.3f'
     xtab['rms'].format='.3f'
     xtab['HdrZero'].format='.3f'
-    outfile='%s.%s.txt' % (outroot,band)
+    outfile='%s.%s.%s.txt' % (outroot, band, cat_label)
     if os.path.isfile(outfile):
         qtab=Table.read(outfile,format='ascii.fixed_width_two_line')
         i=0
@@ -384,13 +432,14 @@ def do_many(filenames,band='G',outroot='MagZero'):
 
 def steer(argv):
     '''
-    usage: ZeroCalc.py [-h] [-R] [-G] file1.fits file2.fits ...
+    usage: ZeroCalc.py [-h] [-R] [-G] [-smash] file1.fits file2.fits ...
     '''
 
     filenames=[]
     band='R'
     outroot='MagZero'
-    
+    catalog='gaia'
+
     i=1
     while i<len(argv):
         if argv[i][:2]=='-h':
@@ -400,6 +449,8 @@ def steer(argv):
             band='G'
         elif argv[i][:2]=='-R':
             band='R'
+        elif argv[i][:6]=='-smash':
+            catalog='smash'
         elif argv[i][:4]=='-out':
             i+=1
             outroot=argv[i]
@@ -413,7 +464,7 @@ def steer(argv):
             return
         i+=1
 
-    do_many(filenames,band,outroot)
+    do_many(filenames, band, outroot, catalog=catalog)
 
 
 

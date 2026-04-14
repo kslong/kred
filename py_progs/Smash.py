@@ -74,6 +74,11 @@ the query parameters for verification.
 Primary Routines
 ----------------
 
+get_smash
+    Retrieve a SMASH catalog for a field and return the file path.
+    This is the main entry point for use by MefPhot and other pipeline
+    tools; it mirrors the interface of GaiaCat.get_gaia.
+
 smash_cone_search
     Perform a cone search on SMASH DR2 catalog (with caching).
 
@@ -84,7 +89,8 @@ plot_positions
     Create a scatter plot of selected objects vs RA and Dec with histograms.
 
 do_one
-    Retrieve and filter SMASH catalog for a single sky position.
+    Retrieve and filter SMASH catalog for a single sky position and write
+    the result to a FITS file.
 
 steer
     Command line interface for catalog retrieval.
@@ -101,14 +107,37 @@ check_cache
 save_to_cache
     Save query result to cache with header keywords.
 
+Output Column Names
+-------------------
+
+After filtering, column names are standardised to match the Gaia
+convention used throughout the pipeline:
+
+* RA, Dec  -- sky coordinates (degrees)
+* U, G, R, Z -- DECam ugriz photometry (magnitudes)
+
+The G and R columns are in the DECam photometric system (not Gaia's
+broadband G and R), so the color term c_1 in ZeroCalc is expected to
+be small for DECam r-band data.
+
 Notes
 -----
 
-Requires the NOAO Data Lab client library (dl).
+* Requires the NOAO Data Lab client library (``dl``).
+* SMASH DR2 covers the Magellanic Cloud region only; use GaiaCat for
+  fields outside this footprint.
+* Raw query results are cached in ``Smash/`` to avoid redundant archive
+  queries.  The filtered output used by MefPhot is also cached in
+  ``Smash/`` with a filename that encodes all query parameters.
 
-History:
+Version History
+---------------
 
-260108 ksl Coding begun
+260108 ksl
+    Coding begun
+
+260414 ksl
+    Added get_smash() as the pipeline integration entry point.
 
 """
 
@@ -579,6 +608,58 @@ def do_one(ra, dec, radius=0.5, outroot='smash_cat', rmag_max=22.0, keep_frac=0.
                        rmag_max=rmag_max, keep_frac=keep_frac, n_original=n_original)
 
     return table
+
+
+def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
+    """
+    Retrieve a SMASH DR2 catalog for the given field, using a local cache
+    if available.  Returns the path to the catalog FITS file.
+
+    This is the SMASH analogue of GaiaCat.get_gaia(ra, dec, size) and
+    provides the same calling interface: given a field centre and a
+    half-diagonal radius in degrees it returns a file path that can be
+    passed directly to MefPhot.do_forced_photometry as ``object_file``.
+
+    The returned table has standardised column names RA, Dec, U, G, R, Z
+    and is compatible with ZeroCalc without further processing.
+
+    Parameters
+    ----------
+    ra : float
+        Right Ascension of the field centre in degrees.
+    dec : float
+        Declination of the field centre in degrees.
+    size : float
+        Half-diagonal search radius in degrees (same convention as
+        get_gaia).
+    rmag_max : float, optional
+        Faint-end r-band magnitude limit passed to do_one (default: 22.0).
+    keep_frac : float, optional
+        Fraction of quality-selected stars to retain (default: 0.5).
+
+    Returns
+    -------
+    str
+        Path to a FITS file containing the filtered SMASH DR2 catalog.
+
+    Notes
+    -----
+    The cached file is stored in the ``Smash/`` subdirectory using a
+    filename that encodes ra, dec, size, rmag_max and keep_frac so that
+    queries with different parameters produce separate cache entries.
+    """
+    os.makedirs(SMASH_CACHE_DIR, exist_ok=True)
+    outroot = os.path.join(
+        SMASH_CACHE_DIR,
+        f'smash_{ra:.4f}_{dec:+.4f}_{size:.3f}_r{rmag_max:.1f}_k{keep_frac:.2f}'
+    )
+    outfile = outroot + '.fits'
+    if os.path.exists(outfile):
+        print(f'get_smash: using cached catalog {outfile}')
+        return outfile
+    do_one(ra, dec, radius=size, outroot=outroot,
+           rmag_max=rmag_max, keep_frac=keep_frac, plot=False)
+    return outfile
 
 
 def steer(argv):

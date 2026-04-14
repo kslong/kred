@@ -8,7 +8,7 @@ Command Line Usage
 
 ::
 
-    python MefPhot.py [-h] [-np N] [-r RADIUS] [-b INNER OUTER] [-out ROOT] file1 [file2 ...]
+    MefPhot.py [-h] [-np N] [-r RADIUS] [-b INNER OUTER] [-cat gaia|smash] [-out ROOT] file1 [file2 ...]
 
 **Required Arguments:**
 
@@ -31,50 +31,66 @@ file1, file2, ...
 -b INNER OUTER
     Inner and outer radius of background annulus in pixels (default: 8, 12)
 
+-cat gaia|smash
+    Reference catalog for source positions (default: gaia).
+    Use ``smash`` for Magellanic Cloud fields to calibrate against the
+    DECam-native SMASH DR2 photometric system.
+
 -out ROOT
-    Root name for output tables (default: derived from filename)
-
-Examples
---------
-Process a single file with default parameters::
-
-    python MefPhot.py observation.fits
-
-Process multiple files in parallel with custom aperture::
-
-    python MefPhot.py -np 16 -r 5 -b 7 10 file1.fits file2.fits
-
-Process files listed in a text file::
-
-    python MefPhot.py -out my_photometry file_list.txt
+    Root name for output tables (default: derived from input filename)
 
 Output
 ------
-Results are written to ``TabPhot/`` directory as FITS tables containing:
+Results are written to ``TabPhot/`` as two-extension FITS files.  The
+output filename encodes the reference catalog so that Gaia and SMASH
+runs on the same input do not overwrite each other::
+
+    TabPhot/<root>.gaia.fits    (default)
+    TabPhot/<root>.smash.fits   (with -cat smash)
+
+Extension 0 carries the primary header copied from the input MEF file.
+Extension 1 is a FITS table with header keywords DATE, FILE, RADIUS,
+B_IN, B_OUT, and CATALOG, and columns including:
 
 * Source positions (pixel and sky coordinates)
-* Raw and background-subtracted fluxes
-* Photometric uncertainties
+* Raw and background-subtracted fluxes with uncertainties
 * FWHM and eccentricity measurements
-* Instrumental magnitudes
-* Gaia catalog information
+* Instrumental magnitudes (zero point = 28)
+* Reference catalog photometry (RA, Dec, G, R, ...)
+* EXT, CCD, Filter, Exptime, MAGZERO, SEEING, Filename
+* Catalog: 'Gaia' or 'SMASH'
+
+Examples
+--------
+Process with Gaia (default)::
+
+    MefPhot.py observation.fits
+    MefPhot.py -np 16 -r 5 -b 7 10 file1.fits file2.fits
+
+Process using SMASH catalog (Magellanic Cloud fields)::
+
+    MefPhot.py -cat smash observation.fits
+
+Process files listed in a text file::
+
+    MefPhot.py -out my_photometry file_list.txt
 
 Dependencies
-Required packages:
+------------
 
 * photutils >= 2.3.0 (earlier versions may hang)
-* astropy
-* numpy
-* scipy
-* matplotlib
-* GaiaCat module (for Gaia catalog access)
-* ImageSum module (for image utilities)
+* astropy, numpy, scipy, matplotlib
+* GaiaCat module (for Gaia DR3 catalog access)
+* Smash module (for SMASH DR2 catalog access)
+* ImageSum module (for WCS and image utilities)
 
 Notes
 -----
 
-* The Gaia catalog file ``Gaia_MagClouds.fits`` must be present either locally
-  or in the ``kred/xdata`` directory
+* For Gaia: ``Gaia_MagClouds.fits`` must be present locally or in
+  ``$KRED/xdata/``
+* For SMASH: requires the NOAO Data Lab client (``dl`` package); SMASH
+  only covers the Magellanic Cloud footprint
 * Processing time is approximately 8 minutes per MEF file on an M1 Mac
 * Background is estimated using sigma-clipped statistics in an annulus
 * Sources outside image boundaries (with margin) are automatically excluded
@@ -88,7 +104,14 @@ Version History
 2025-12-05 ksl
     Tested with photutils 2.3.0
 
+2026-04-14 ksl
+    Added SMASH DR2 as an alternative reference catalog (-cat smash).
+    Output filenames now include catalog suffix (.gaia.fits / .smash.fits).
+    MEF primary header copied to extension 0 of output file.
+    Extraction parameters written to extension 1 header.
+
 Author
+------
 Space Telescope Science Institute
 
 .. moduleauthor:: KSL
@@ -124,6 +147,7 @@ import multiprocessing as mp
 import traceback
 
 from GaiaCat import get_gaia
+from Smash import get_smash
 import ImageSum
 
 
@@ -481,7 +505,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
 
 
 def do_one(filename='foo.fits', outroot='', nrows_max=-1,
-           rstar=4, b_in=4, b_out=8):
+           rstar=4, b_in=4, b_out=8, catalog='gaia'):
     """
     Process a single multi-extension FITS file.
 
@@ -504,12 +528,17 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         Inner background annulus radius in pixels. Default: 4.
     b_out : float, optional
         Outer background annulus radius in pixels. Default: 8.
+    catalog : str, optional
+        Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
+        SMASH is only available over the Magellanic Cloud footprint but
+        uses the same DECam photometric system as the images, giving a
+        smaller color term in ZeroCalc.
 
     Returns
     -------
     Table
         Combined photometry table from all extensions with additional columns:
-        
+
         * EXT : int - FITS extension number
         * CCD : str - CCD/detector name
         * Filter : str - Filter name from header
@@ -518,6 +547,7 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         * SEEING : float - Seeing FWHM in arcseconds
         * Star_rad : float - Star radius parameter
         * Filename : str - Input filename
+        * Catalog : str - Reference catalog used ('Gaia' or 'SMASH')
 
     Raises
     ------
@@ -572,8 +602,9 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         print(f'Could not locate {filename}')
         raise IOError
 
+    catalog = catalog.lower()
     print(f'do_one: Starting {filename} with radius {rstar:.1f} '
-          f'and annulus {b_in:.1f} {b_out:.1f}')
+          f'and annulus {b_in:.1f} {b_out:.1f} using {catalog} catalog')
 
     xexptime = x['PRIMARY'].header['EXPTIME']
 
@@ -610,8 +641,11 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         height = info['height_deg']
         size = np.sqrt(width*width + height*height) / 2.
         
-        gaia_file = get_gaia(ra, dec, size)
-        phot_table = do_forced_photometry(filename, one_extension, gaia_file,
+        if catalog == 'smash':
+            cat_file = get_smash(ra, dec, size)
+        else:
+            cat_file = get_gaia(ra, dec, size)
+        phot_table = do_forced_photometry(filename, one_extension, cat_file,
                                           nrows_max, rstar, b_in, b_out)
         phot_table['EXT'] = one_extension
         phot_table['CCD'] = image_extensions['NAME'][i]
@@ -624,23 +658,33 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
     phot['SEEING'] = ssee
     phot['Star_rad'] = srad
     phot['Filename'] = filename
+    phot['Catalog'] = 'SMASH' if catalog == 'smash' else 'Gaia'
 
     # Write output
     os.makedirs('TabPhot', exist_ok=True)
     if outroot == '':
         outroot = filename.split('/')[-1]
         outroot = outroot.replace('.fz', '').replace('.fits', '')
-    outfile = f'TabPhot/{outroot}.fits'
+    cat_suffix = '.smash' if catalog == 'smash' else '.gaia'
+    outfile = f'TabPhot/{outroot}{cat_suffix}.fits'
 
-    # Store metadata
     now = Time.now()
-    phot.meta['DATE'] = now.isot
-    phot.meta['FILE'] = filename
-    phot.meta['RADIUS'] = rstar
-    phot.meta['B_IN'] = b_in
-    phot.meta['B_OUT'] = b_out
 
-    phot.write(outfile, format='fits', overwrite=True)
+    # Extension 0: copy primary header from input MEF file
+    primary_hdu = fits.PrimaryHDU(header=x['PRIMARY'].header.copy())
+
+    # Extension 1: photometry table with extraction parameters in header
+    table_hdu = fits.table_to_hdu(phot)
+    table_hdu.header['DATE'] = (now.isot, 'Processing timestamp')
+    table_hdu.header['FILE'] = (filename[:68], 'Input FITS file')
+    table_hdu.header['RADIUS'] = (rstar, 'Aperture radius in pixels')
+    table_hdu.header['B_IN'] = (b_in, 'Inner background annulus radius in pixels')
+    table_hdu.header['B_OUT'] = (b_out, 'Outer background annulus radius in pixels')
+    table_hdu.header['CATALOG'] = ('SMASH' if catalog == 'smash' else 'Gaia',
+                                   'Reference catalog used for source positions')
+
+    fits.HDUList([primary_hdu, table_hdu]).writeto(outfile, overwrite=True)
+    x.close()
     print(f'do_one: Completed {filename} and written to {outfile}')
     return phot
 
@@ -664,6 +708,7 @@ def _safe_do_one_with_index(args):
         * rstar : float - Aperture radius
         * b_in : float - Inner background radius
         * b_out : float - Outer background radius
+        * catalog : str - Reference catalog ('gaia' or 'smash')
 
     Returns
     -------
@@ -680,11 +725,11 @@ def _safe_do_one_with_index(args):
     This function catches all exceptions to prevent multiprocessing pool
     failures. Exceptions are converted to string messages for reporting.
     """
-    index, filename, outroot, nrows_max, rstar, b_in, b_out = args
+    index, filename, outroot, nrows_max, rstar, b_in, b_out, catalog = args
     try:
         numbered_outroot = f"{outroot}_{index:03d}" if outroot else ''
         do_one(filename, outroot=numbered_outroot, nrows_max=nrows_max,
-               rstar=rstar, b_in=b_in, b_out=b_out)
+               rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog)
         return (filename, True, None)
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
@@ -693,7 +738,7 @@ def _safe_do_one_with_index(args):
 
 
 def do_many(filenames, outroot='', nrows_max=-1, rstar=4, b_in=4, b_out=8,
-            n_processes=None, logfile=None, verbose_errors=False):
+            n_processes=None, logfile=None, verbose_errors=False, catalog='gaia'):
     """
     Process multiple FITS files in parallel.
 
@@ -766,7 +811,7 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=4, b_in=4, b_out=8,
     if n_processes is None:
         n_processes = max(1, mp.cpu_count() - 1)
 
-    args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out)
+    args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out, catalog)
                  for i, fname in enumerate(filenames)]
 
     with Pool(processes=n_processes) as pool:
@@ -866,6 +911,7 @@ def steer(argv):
     nrows_max = -1
     b_in = 8
     b_out = 12
+    catalog = 'gaia'
 
     i = 1
     while i < len(argv):
@@ -878,6 +924,12 @@ def steer(argv):
         elif argv[i][:4] == '-out':
             i += 1
             root = argv[i]
+        elif argv[i][:4] == '-cat':
+            i += 1
+            catalog = argv[i].lower()
+            if catalog not in ('gaia', 'smash'):
+                print(f'Error: -cat must be gaia or smash, got {argv[i]}')
+                return
         elif argv[i][:2] == '-r':
             i += 1
             rstar = float(argv[i])
@@ -899,7 +951,7 @@ def steer(argv):
         i += 1
 
     print(f'Starting with {len(filenames)} filenames and rstar of {rstar:.1f} '
-          f'and background annulus of {b_in:.1f} {b_out:.1f}')
+          f'and background annulus of {b_in:.1f} {b_out:.1f} using {catalog} catalog')
 
     if rstar > b_in or b_in > b_out:
         print('UNPHYSICAL limits for photometry')
@@ -908,11 +960,12 @@ def steer(argv):
     if len(filenames) == 1 or np_proc < 2:
         for one_file in filenames:
             do_one(filename=one_file, outroot=root, nrows_max=nrows_max,
-                   rstar=rstar, b_in=b_in, b_out=b_out)
+                   rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog)
         return
 
     do_many(filenames, outroot=root, nrows_max=nrows_max, rstar=rstar,
-            b_in=b_in, b_out=b_out, n_processes=np_proc, logfile=None)
+            b_in=b_in, b_out=b_out, n_processes=np_proc, logfile=None,
+            catalog=catalog)
 
 
 if __name__ == "__main__":
