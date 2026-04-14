@@ -259,10 +259,11 @@ def save_to_cache(table, ra, dec, radius):
     table.write(cache_file, format='fits', overwrite=True)
 
     # Add header keywords describing the query
+    # Coerce to plain Python floats in case numpy scalars were passed
     with fits.open(cache_file, mode='update') as hdu:
-        hdu[1].header['QUERY_RA'] = (ra, 'Query center RA (deg)')
-        hdu[1].header['QUERY_DE'] = (dec, 'Query center Dec (deg)')
-        hdu[1].header['QUERY_R'] = (radius, 'Query radius (deg)')
+        hdu[1].header['QUERY_RA'] = (float(ra), 'Query center RA (deg)')
+        hdu[1].header['QUERY_DE'] = (float(dec), 'Query center Dec (deg)')
+        hdu[1].header['QUERY_R'] = (float(radius), 'Query radius (deg)')
         hdu[1].header['CATALOG'] = ('SMASH_DR2', 'Source catalog')
         hdu[1].header['NOBJ_RAW'] = (len(table), 'Number of objects in raw query')
         hdu.flush()
@@ -591,9 +592,9 @@ def do_one(ra, dec, radius=0.5, outroot='smash_cat', rmag_max=22.0, keep_frac=0.
 
     # Add header keywords describing the query and filtering
     with fits.open(outfile, mode='update') as hdu:
-        hdu[1].header['QUERY_RA'] = (ra, 'Query center RA (deg)')
-        hdu[1].header['QUERY_DE'] = (dec, 'Query center Dec (deg)')
-        hdu[1].header['QUERY_R'] = (radius, 'Query radius (deg)')
+        hdu[1].header['QUERY_RA'] = (float(ra), 'Query center RA (deg)')
+        hdu[1].header['QUERY_DE'] = (float(dec), 'Query center Dec (deg)')
+        hdu[1].header['QUERY_R'] = (float(radius), 'Query radius (deg)')
         hdu[1].header['CATALOG'] = ('SMASH_DR2', 'Source catalog')
         hdu[1].header['RMAG_MAX'] = (rmag_max, 'Max r-band magnitude filter')
         hdu[1].header['KEEPFRAC'] = (keep_frac, 'Fraction of objects kept')

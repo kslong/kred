@@ -363,7 +363,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
     # Load source catalog
     sources = read_table(object_file)
     if 'G' in sources.colnames:
-        good = ~sources['R'].mask
+        good = np.isfinite(sources['R'])
         sources = sources[good]
 
     coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
@@ -498,7 +498,11 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
 
     # Add source names if not present
     if 'Source_name' not in phot_table.colnames:
-        names = [f'x{one["id"]:05d}' for one in phot_table]
+        id_col = 'id' if 'id' in phot_table.colnames else 'id_1'
+        if id_col in phot_table.colnames:
+            names = [f'x{one[id_col]:05d}' for one in phot_table]
+        else:
+            names = [f'x{i:05d}' for i in range(len(phot_table))]
         phot_table['Source_name'] = names
 
     return phot_table
