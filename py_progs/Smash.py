@@ -76,8 +76,14 @@ Primary Routines
 
 get_smash
     Retrieve a SMASH catalog for a field and return the file path.
+    Tries a pre-assembled local file first, falls back to the archive.
     This is the main entry point for use by MefPhot and other pipeline
     tools; it mirrors the interface of GaiaCat.get_gaia.
+
+get_smash_from_file
+    Extract sources from a pre-assembled local SMASH catalog file
+    (default: Smash_MagClouds.fits in the current directory or
+    $KRED/xdata/), mirroring GaiaCat.get_gaia_from_file.
 
 smash_cone_search
     Perform a cone search on SMASH DR2 catalog (with caching).
@@ -152,6 +158,10 @@ from dl import queryClient as qc
 
 # Cache directory for raw SMASH query results
 SMASH_CACHE_DIR = 'Smash'
+
+# Module-level cache for the pre-assembled catalog (populated on first use)
+_smash_preassembled_table = None
+_smash_preassembled_path  = None
 
 
 def get_cache_filename(ra, dec, radius):
@@ -611,6 +621,134 @@ def do_one(ra, dec, radius=0.5, outroot='smash_cat', rmag_max=22.0, keep_frac=0.
     return table
 
 
+def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
+                        outroot='', rmag_max=22.0, keep_frac=0.5):
+    """
+    Extract SMASH DR2 sources from a local pre-assembled catalog file.
+
+    Performs a rectangular RA/Dec selection from a pre-downloaded SMASH
+    catalog, applies quality filtering, standardises column names, and
+    writes the subset to the ``Smash/`` cache directory.  This mirrors
+    the behaviour of ``GaiaCat.get_gaia_from_file()``.
+
+    Parameters
+    ----------
+    ra : float
+        Right Ascension of the field centre in degrees.
+    dec : float
+        Declination of the field centre in degrees.
+    size_deg : float
+        Half-width of the extraction region in degrees.  The RA range is
+        widened by ``1/cos(dec)`` to preserve equal angular coverage in
+        both dimensions.
+    filename : str, optional
+        Name of the pre-assembled SMASH catalog.  Searched first in the
+        current directory, then in ``$KRED/xdata/``.
+        Default: ``'Smash_MagClouds.fits'``.
+    outroot : str, optional
+        Root name for the output file.  If empty, constructed from RA and
+        Dec.
+    rmag_max : float, optional
+        Faint-end r-band magnitude limit passed to
+        ``select_fraction_smash_dr2`` (default: 22.0).
+    keep_frac : float, optional
+        Fraction of quality-selected stars to retain (default: 0.5).
+
+    Returns
+    -------
+    str
+        Path to the output FITS file containing the filtered sources with
+        standardised column names (RA, Dec, U, G, R, Z).
+
+    Raises
+    ------
+    IOError
+        If ``filename`` cannot be located in the current directory or in
+        ``$KRED/xdata/``.
+    """
+    # Locate the pre-assembled file
+    xfilename = ''
+    if os.path.isfile(filename):
+        xfilename = filename
+        print(f'get_smash_from_file: using local file {xfilename}')
+    else:
+        KRED = os.environ.get('KRED')
+        if KRED is not None:
+            candidate = os.path.join(KRED, 'xdata', filename)
+            if os.path.isfile(candidate):
+                xfilename = candidate
+                print(f'get_smash_from_file: using {xfilename}')
+            else:
+                raise IOError(f'Could not locate {filename} locally or in $KRED/xdata/')
+        else:
+            raise IOError(
+                f'Could not locate {filename} locally and KRED environment variable is not set'
+            )
+
+    global _smash_preassembled_table, _smash_preassembled_path
+    if _smash_preassembled_path == xfilename and _smash_preassembled_table is not None:
+        print(f'get_smash_from_file: using in-memory cached table ({len(_smash_preassembled_table):,} rows)')
+        xtab = _smash_preassembled_table
+    else:
+        size_gb = os.path.getsize(xfilename) / 1e9
+        print(f'get_smash_from_file: reading {xfilename} ({size_gb:.1f} GB, slow first time)...')
+        xtab = Table.read(xfilename)
+        _smash_preassembled_table = xtab
+        _smash_preassembled_path  = xfilename
+        print(f'get_smash_from_file: loaded {len(xtab):,} rows into memory')
+
+    # Detect column naming convention:
+    #   raw archive  -> lowercase 'ra', 'dec', 'rmag', 'umag', 'gmag', 'zmag'
+    #   pre-assembled -> standardised 'RA', 'Dec', 'R', 'U', 'G', 'Z'
+    raw_names = 'ra' in xtab.colnames
+    ra_col  = 'ra'  if raw_names else 'RA'
+    dec_col = 'dec' if raw_names else 'Dec'
+
+    # Rectangular sky selection (RA range scaled by cos(dec))
+    dec_min = dec - 0.5 * size_deg
+    dec_max = dec + 0.5 * size_deg
+    xscale = np.cos(np.radians(dec))
+    factor = 0.5 * size_deg / xscale
+    ra_min = ra - factor
+    ra_max = ra + factor
+
+    mask = (
+        (xtab[ra_col]  > ra_min) & (xtab[ra_col]  < ra_max) &
+        (xtab[dec_col] > dec_min) & (xtab[dec_col] < dec_max)
+    )
+    ftab = xtab[mask]
+    print(f'get_smash_from_file: {len(ftab)} sources in sky region before filtering')
+
+    # select_fraction_smash_dr2 expects the raw column name 'rmag'.
+    # Pre-assembled files already call it 'R', so rename temporarily.
+    if not raw_names:
+        ftab.rename_column('R', 'rmag')
+
+    ftab = select_fraction_smash_dr2(ftab, rmag_max=rmag_max, keep_frac=keep_frac)
+    print(f'get_smash_from_file: {len(ftab)} sources after select_fraction_smash_dr2')
+
+    # Standardise column names to match pipeline convention
+    if raw_names:
+        ftab.rename_column('ra',   'RA')
+        ftab.rename_column('dec',  'Dec')
+        ftab.rename_column('umag', 'U')
+        ftab.rename_column('gmag', 'G')
+        ftab.rename_column('rmag', 'R')
+        ftab.rename_column('zmag', 'Z')
+    else:
+        # Undo the temporary rename used for filtering
+        ftab.rename_column('rmag', 'R')
+
+    os.makedirs(SMASH_CACHE_DIR, exist_ok=True)
+    if outroot == '':
+        outroot = f'{ra:.4f}_{dec:+.4f}'
+    outfile = os.path.join(SMASH_CACHE_DIR, f'Smash.{outroot}.fits')
+
+    ftab.write(outfile, format='fits', overwrite=True)
+    print(f'get_smash_from_file: wrote {len(ftab)} sources to {outfile}')
+    return outfile
+
+
 def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
     """
     Retrieve a SMASH DR2 catalog for the given field, using a local cache
@@ -623,6 +761,11 @@ def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
 
     The returned table has standardised column names RA, Dec, U, G, R, Z
     and is compatible with ZeroCalc without further processing.
+
+    The function first attempts to extract sources from a pre-assembled
+    local file (``Smash_MagClouds.fits``, searched in the current directory
+    then in ``$KRED/xdata/``).  If the file is not available it falls back
+    to a live cone search against the NOAO Data Lab archive.
 
     Parameters
     ----------
@@ -645,10 +788,26 @@ def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
 
     Notes
     -----
-    The cached file is stored in the ``Smash/`` subdirectory using a
-    filename that encodes ra, dec, size, rmag_max and keep_frac so that
-    queries with different parameters produce separate cache entries.
+    When using the pre-assembled file the output is cached in
+    ``Smash/Smash.<ra>_<dec>.fits``.  When falling back to the archive
+    the output is cached using a filename that also encodes rmag_max and
+    keep_frac so that queries with different parameters produce separate
+    cache entries.
     """
+    # Try the pre-assembled local file first
+    try:
+        outroot = f'{ra:.4f}_{dec:+.4f}_r{rmag_max:.1f}_k{keep_frac:.2f}'
+        outfile = os.path.join(SMASH_CACHE_DIR, f'Smash.{outroot}.fits')
+        if os.path.exists(outfile):
+            print(f'get_smash: using cached catalog {outfile}')
+            return outfile
+        return get_smash_from_file(ra, dec, size,
+                                   rmag_max=rmag_max, keep_frac=keep_frac,
+                                   outroot=outroot)
+    except IOError:
+        print('get_smash: pre-assembled file not available, falling back to archive')
+
+    # Fall back to live archive query
     os.makedirs(SMASH_CACHE_DIR, exist_ok=True)
     outroot = os.path.join(
         SMASH_CACHE_DIR,

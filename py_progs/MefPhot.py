@@ -89,8 +89,16 @@ Notes
 
 * For Gaia: ``Gaia_MagClouds.fits`` must be present locally or in
   ``$KRED/xdata/``
-* For SMASH: requires the NOAO Data Lab client (``dl`` package); SMASH
-  only covers the Magellanic Cloud footprint
+* For SMASH: uses ``Smash_MagClouds.fits`` if present locally or in
+  ``$KRED/xdata/``; falls back to a live NOAO Data Lab query (requires
+  the ``dl`` package) if the file is absent.  SMASH only covers the
+  Magellanic Cloud footprint.
+* **Parallel SMASH memory**: ``Smash_MagClouds.fits`` is ~15 GB and each
+  worker process loads it independently.  Before spawning workers,
+  ``do_many`` checks whether ``-np N`` would exceed available RAM and
+  prompts for a lower value if so.  Pre-populating the per-tile cache
+  with a serial run (``-np 1``) first avoids the issue entirely on
+  subsequent runs.
 * Processing time is approximately 8 minutes per MEF file on an M1 Mac
 * Background is estimated using sigma-clipped statistics in an annulus
 * Sources outside image boundaries (with margin) are automatically excluded
@@ -149,6 +157,199 @@ import traceback
 from GaiaCat import get_gaia
 from Smash import get_smash
 import ImageSum
+
+
+def get_total_memory():
+    """Return total installed physical RAM in bytes, cross-platform.
+
+    Returns
+    -------
+    int or None
+        Total RAM in bytes, or None if it cannot be determined.
+    """
+    try:
+        import psutil
+        return psutil.virtual_memory().total
+    except ImportError:
+        pass
+
+    import platform
+    system = platform.system()
+
+    if system == 'Linux':
+        try:
+            with open('/proc/meminfo') as f:
+                for line in f:
+                    if line.startswith('MemTotal:'):
+                        return int(line.split()[1]) * 1024   # kB -> bytes
+        except OSError:
+            pass
+
+    elif system == 'Darwin':
+        try:
+            import subprocess
+            result = subprocess.run(['sysctl', '-n', 'hw.memsize'],
+                                    capture_output=True, text=True, check=True)
+            return int(result.stdout.strip())
+        except Exception:
+            pass
+
+    return None
+
+
+def get_available_memory():
+    """Return available (free + reclaimable) memory in bytes, cross-platform.
+
+    Tries psutil first (works on Linux and macOS), then falls back to
+    platform-specific methods so the function works without psutil.
+
+    Returns
+    -------
+    int or None
+        Available memory in bytes, or None if it cannot be determined.
+    """
+    try:
+        import psutil
+        return psutil.virtual_memory().available
+    except ImportError:
+        pass
+
+    import platform
+    system = platform.system()
+
+    if system == 'Linux':
+        try:
+            with open('/proc/meminfo') as f:
+                for line in f:
+                    if line.startswith('MemAvailable:'):
+                        return int(line.split()[1]) * 1024   # kB -> bytes
+        except OSError:
+            pass
+
+    elif system == 'Darwin':
+        try:
+            import subprocess
+            result = subprocess.run(['vm_stat'], capture_output=True, text=True, check=True)
+            page_size = 4096
+            free = inactive = speculative = 0
+            for line in result.stdout.splitlines():
+                if 'page size of' in line:
+                    page_size = int(line.split('page size of')[1].split()[0])
+                elif line.startswith('Pages free:'):
+                    free = int(line.split(':')[1].strip().rstrip('.'))
+                elif line.startswith('Pages inactive:'):
+                    inactive = int(line.split(':')[1].strip().rstrip('.'))
+                elif line.startswith('Pages speculative:'):
+                    speculative = int(line.split(':')[1].strip().rstrip('.'))
+            return (free + inactive + speculative) * page_size
+        except Exception:
+            pass
+
+    return None
+
+
+def check_smash_memory(n_processes, catalog, n_files=None):
+    """Warn and prompt when launching multiple SMASH workers would exhaust RAM.
+
+    Each worker process independently loads the pre-assembled SMASH catalog
+    into memory.  The actual number of workers spawned is
+    ``min(n_processes, n_files)``, so both values are taken into account.
+    Always prints a one-line memory summary when the pre-assembled file is
+    present, and prompts the user to lower the process count if the total
+    would exceed available RAM.
+
+    Parameters
+    ----------
+    n_processes : int
+        Requested number of parallel worker processes.
+    catalog : str
+        Catalog name ('gaia' or 'smash').  Returns immediately for 'gaia'.
+    n_files : int or None
+        Number of files to be processed.  If provided, the effective worker
+        count is capped at ``min(n_processes, n_files)``.
+
+    Returns
+    -------
+    int
+        The number of processes to actually use (may be adjusted by the user).
+    """
+    if catalog != 'smash':
+        return n_processes
+
+    # Locate the pre-assembled file (mirrors the search in Smash.get_smash_from_file)
+    smash_file = None
+    kred = os.environ.get('KRED', '')
+    for candidate in ['Smash_MagClouds.fits',
+                       os.path.join(kred, 'xdata', 'Smash_MagClouds.fits') if kred else None]:
+        if candidate and os.path.isfile(candidate):
+            smash_file = candidate
+            break
+
+    if smash_file is None:
+        print('check_smash_memory: pre-assembled file not found; archive path will be used.',
+              flush=True)
+        return n_processes
+
+    # Effective workers = min(requested, files to process)
+    effective = n_processes if n_files is None else min(n_processes, n_files)
+
+    # Workers that hit an already-cached per-tile file skip loading the big table.
+    # Count existing Smash/Smash.*.fits files as a proxy for already-cached tiles.
+    import glob as _glob
+    n_cached   = len(_glob.glob(os.path.join('Smash', 'Smash.*.fits')))
+    n_uncached = max(0, n_files - n_cached) if n_files is not None else effective
+    # At most `effective` workers run simultaneously; only loaders need the big file.
+    loaders = min(effective, n_uncached)
+
+    # Per-worker overhead: Python runtime + astropy imports + FITS data in memory.
+    OVERHEAD_GB = 1.5
+    file_gb     = os.path.getsize(smash_file) / 1e9
+    total_gb    = loaders * file_gb + effective * OVERHEAD_GB
+    total_bytes = int(total_gb * 1e9)
+
+    total_ram   = get_total_memory()
+    # Warn when estimated usage exceeds 60% of total installed RAM
+    WARN_FRAC   = 0.6
+    warn_bytes  = int(total_ram * WARN_FRAC) if total_ram is not None else None
+
+    if total_ram is not None:
+        total_ram_gb = total_ram / 1e9
+        warn_gb      = warn_bytes / 1e9
+        # Safe process count: workers that fit within the 60% budget
+        safe_np  = max(1, int((warn_bytes / 1e9 - effective * OVERHEAD_GB) / file_gb))
+        mem_ok   = total_bytes <= warn_bytes
+    else:
+        total_ram_gb = None
+        warn_gb      = None
+        safe_np      = 1
+        mem_ok       = False    # can't determine, so warn
+
+    # Always show the memory summary so the user can see the check ran
+    cache_note = (f'; {n_cached} tile(s) already cached'
+                  f', so {loaders} worker(s) will load big file')
+    if total_ram_gb is not None:
+        mem_str = (f'{total_gb:.1f} GB estimated vs {warn_gb:.1f} GB limit'
+                   f' (60% of {total_ram_gb:.1f} GB total RAM)')
+    else:
+        mem_str = f'{total_gb:.1f} GB estimated; total RAM unknown'
+    print(f'SMASH memory check: {mem_str}{cache_note}', flush=True)
+
+    if mem_ok:
+        return n_processes
+
+    print(f'WARNING: insufficient RAM for {effective} parallel SMASH worker(s).',
+          flush=True)
+    print(f'  Suggested: {safe_np} process(es)', flush=True)
+    print(flush=True)
+
+    try:
+        response = input(f'Enter number of processes to use [{safe_np}]: ').strip()
+        chosen = int(response) if response else safe_np
+    except (EOFError, ValueError):
+        print(f'Non-interactive or invalid input — using {safe_np} process(es).', flush=True)
+        chosen = safe_np
+
+    return max(1, chosen)
 
 
 def random_rows(tab, nrows, seed=None):
@@ -960,6 +1161,8 @@ def steer(argv):
     if rstar > b_in or b_in > b_out:
         print('UNPHYSICAL limits for photometry')
         return
+
+    np_proc = check_smash_memory(np_proc, catalog, n_files=len(filenames))
 
     if len(filenames) == 1 or np_proc < 2:
         for one_file in filenames:

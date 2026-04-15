@@ -178,7 +178,7 @@ from astropy.wcs import NoConvergence
 from astropy.wcs._wcs import InvalidCoordinateError
 from http.client import IncompleteRead
 import ImageSum
-from GaiaCat import get_gaia_from_archive as get_gaia
+from GaiaCat import get_gaia
 
 # Restore stdout/stderr after imports
 # _devnull.close()
@@ -1220,7 +1220,7 @@ def do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False,
         ra, dec, size_deg = get_size(filename)
         print('Making new GaiaCat file - %.2f %.2f %.2f' % (ra, dec, size_deg))
         print('do_one - RA, Dec, size: ', ra, dec, size_deg)
-        gaia_file = get_gaia(ra, dec, size_deg, outroot)
+        gaia_file = get_gaia(ra, dec, size_deg)
 
     do_xphot(filename, gaia_file, forced, nrows_max, outroot)
     return
@@ -1305,7 +1305,7 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True
 
     gaia_files = []
     for one in zpos:
-        gaia_file = get_gaia(one['RA'], one['Dec'], one['Size'], outroot='')
+        gaia_file = get_gaia(one['RA'], one['Dec'], one['Size'])
         gaia_files.append(gaia_file)
     zpos['gaia_file'] = gaia_files
 
