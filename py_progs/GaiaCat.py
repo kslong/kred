@@ -16,8 +16,8 @@ Command Line Usage
 
 ::
 
-    GaiaCat.py [-h] [-archive] [-gfile FILENAME] [-rad DEGREES] [-out OUTROOT]
-               input.fits or RA Cec
+    GaiaCat.py [-h] [-archive] [-redo] [-gfile FILENAME] [-rad DEGREES] [-out OUTROOT]
+               input.fits or RA Dec
 
 Arguments
 ---------
@@ -30,7 +30,7 @@ RA, Dec  RA and DEC of field center
 
 or
 
-whatever.fits  a fits file with a WCS,  not that size is not taken from WCS
+whatever.fits  a fits file with a WCS,  note that size is not taken from WCS
 
 Options
 -------
@@ -41,6 +41,10 @@ Options
 -archive
     Retrieve from GAIA archive instead of local file. By default,
     tries local file first, then falls back to archive.
+
+-redo
+    Force re-retrieval from the archive even if the output file already
+    exists. Implies -archive.
 
 -gfile FILENAME
     Name of local GAIA catalog file. Searches locally first, then
@@ -92,6 +96,10 @@ Command line with RA/Dec::
 Force archive retrieval (skip local file)::
 
     $ GaiaCat.py 84.925 -66.274 -archive -rad 0.3
+
+Force re-retrieval from archive even if output file exists::
+
+    $ GaiaCat.py 84.925 -66.274 -redo -rad 0.3
 
 Use a different local catalog file::
 
@@ -488,6 +496,101 @@ def get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
         return []
 
 
+def get_gaia_spectra_batch(source_ids, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
+    """Retrieve XP spectra for multiple Gaia sources in a single archive call.
+
+    Uses gaiaxpy.calibrate() on the full list, then splits and caches results
+    in the same per-star format used by get_gaia_spec(), so subsequent calls
+    to get_gaia_spec() for the same IDs will be served from cache.
+
+    Parameters
+    ----------
+    source_ids : list of int
+        Gaia DR3 source identifiers.
+    GAIA_CACHE_DIR : str, optional
+        Cache directory. Default is './GaiaSpec'.
+    redo : bool, optional
+        If False (default), skip IDs already in cache.
+
+    Returns
+    -------
+    n_ok : int
+        Number of spectra successfully retrieved and cached.
+    n_fail : int
+        Number of IDs for which retrieval failed.
+    """
+    import warnings
+    import pandas as pd
+    from gaiaxpy import calibrate
+
+    pathlib.Path(GAIA_CACHE_DIR).mkdir(parents=True, exist_ok=True)
+
+    if not redo:
+        pending = [sid for sid in source_ids
+                   if not (path.exists(f'{GAIA_CACHE_DIR}/gaia_spec_{sid}.csv') and
+                           path.exists(f'{GAIA_CACHE_DIR}/gaia_spec_{sid}_sampling.csv'))]
+        n_cached = len(source_ids) - len(pending)
+        if n_cached:
+            print(f'get_gaia_spectra_batch: {n_cached} already cached, fetching {len(pending)}')
+    else:
+        pending = list(source_ids)
+
+    if not pending:
+        print('get_gaia_spectra_batch: all spectra already cached')
+        return len(source_ids), 0
+
+    # Read credentials if available
+    username, password = None, None
+    cred_file = os.path.expanduser('~/.gaia_credentials')
+    if os.path.isfile(cred_file):
+        with open(cred_file) as f:
+            lines = f.read().splitlines()
+        if len(lines) >= 2:
+            username, password = lines[0].strip(), lines[1].strip()
+
+    print(f'get_gaia_spectra_batch: retrieving {len(pending)} spectra in one call')
+    spectra = None
+    for attempt in range(3):
+        try:
+            if attempt > 0:
+                print(f'get_gaia_spectra_batch: retry {attempt}/2...')
+                time.sleep(5)
+            with warnings.catch_warnings():
+                warnings.filterwarnings('ignore', message='.*archive is unstable.*')
+                spectra, sampling = calibrate(pending, save_file=False,
+                                              username=username, password=password)
+            break
+        except Exception as e:
+            print(f'get_gaia_spectra_batch: attempt {attempt+1} failed: {e}')
+    if spectra is None:
+        return 0, len(pending)
+
+    # sampling is the same for all stars — save once as a reference
+    sampling_df = sampling if isinstance(sampling, pd.DataFrame) else pd.DataFrame(sampling)
+
+    n_ok = 0
+    n_fail = 0
+    retrieved_ids = set(spectra['source_id'].values)
+
+    for sid in pending:
+        if sid not in retrieved_ids:
+            n_fail += 1
+            continue
+        row = spectra[spectra['source_id'] == sid].iloc[0]
+        flux_path = f'{GAIA_CACHE_DIR}/gaia_spec_{sid}.csv'
+        wave_path = f'{GAIA_CACHE_DIR}/gaia_spec_{sid}_sampling.csv'
+        try:
+            pd.DataFrame({'flux': [str(tuple(row['flux']))]}).to_csv(flux_path, index=False)
+            pd.DataFrame({'pos': [str(tuple(sampling_df['pos'].iloc[0]))]}).to_csv(wave_path, index=False)
+            n_ok += 1
+        except Exception as e:
+            print(f'get_gaia_spectra_batch: failed caching {sid}: {e}')
+            n_fail += 1
+
+    print(f'get_gaia_spectra_batch: {n_ok} cached, {n_fail} failed')
+    return n_ok, n_fail
+
+
 def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
                        size_deg=0.3, filename='Gaia_MagClouds.fits', outroot=''):
     """Extract GAIA sources from a local catalog file within a sky region.
@@ -646,6 +749,7 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     - ``teff_gspphot`` → ``teff``
     - ``logg_gspphot`` → ``log_g``
     - ``distance_gspphot`` → ``D``
+    - ``has_xp_continuous`` → ``xp_spec_exists`` (boolean flag)
 
     Output is written to ``Gaia/Gaia.<outroot>.fits`` in FITS table format.
 
@@ -737,10 +841,13 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     r.rename_column('logg_gspphot', 'log_g')
     r.rename_column('distance_gspphot', 'D')
 
-    r['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D'].write(
-        outfile, format='fits', overwrite=True
-    )
-    print('Wrote %s with %d objects' % (outfile, len(r)))
+    cols = ['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D']
+    if 'has_xp_continuous' in r.colnames:
+        r.rename_column('has_xp_continuous', 'xp_spec_exists')
+        cols.append('xp_spec_exists')
+    r[cols].write(outfile, format='fits', overwrite=True)
+    n_spec = int(np.sum(r['xp_spec_exists'])) if 'xp_spec_exists' in r.colnames else 0
+    print('Wrote %s with %d objects (%d with XP spectra)' % (outfile, len(r), n_spec))
     return outfile
 
 
@@ -949,6 +1056,7 @@ def steer(argv):
         Path to output file, or None if error
     """
     force_archive = False
+    redo = False
     rad_deg = 0.5
     outroot = ''
     ra = None
@@ -963,6 +1071,9 @@ def steer(argv):
             return
         elif argv[i] == '-archive':
             force_archive = True
+        elif argv[i] == '-redo':
+            redo = True
+            force_archive = True
         elif argv[i][:6] == '-gfile':
             i += 1
             gaia_file = argv[i]
@@ -972,6 +1083,12 @@ def steer(argv):
         elif argv[i][:4] == '-out':
             i += 1
             outroot = argv[i]
+        elif argv[i][0] == '-' and ra is not None and dec is None:
+            try:
+                dec = float(argv[i])
+            except ValueError:
+                print('Error: Unknown option:', argv[i])
+                return
         elif argv[i][0] == '-':
             print('Error: Unknown option:', argv[i])
             return
@@ -1036,7 +1153,7 @@ def steer(argv):
     # Try local file first (unless -archive specified), then fall back to archive
     if force_archive:
         print('Source mode : archive (forced)')
-        outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot)
+        outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot, redo=redo)
     else:
         print('Source mode : local file (with archive fallback)')
         try:
@@ -1045,7 +1162,7 @@ def steer(argv):
         except (IOError, FileNotFoundError) as e:
             print(f'Local file not available: {e}')
             print('Falling back to archive...')
-            outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot)
+            outfile = get_gaia_from_archive(ra=ra, dec=dec, rad_deg=rad_deg, outroot=outroot, redo=redo)
 
     return outfile
 

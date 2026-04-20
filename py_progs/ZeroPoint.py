@@ -57,7 +57,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import random
 
-from PhotCompare import get_gaia_spec
+from GaiaCat import get_gaia_spec
 
 
                                                             
