@@ -1,0 +1,10 @@
+# Large data files not tracked by git
+xdata/*.fits
+xdata/*.csv.gz
+
+# Python cache
+py_progs/__pycache__/
+
+# Docs build output
+docs/build/
+docs/pydocs/
