@@ -565,8 +565,16 @@ def get_gaia_spectra_batch(source_ids, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
     if spectra is None:
         return 0, len(pending)
 
-    # sampling is the same for all stars — save once as a reference
-    sampling_df = sampling if isinstance(sampling, pd.DataFrame) else pd.DataFrame(sampling)
+    # sampling is a numpy array of wavelength positions (same for all stars)
+    import numpy as np
+    if isinstance(sampling, pd.DataFrame):
+        wave_arr = sampling['pos'].iloc[0] if 'pos' in sampling.columns else sampling.iloc[0].values
+    else:
+        wave_arr = np.asarray(sampling)
+    wave_str = str(tuple(wave_arr))
+
+    # identify flux column name
+    flux_col = 'flux' if 'flux' in spectra.columns else [c for c in spectra.columns if c != 'source_id'][0]
 
     n_ok = 0
     n_fail = 0
@@ -580,8 +588,8 @@ def get_gaia_spectra_batch(source_ids, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
         flux_path = f'{GAIA_CACHE_DIR}/gaia_spec_{sid}.csv'
         wave_path = f'{GAIA_CACHE_DIR}/gaia_spec_{sid}_sampling.csv'
         try:
-            pd.DataFrame({'flux': [str(tuple(row['flux']))]}).to_csv(flux_path, index=False)
-            pd.DataFrame({'pos': [str(tuple(sampling_df['pos'].iloc[0]))]}).to_csv(wave_path, index=False)
+            pd.DataFrame({'flux': [str(tuple(row[flux_col]))]}).to_csv(flux_path, index=False)
+            pd.DataFrame({'pos': [wave_str]}).to_csv(wave_path, index=False)
             n_ok += 1
         except Exception as e:
             print(f'get_gaia_spectra_batch: failed caching {sid}: {e}')
