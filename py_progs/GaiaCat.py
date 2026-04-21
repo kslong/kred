@@ -849,6 +849,7 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     r.rename_column('logg_gspphot', 'log_g')
     r.rename_column('distance_gspphot', 'D')
 
+    r['log_g'].unit = None  # strip unparseable 'log(cm.s**-2)' unit
     cols = ['Source_name', 'RA', 'Dec', 'B', 'G', 'R', 'teff', 'log_g', 'D']
     if 'has_xp_continuous' in r.colnames:
         r.rename_column('has_xp_continuous', 'xp_spec_exists')
