@@ -782,12 +782,6 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
         ... )
 
     """
-    try:
-        Gaia = load_Gaia(probe_service=True)  # set False if you want no network here
-    except RuntimeError as err:
-        # Distinguishing message already provided by load_Gaia
-        raise RuntimeError(f"Gaia archive access failed: {err}") from err
-
     if outroot == '':
         outroot = '%05.1f_%05.1f' % (ra, dec)
     os.makedirs('Gaia', exist_ok=True)
@@ -796,6 +790,11 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     if not redo and os.path.isfile(outfile):
         print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
         return outfile
+
+    try:
+        Gaia = load_Gaia(probe_service=False)
+    except RuntimeError as err:
+        raise RuntimeError(f"Gaia archive access failed: {err}") from err
 
     print('get_gaia: Getting data for RA Dec of %.5f %.5f and size of %.2f' % (ra, dec, rad_deg))
     Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
@@ -808,8 +807,11 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
         try:
             if attempt > 0:
                 print(f'get_gaia: Retry attempt {attempt + 1}/{max_retries}...')
+            print('get_gaia: Submitting query to Gaia archive...')
             j = Gaia.cone_search_async(coord, radius=u.Quantity(rad_deg, u.deg))
+            print('get_gaia: Waiting for results...')
             r = j.get_results()
+            print('get_gaia: Results received.')
             # Success
             break
         except IncompleteRead as e:
