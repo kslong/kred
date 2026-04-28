@@ -126,6 +126,7 @@ from astropy.io import fits, ascii
 from astropy.table import Table, join, hstack
 from astropy.coordinates import SkyCoord
 import astropy.units as u
+from astroquery.mast import Catalogs
 
 
 # --------------------------------------------------------------------------------
@@ -791,47 +792,61 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
         print('get_gaia: %s exists so returning, use redo==True to redo' % outfile)
         return outfile
 
-    try:
-        Gaia = load_Gaia(probe_service=False)
-    except RuntimeError as err:
-        raise RuntimeError(f"Gaia archive access failed: {err}") from err
-
     print('get_gaia: Getting data for RA Dec of %.5f %.5f and size of %.2f' % (ra, dec, rad_deg))
-    Gaia.ROW_LIMIT = nmax  # Ensure the default row limit.
-    coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
 
-    # Retry loop for handling IncompleteRead errors
     r = None
     start_time = time.time()
-    for attempt in range(max_retries):
+
+    # Try MAST first — synchronous, avoids ESA async job storage bugs
+    try:
+        print('get_gaia: Querying MAST GaiaDR3...')
+        r = Catalogs.query_region('%f %f' % (ra, dec), radius='%f deg' % rad_deg, catalog='GaiaDR3')
+        if nmax > 0:
+            r = r[:nmax]
+        print('get_gaia: MAST query returned %d rows.' % len(r))
+    except Exception as e:
+        print(f'get_gaia: MAST query failed ({type(e).__name__}: {e}), falling back to ESA archive...')
+        r = None
+
+    # Fall back to ESA archive with retry loop
+    if r is None:
         try:
-            if attempt > 0:
-                print(f'get_gaia: Retry attempt {attempt + 1}/{max_retries}...')
-            print('get_gaia: Submitting query to Gaia archive...')
-            j = Gaia.cone_search_async(coord, radius=u.Quantity(rad_deg, u.deg))
-            print('get_gaia: Waiting for results...')
-            r = j.get_results()
-            print('get_gaia: Results received.')
-            # Success
-            break
-        except IncompleteRead as e:
-            print(f'get_gaia: IncompleteRead error on attempt {attempt + 1}: {e}')
-            if attempt < max_retries - 1:
-                print(f'get_gaia: Retrying in {retry_delay} seconds...')
-                time.sleep(retry_delay)
-            else:
-                print('get_gaia: Max retries reached. Query failed.')
-                raise
-        except Exception as e:
-            print(f'get_gaia: Unexpected error on attempt {attempt + 1}: {type(e).__name__}: {e}')
-            if attempt < max_retries - 1:
-                print(f'get_gaia: Retrying in {retry_delay} seconds...')
-                time.sleep(retry_delay)
-            else:
-                print('get_gaia: Max retries reached. Query failed.')
-                raise
+            Gaia = load_Gaia(probe_service=False)
+        except RuntimeError as err:
+            raise RuntimeError(f"Gaia archive access failed: {err}") from err
+
+        Gaia.ROW_LIMIT = nmax
+        coord = SkyCoord(ra=ra, dec=dec, unit=(u.degree, u.degree), frame='icrs')
+
+        for attempt in range(max_retries):
+            try:
+                if attempt > 0:
+                    print(f'get_gaia: Retry attempt {attempt + 1}/{max_retries}...')
+                print('get_gaia: Submitting query to ESA Gaia archive...')
+                j = Gaia.cone_search_async(coord, radius=u.Quantity(rad_deg, u.deg))
+                print('get_gaia: Waiting for results...')
+                r = j.get_results()
+                print('get_gaia: Results received.')
+                break
+            except IncompleteRead as e:
+                print(f'get_gaia: IncompleteRead error on attempt {attempt + 1}: {e}')
+                if attempt < max_retries - 1:
+                    print(f'get_gaia: Retrying in {retry_delay} seconds...')
+                    time.sleep(retry_delay)
+                else:
+                    print('get_gaia: Max retries reached. Query failed.')
+                    raise
+            except Exception as e:
+                print(f'get_gaia: Unexpected error on attempt {attempt + 1}: {type(e).__name__}: {e}')
+                if attempt < max_retries - 1:
+                    print(f'get_gaia: Retrying in {retry_delay} seconds...')
+                    time.sleep(retry_delay)
+                else:
+                    print('get_gaia: Max retries reached. Query failed.')
+                    raise
+
     elapsed_time = time.time() - start_time
-    print(f'get_gaia: Archive query completed in {elapsed_time:.1f} seconds')
+    print(f'get_gaia: Query completed in {elapsed_time:.1f} seconds')
 
     if r is None or len(r) == 0:
         print('Error: get_gaia: No objects were retrieved')
