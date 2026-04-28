@@ -800,7 +800,8 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     # Try MAST first — synchronous, avoids ESA async job storage bugs
     try:
         print('get_gaia: Querying MAST GaiaDR3...')
-        r = Catalogs.query_region('%f %f' % (ra, dec), radius='%f deg' % rad_deg, catalog='GaiaDR3')
+        coord = SkyCoord(ra=ra, dec=dec, unit=u.degree, frame='icrs')
+        r = Catalogs.query_region(coord, radius='%f deg' % rad_deg, catalog='GaiaDR3')
         if nmax > 0:
             r = r[:nmax]
         print('get_gaia: MAST query returned %d rows.' % len(r))
