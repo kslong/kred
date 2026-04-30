@@ -694,6 +694,8 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
     os.makedirs('Gaia', exist_ok=True)
     outfile = f'Gaia/Gaia.{outroot}.fits'
 
+    ftab['RA'].unit = None
+    ftab['Dec'].unit = None
     ftab.write(outfile, format='fits', overwrite=True)
     print(f'Wrote {outfile} with {len(ftab)} objects')
     return outfile
