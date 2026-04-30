@@ -857,9 +857,9 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', object_file='object
             cutout_stats = ApertureStats(cutout, cutout_aper, sigma_clip=None)
 
             if np.isfinite(cutout_stats.fwhm.value):
-                phot_table['FWHM'][i] = cutout_stats.fwhm.value
+                phot_table['FWHM'][i] = float(cutout_stats.fwhm.value)
             if np.isfinite(cutout_stats.eccentricity):
-                phot_table['Eccentricity'][i] = cutout_stats.eccentricity
+                phot_table['Eccentricity'][i] = float(cutout_stats.eccentricity)
 
     phot_table['Max'] = aper_stats.max
     phot_table['Min'] = aper_stats.min
