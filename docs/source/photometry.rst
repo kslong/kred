@@ -4,9 +4,10 @@ Photometry and Calibration
 
 This page describes the tools available for stellar photometry and photometric
 calibration.  There are two main goals: (1) measuring instrumental fluxes of
-stars using Gaia catalog positions as a reference, and (2) placing those
-measurements on an absolute calibration scale, either in magnitudes (by
-comparison to Gaia broadband photometry) or in physical flux units (by
+stars using a reference catalog — either Gaia DR3 or, for Magellanic Cloud
+fields, the SMASH DR2 catalog — and (2) placing those measurements on an
+absolute calibration scale, either in magnitudes (by comparison to broadband
+photometry from the reference catalog) or in physical flux units (by
 comparison to Gaia XP spectra).  A secondary goal is to check whether the
 ``MAGZERO`` value carried in each MEF file header is consistent with an
 independently derived zero point.
@@ -28,11 +29,14 @@ The photometry system comprises seven modules:
    * - :doc:`Smash <api/Smash/index>`
      - Retrieve SMASH DR2 catalog for Magellanic Cloud fields (alternative to Gaia)
    * - :doc:`MefPhot <api/MefPhot/index>`
-     - Forced aperture photometry on MEF images at Gaia positions
+     - Forced aperture photometry on MEF images at Gaia or SMASH catalog
+       positions (``-cat gaia|smash``)
    * - :doc:`PhotCompare <api/PhotCompare/index>`
      - Cross-match aperture photometry against Gaia; produce comparison plots
+       (always Gaia-based; SMASH not applicable)
    * - :doc:`ZeroCalc <api/ZeroCalc/index>`
-     - Fit a magnitude zero point and color term against Gaia R or G magnitudes
+     - Fit a magnitude zero point and color term against Gaia or SMASH
+       broadband magnitudes (``-smash`` flag selects SMASH)
    * - :doc:`ZeroPoint <api/ZeroPoint/index>`
      - Derive a physical flux zero point using Gaia XP spectra
    * - :doc:`PhotAnal <api/PhotAnal/index>`
@@ -52,14 +56,15 @@ The DECam community pipeline assigns a photometric zero point to each
 exposure, stored as the ``MAGZERO`` keyword in the primary FITS header of
 each MEF file.  This value is used downstream (e.g., in ``MefPrep``) to
 place images on a common flux scale.  The routines described here allow you
-to independently derive a zero point from Gaia reference stars and compare
-it to the pipeline-supplied value.
+to independently derive a zero point from reference catalog stars (Gaia, or
+SMASH for Magellanic Cloud fields) and compare it to the pipeline-supplied
+value.
 
 Two calibration paths are available:
 
 **Magnitude calibration** (``ZeroCalc``)
     Fits instrumental magnitudes (measured at a reference zero point of 28)
-    against Gaia broadband magnitudes using the model:
+    against Gaia or SMASH broadband magnitudes using the model:
 
     .. math::
 
@@ -84,8 +89,9 @@ Standard Workflow
 .. _photometry-workflow:
 
 The typical workflow is illustrated below.  The ``GaiaCat`` module is called
-automatically by ``MefPhot`` and ``PhotCompare``; you do not need to invoke
-it separately.
+automatically by ``MefPhot`` (default) and ``PhotCompare``; the ``Smash``
+module is called automatically by ``MefPhot`` when ``-cat smash`` is used.
+You do not need to invoke either catalog module separately.
 
 .. code-block:: text
 

@@ -54,6 +54,8 @@ file1 file2 ...
     One or more FITS files to process (ignored if -dir is specified)
 
 Processing Modes
+----------------
+
 **Forced Photometry Mode (default):**
 
 Performs aperture photometry at positions from the Gaia catalog. This is
@@ -77,17 +79,9 @@ The routine generates:
 
 * **Tables**: Saved to ``TabPhot/`` directory containing:
 
-  - Photometry results
+  - Photometry results (``TabPhot/xmatch_*.txt``)
   - Cross-matched catalogs
   - Source lists (unforced mode)
-
-Performance Notes
-The most time-consuming operation is Gaia catalog retrieval. To optimize:
-
-* Catalogs are cached and reused when processing multiple files with the
-  same field center and size
-* Cached catalogs are stored in a ``GAIA/`` subdirectory
-* If all files cover the same region, retrieval happens only once
 
 Examples
 --------
@@ -117,26 +111,31 @@ The most time-consuming operation is Gaia catalog retrieval. To optimize:
 * Cached catalogs are stored in a ``GAIA/`` subdirectory
 * If all files cover the same region, retrieval happens only once
 
+The xmatch output files written to ``TabPhot/`` are the primary input for
+``ZeroPoint.py``.
+
 Version History
 ---------------
 
 240318 ksl
-
     Coding begun
 
 240527 ksl
-
     Speed up catalog matching with KDTree
 
 251105 ksl
-
     Split finding sources from doing photometry
 
 251130 ksl
-
     Starting cleaning
 
+260430 ksl
+    Handle photutils >= 2.x returning shaped arrays from
+    ``ApertureStats.fwhm`` and ``ApertureStats.eccentricity``; use
+    ``.flat[0]`` instead of ``float()`` conversion.
+
 Author
+------
 Space Telescope Science Institute
 """
 

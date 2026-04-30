@@ -59,11 +59,17 @@ Options
 Description
 -----------
 
-This module provides functions to retrieve GAIA DR3 photometric data.
-The primary functions are:
+This module provides functions to retrieve GAIA DR3 photometric and
+spectroscopic data.  Catalog cone searches query MAST first
+(``astroquery.mast.Catalogs``) because it is synchronous and avoids the
+async-job storage bugs on the ESA server; ESA (``astroquery.gaia``) is
+retained as a fallback.  The primary functions are:
 
-- get_gaia_from_archive(): Query the GAIA archive with cone search
+- get_gaia_from_archive(): Query MAST (primary) or ESA (fallback) with
+  cone search
 - get_gaia_from_file(): Extract from a local pre-downloaded catalog
+- get_gaia_spectra_batch(): Bulk-retrieve Gaia XP spectra for a list of
+  source IDs, pre-populating the per-star cache used by get_gaia_spec()
 
 Notes
 -----
@@ -81,6 +87,9 @@ History:
 251130 ksl Robust handling of astroquery import vs service availability
 251211 ksl Handle gaiaxpy version compatibility (2.1.1 vs 2.1.2)
 250116 ksl Added command-line steering with FITS/WCS support
+260429 ksl Switch catalog queries to MAST as primary source; ESA async
+           endpoint retained as fallback.  Add get_gaia_spectra_batch()
+           for bulk XP spectrum retrieval.
 
 Example Usage
 -------------
