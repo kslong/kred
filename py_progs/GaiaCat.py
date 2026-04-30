@@ -392,34 +392,11 @@ def old_get_gaia_spec(gaiaID, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
         gaiawave = Table.read(wave_path, format="csv")
     else:
         print('Star must be retrieved')
-        # Deferred imports to keep module import-safe
-        import requests
-        from gaiaxpy import calibrate
+        n_ok, n_fail = get_gaia_spectra_batch([int(gaiaID)], GAIA_CACHE_DIR=GAIA_CACHE_DIR)
+        if n_ok == 0:
+            return []
 
-        # need to download from Gaia archive
-        CSV_URL = (
-            "https://gea.esac.esa.int/data-server/data?RETRIEVAL_TYPE=XP_CONTINUOUS&ID=Gaia+DR3+"
-            + str(gaiaID)
-            + "&format=CSV&DATA_STRUCTURE=RAW"
-        )
-        FILE = f"{GAIA_CACHE_DIR}/XP_{gaiaID}_RAW.csv"
-
-        with requests.get(CSV_URL, stream=True) as r:
-            r.raise_for_status()
-            if len(r.content) < 2:
-                return []
-            with open(FILE, "w") as f:
-                f.write(r.content.decode("utf-8"))
-
-        # convert coefficients to sampled spectrum
-        _, _ = calibrate(
-            FILE,
-            output_path=GAIA_CACHE_DIR,
-            output_file=f"gaia_spec_{gaiaID}",
-            output_format="csv",
-        )
-
-        # read the flux and wavelength tables
+        # read the flux and wavelength tables written by the batch call
         gaiaflux = Table.read(flux_path, format="csv")
         gaiawave = Table.read(wave_path, format="csv")
 
