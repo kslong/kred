@@ -856,6 +856,8 @@ def get_gaia_from_archive(ra=84.92500000000001, dec=-66.27416666666667,
     # Process and rename columns
     r.rename_column('ra', 'RA')
     r.rename_column('dec', 'Dec')
+    r['RA'].unit = None
+    r['Dec'].unit = None
     try:
         r.rename_column('source_id', 'Source_name')
     except Exception:

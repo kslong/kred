@@ -104,10 +104,13 @@ def gaia_choose(filename='TabPhot/xmatch_Gaia.LMC_c32_T07_LMC_c32_T07.N673.t800_
         print('Error: Could not read %s' % filename)
       
     ftab=tab_remove_bad(xtab,'teff')
-    
+
+    if 'xp_spec_exists' in ftab.colnames:
+        ftab=ftab[ftab['xp_spec_exists']==True]
+
     ftab=ftab[ftab['R']>Rmin]
     ftab=ftab[ftab['R']<Rmax]
-    
+
     ftab=ftab[ftab['teff']>tmin]
     ftab=ftab[ftab['teff']<tmax]
     
