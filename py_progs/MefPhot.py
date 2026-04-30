@@ -567,7 +567,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
         good = np.isfinite(sources['R'])
         sources = sources[good]
 
-    coords = SkyCoord(ra=sources['RA']*u.deg, dec=sources['Dec']*u.deg)
+    coords = SkyCoord(ra=np.array(sources['RA'])*u.deg, dec=np.array(sources['Dec'])*u.deg)
 
     # Transform coordinates to pixel space
     sources['xcentroid'] = np.nan
