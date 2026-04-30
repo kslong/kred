@@ -533,12 +533,18 @@ def get_gaia_spectra_batch(source_ids, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
             if attempt > 0:
                 print(f'get_gaia_spectra_batch: retry {attempt}/2...')
                 time.sleep(5)
-            with warnings.catch_warnings():
+            import io, contextlib, logging
+            _aq_logger = logging.getLogger('astroquery')
+            _old_level = _aq_logger.level
+            _aq_logger.setLevel(logging.WARNING)
+            with warnings.catch_warnings(), contextlib.redirect_stdout(io.StringIO()):
                 warnings.filterwarnings('ignore', message='.*archive is unstable.*')
                 spectra, sampling = calibrate(pending, save_file=False,
                                               username=username, password=password)
+            _aq_logger.setLevel(_old_level)
             break
         except Exception as e:
+            _aq_logger.setLevel(_old_level)
             print(f'get_gaia_spectra_batch: attempt {attempt+1} failed: {e}')
     if spectra is None:
         return 0, len(pending)
