@@ -106,7 +106,12 @@ def gaia_choose(filename='TabPhot/xmatch_Gaia.LMC_c32_T07_LMC_c32_T07.N673.t800_
     ftab=tab_remove_bad(xtab,'teff')
 
     if 'xp_spec_exists' in ftab.colnames:
-        ftab=ftab[ftab['xp_spec_exists']==True]
+        col = ftab['xp_spec_exists']
+        if col.dtype.kind in ('U', 'S'):
+            mask = np.array([str(v).strip() == 'True' for v in col])
+        else:
+            mask = np.array(col, dtype=bool)
+        ftab = ftab[mask]
 
     ftab=ftab[ftab['R']>Rmin]
     ftab=ftab[ftab['R']<Rmax]
