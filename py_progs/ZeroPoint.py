@@ -156,6 +156,8 @@ def get_gaia_flux(xtab,key='Ha',wave=6563):
             return None
 
         if len(spec_tab)>0:
+            wave_arr, flux_arr = spec_tab
+            spec_tab = Table({'WAVE': wave_arr, 'FLUX': flux_arr})
             f_ha=get_flux(spec_tab,6563)
             ha_values.append(f_ha)
             f_s2=get_flux(spec_tab,6720)
