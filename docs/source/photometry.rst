@@ -32,8 +32,8 @@ The photometry system comprises seven modules:
      - Forced aperture photometry on MEF images at Gaia or SMASH catalog
        positions (``-cat gaia|smash``)
    * - :doc:`PhotCompare <api/PhotCompare/index>`
-     - Cross-match aperture photometry against Gaia; produce comparison plots
-       (always Gaia-based; SMASH not applicable)
+     - Aperture photometry on tile/swarped images with catalog cross-match and
+       comparison plots (``-cat gaia|smash``)
    * - :doc:`ZeroCalc <api/ZeroCalc/index>`
      - Fit a magnitude zero point and color term against Gaia or SMASH
        broadband magnitudes (``-smash`` flag selects SMASH)
@@ -88,10 +88,10 @@ Standard Workflow
 
 .. _photometry-workflow:
 
-The typical workflow is illustrated below.  The ``GaiaCat`` module is called
-automatically by ``MefPhot`` (default) and ``PhotCompare``; the ``Smash``
-module is called automatically by ``MefPhot`` when ``-cat smash`` is used.
-You do not need to invoke either catalog module separately.
+The typical workflow is illustrated below.  The ``GaiaCat`` module is called automatically by ``MefPhot`` and
+``PhotCompare`` when using the default Gaia catalog; the ``Smash`` module is
+called automatically by either script when ``-cat smash`` is used.  You do
+not need to invoke either catalog module separately.
 
 .. code-block:: text
 
@@ -109,8 +109,8 @@ You do not need to invoke either catalog module separately.
     MEF or tile image(s)
         │
         ▼
-    PhotCompare.py       ──► TabPhot/xmatch_<name>.fits
-                              Figs_phot/<name>.png
+    PhotCompare.py [-cat gaia|smash]  ──► TabPhot/xmatch_<name>.fits
+                                           Figs_phot/<name>.png
         │
         ▼
     ZeroPoint.py         ──► PhotMaster.txt
@@ -321,6 +321,18 @@ Pass ``-cat smash`` to ``MefPhot``::
 The output tables are identical in structure to Gaia-based runs.  A
 ``Catalog`` column (value ``'SMASH'``) is added so downstream tools and the
 output FITS header record which reference was used.
+
+Running PhotCompare with SMASH
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Pass ``-cat smash`` to ``PhotCompare`` to perform photometry and generate
+comparison figures using SMASH catalog positions::
+
+    PhotCompare.py -cat smash -forced DECam_SWARP/LMC_c42/T01/*.fits
+
+The cross-matched output tables written to ``TabPhot/`` are otherwise
+identical in structure to Gaia-based runs, and can be passed directly to
+``ZeroPoint.py`` for flux calibration.
 
 Deriving zero points from SMASH
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

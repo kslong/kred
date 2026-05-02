@@ -15,7 +15,7 @@ PhotCompare
    ::
 
        PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
-                      [-gcat FILE] [-out NAME] file1 file2 ...
+                      [-cat gaia|smash] [-gcat FILE] [-out NAME] file1 file2 ...
 
    **Operating Modes:**
 
@@ -37,19 +37,23 @@ PhotCompare
 
    -nmax N
        Limit the number of positions used for forced photometry from the
-       Gaia catalog. If nmax < 0, all positions are processed. Default: 30000.
+       reference catalog. If nmax < 0, all positions are processed. Default: 30000.
 
    -forced
-       Use forced photometry (default mode). Performs photometry at Gaia
+       Use forced photometry (default mode). Performs photometry at reference
        catalog positions.
 
    -unforced
-       Search for sources in the image, then cross-match positions to Gaia.
-       This is a diagnostic mode useful for checking relative astrometry
-       between Gaia and our images.
+       Search for sources in the image, then cross-match positions to the
+       reference catalog. Diagnostic mode useful for checking astrometry.
+
+   -cat gaia|smash
+       Reference catalog for source positions (default: gaia).
+       Use ``smash`` for Magellanic Cloud fields to calibrate against the
+       DECam-native SMASH DR2 photometric system.
 
    -gcat FILE
-       Use specified Gaia catalog file instead of auto-generating
+       Use specified catalog file instead of auto-generating
 
    -out NAME
        Specify output root name for results
@@ -108,11 +112,11 @@ PhotCompare
    Notes
    -----
 
-   The most time-consuming operation is Gaia catalog retrieval. To optimize:
+   The most time-consuming operation is catalog retrieval. To optimize:
 
    * Catalogs are cached and reused when processing multiple files with the
      same field center and size
-   * Cached catalogs are stored in a ``GAIA/`` subdirectory
+   * Cached Gaia catalogs are stored in a ``GAIA/`` subdirectory
    * If all files cover the same region, retrieval happens only once
 
    The xmatch output files written to ``TabPhot/`` are the primary input for
@@ -137,6 +141,10 @@ PhotCompare
        Handle photutils >= 2.x returning shaped arrays from
        ``ApertureStats.fwhm`` and ``ApertureStats.eccentricity``; use
        ``.flat[0]`` instead of ``float()`` conversion.
+
+   260502 ksl
+       Added SMASH DR2 as an alternative reference catalog (-cat smash).
+       All catalog-retrieval functions now accept a ``catalog`` parameter.
 
    Author
    ------
@@ -181,12 +189,12 @@ Module Contents
    :value: ''
 
 
-.. py:function:: do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True)
+.. py:function:: do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True, catalog='gaia')
 
    Process all images in a directory and subdirectories.
 
    Recursively finds all FITS files in a directory tree and processes
-   them with optimized Gaia catalog retrieval.
+   them with optimized catalog retrieval.
 
    Parameters
    ----------
@@ -196,6 +204,8 @@ Module Contents
        Maximum sources for forced photometry. Default: 30000.
    forced : bool, optional
        Photometry mode. Default: True.
+   catalog : str, optional
+       Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
 
    Returns
    -------
@@ -205,17 +215,14 @@ Module Contents
    Notes
    -----
    Uses ImageSum.table_create() to recursively find all FITS files.
-   Then calls do_many() to process with optimized Gaia catalog caching.
+   Then calls do_many() to process with optimized catalog caching.
 
    This is the recommended approach for processing large datasets where
    multiple images cover the same fields.
 
    Examples
    --------
-   >>> do_dir('DECamSWARP2/SMC_c01', nrows_max=20000, forced=True)
-   Starting 145 files
-   Finished getting gaia tables for 12 files
-   Processing images...
+   >>> do_dir('DECamSWARP2/SMC_c01', nrows_max=20000, forced=True, catalog='smash')
 
 
 .. py:function:: do_fig(xtab, outroot='')
@@ -350,12 +357,12 @@ Module Contents
    >>> print(f"Measured {len(phot)} sources")
 
 
-.. py:function:: do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True, nrows_max=10000, outroot='')
+.. py:function:: do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True, nrows_max=10000, outroot='', catalog='gaia')
 
-   Process multiple images with optimized Gaia catalog retrieval.
+   Process multiple images with optimized catalog retrieval.
 
    Efficiently processes multiple images by identifying unique field
-   positions and reusing Gaia catalogs for overlapping fields.
+   positions and reusing catalogs for overlapping fields.
 
    Parameters
    ----------
@@ -369,6 +376,9 @@ Module Contents
        Maximum sources for forced photometry. Default: 10000.
    outroot : str, optional
        Output filename root. Default: ''.
+   catalog : str, optional
+       Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
+       SMASH is only available over the Magellanic Cloud footprint.
 
    Returns
    -------
@@ -386,47 +396,50 @@ Module Contents
 
    1. Calculate field centers and sizes for all files
    2. Identify unique fields (within 0.01° tolerance)
-   3. Retrieve Gaia catalogs only for unique fields
-   4. Map each file to its Gaia catalog
+   3. Retrieve catalogs only for unique fields
+   4. Map each file to its catalog
    5. Process all files using cached catalogs
 
-   This dramatically reduces Gaia query time when processing many images
+   This dramatically reduces catalog query time when processing many images
    of the same field (e.g., different filters or epochs).
 
    **Intermediate Files:**
 
    * xpos.txt - All file positions
    * zpos.txt - Unique field positions
-   * xxpos.txt - Files with assigned Gaia catalogs
+   * xxpos.txt - Files with assigned catalogs
 
    Examples
    --------
    >>> files = ['field1_r.fits', 'field1_g.fits', 'field1_i.fits']
    >>> do_many(files, forced=True, nrows_max=5000)
-   Finished getting gaia tables for 1 files
-   Processing images...
+   >>> do_many(files, forced=True, nrows_max=5000, catalog='smash')
 
 
-.. py:function:: do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False, nrows_max=-1, outroot='')
+.. py:function:: do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False, nrows_max=-1, outroot='', catalog='gaia')
 
    Process a single image for photometric comparison.
 
-   Complete pipeline for comparing photometry in a single image to Gaia
-   catalog, including catalog retrieval, photometry, and figure generation.
+   Complete pipeline for comparing photometry in a single image to a
+   reference catalog, including catalog retrieval, photometry, and figure
+   generation.
 
    Parameters
    ----------
    filename : str, optional
        Path to FITS file. Default: 'LMC_c48_T08.r.t060.fits'.
    gaia_cat_file : str, optional
-       Path to existing Gaia catalog. If empty or non-existent, will
-       retrieve new catalog. Default: ''.
+       Path to an existing catalog file (Gaia or SMASH). If empty or
+       non-existent, a new catalog will be retrieved. Default: ''.
    forced : bool, optional
        Photometry mode (True=forced, False=unforced). Default: False.
    nrows_max : int, optional
        Maximum sources for forced photometry. Default: -1 (all).
    outroot : str, optional
        Output filename root. Default: ''.
+   catalog : str, optional
+       Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
+       SMASH is only available over the Magellanic Cloud footprint.
 
    Returns
    -------
@@ -440,20 +453,17 @@ Module Contents
 
    Notes
    -----
-   **Gaia Catalog Handling:**
+   **Catalog Handling:**
 
-   * If gaia_cat_file exists: uses it
-   * Otherwise: calculates field center/size and retrieves new catalog
+   * If gaia_cat_file exists: uses it directly regardless of ``catalog``
+   * Otherwise: calculates field center/size and retrieves a new catalog
 
    Catalog is cached for reuse in subsequent calls with the same field.
 
    Examples
    --------
-   >>> # Use existing Gaia catalog
    >>> do_one('image.fits', gaia_cat_file='gaia.fits', forced=True)
-
-   >>> # Auto-retrieve Gaia catalog
-   >>> do_one('image.fits', forced=True, nrows_max=5000)
+   >>> do_one('image.fits', forced=True, nrows_max=5000, catalog='smash')
 
 
 .. py:function:: do_xphot(filename, gaia_file, forced, nrows_max, outroot)
@@ -742,7 +752,7 @@ Module Contents
    Parse command-line arguments and run PhotCompare.
 
    Usage: PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
-                         [-gcat FILE] [-out NAME] file1 file2 ...
+                         [-cat gaia|smash] [-gcat FILE] [-out NAME] file1 file2 ...
 
 
 .. py:function:: unique_rows_within_tol(tab, tol=0.01)

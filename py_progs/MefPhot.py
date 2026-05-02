@@ -448,7 +448,7 @@ def read_table(filename):
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
                          object_file='objects.txt', nrows_max=-1,
-                         rstar=4, b_in=4, b_out=8, add_psf_metrics=True):
+                         rstar=6, b_in=8, b_out=12, add_psf_metrics=True):
     """
     Perform forced aperture photometry at specified sky positions.
 
@@ -468,11 +468,11 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
         Maximum number of sources to process. If -1, process all sources.
         Default: -1.
     rstar : float, optional
-        Aperture radius in pixels for source extraction. Default: 4.
+        Aperture radius in pixels for source extraction. Default: 6.
     b_in : float, optional
-        Inner radius of background annulus in pixels. Default: 4.
+        Inner radius of background annulus in pixels. Default: 8.
     b_out : float, optional
-        Outer radius of background annulus in pixels. Default: 8.
+        Outer radius of background annulus in pixels. Default: 12.
     add_psf_metrics : bool, optional
         If True, adds columns useful for PSF star selection:
         SNR, Concentration, BkgContam. Default: True.
@@ -710,7 +710,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
 
 
 def do_one(filename='foo.fits', outroot='', nrows_max=-1,
-           rstar=4, b_in=4, b_out=8, catalog='gaia'):
+           rstar=6, b_in=8, b_out=12, catalog='gaia'):
     """
     Process a single multi-extension FITS file.
 
@@ -728,11 +728,11 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
     nrows_max : int, optional
         Maximum sources per extension. If -1, process all. Default: -1.
     rstar : float, optional
-        Aperture radius in pixels. Default: 4.
+        Aperture radius in pixels. Default: 6.
     b_in : float, optional
-        Inner background annulus radius in pixels. Default: 4.
+        Inner background annulus radius in pixels. Default: 8.
     b_out : float, optional
-        Outer background annulus radius in pixels. Default: 8.
+        Outer background annulus radius in pixels. Default: 12.
     catalog : str, optional
         Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
         SMASH is only available over the Magellanic Cloud footprint but
@@ -942,7 +942,7 @@ def _safe_do_one_with_index(args):
         return (filename, False, error_msg, tb)
 
 
-def do_many(filenames, outroot='', nrows_max=-1, rstar=4, b_in=4, b_out=8,
+def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
             n_processes=None, logfile=None, verbose_errors=False, catalog='gaia'):
     """
     Process multiple FITS files in parallel.
@@ -960,11 +960,11 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=4, b_in=4, b_out=8,
     nrows_max : int, optional
         Maximum sources per extension. -1 for all. Default: -1.
     rstar : float, optional
-        Aperture radius in pixels. Default: 4.
+        Aperture radius in pixels. Default: 6.
     b_in : float, optional
-        Inner background annulus radius. Default: 4.
+        Inner background annulus radius. Default: 8.
     b_out : float, optional
-        Outer background annulus radius. Default: 8.
+        Outer background annulus radius. Default: 12.
     n_processes : int, optional
         Number of parallel processes. If None, uses CPU count - 1. Default: None.
     logfile : str, optional

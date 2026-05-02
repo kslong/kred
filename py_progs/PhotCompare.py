@@ -11,7 +11,7 @@ Command Line Usage
 ::
 
     PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
-                   [-gcat FILE] [-out NAME] file1 file2 ...
+                   [-cat gaia|smash] [-gcat FILE] [-out NAME] file1 file2 ...
 
 **Operating Modes:**
 
@@ -44,8 +44,13 @@ There are two basic modes of operation:
     This is a diagnostic mode useful for checking relative astrometry
     between Gaia and our images.
 
+-cat gaia|smash
+    Reference catalog for source positions (default: gaia).
+    Use ``smash`` for Magellanic Cloud fields to calibrate against the
+    DECam-native SMASH DR2 photometric system.
+
 -gcat FILE
-    Use specified Gaia catalog file instead of auto-generating
+    Use specified catalog file instead of auto-generating
 
 -out NAME
     Specify output root name for results
@@ -178,6 +183,7 @@ from astropy.wcs._wcs import InvalidCoordinateError
 from http.client import IncompleteRead
 import ImageSum
 from GaiaCat import get_gaia
+from Smash import get_smash
 
 # Restore stdout/stderr after imports
 # _devnull.close()
@@ -1157,54 +1163,46 @@ def do_xphot(filename, gaia_file, forced, nrows_max, outroot):
     do_fig(closest_objects_table, outroot)
 
 
-def do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False, 
-           nrows_max=-1, outroot=''):
+def do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False,
+           nrows_max=-1, outroot='', catalog='gaia'):
     """
     Process a single image for photometric comparison.
-    
-    Complete pipeline for comparing photometry in a single image to Gaia
-    catalog, including catalog retrieval, photometry, and figure generation.
+
+    Complete pipeline for comparing photometry in a single image to a
+    reference catalog, including catalog retrieval, photometry, and figure
+    generation.
 
     Parameters
     ----------
     filename : str, optional
         Path to FITS file. Default: 'LMC_c48_T08.r.t060.fits'.
     gaia_cat_file : str, optional
-        Path to existing Gaia catalog. If empty or non-existent, will
-        retrieve new catalog. Default: ''.
+        Path to an existing catalog file (Gaia or SMASH). If empty or
+        non-existent, a new catalog will be retrieved. Default: ''.
     forced : bool, optional
         Photometry mode (True=forced, False=unforced). Default: False.
     nrows_max : int, optional
         Maximum sources for forced photometry. Default: -1 (all).
     outroot : str, optional
         Output filename root. Default: ''.
+    catalog : str, optional
+        Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
+        SMASH is only available over the Magellanic Cloud footprint.
 
     Returns
     -------
     None
         Results written to TabPhot/ and figures to Figs_phot/.
-    
+
     Raises
     ------
     ValueError
         If FITS file cannot be opened.
-    
-    Notes
-    -----
-    **Gaia Catalog Handling:**
-    
-    * If gaia_cat_file exists: uses it
-    * Otherwise: calculates field center/size and retrieves new catalog
-    
-    Catalog is cached for reuse in subsequent calls with the same field.
-    
+
     Examples
     --------
-    >>> # Use existing Gaia catalog
     >>> do_one('image.fits', gaia_cat_file='gaia.fits', forced=True)
-    
-    >>> # Auto-retrieve Gaia catalog
-    >>> do_one('image.fits', forced=True, nrows_max=5000)
+    >>> do_one('image.fits', forced=True, nrows_max=5000, catalog='smash')
     """
     try:
         x = fits.open(filename)
@@ -1212,26 +1210,30 @@ def do_one(filename='LMC_c48_T08.r.t060.fits', gaia_cat_file='', forced=False,
         print('Could not open %s' % filename)
         raise ValueError
 
-    if gaia_cat_file != '' and os.path.isfile(gaia_cat_file) == True:
-        gaia_file = gaia_cat_file
-        print('Using existing GaiaCat file: %s' % gaia_cat_file)
+    catalog = catalog.lower()
+
+    if gaia_cat_file != '' and os.path.isfile(gaia_cat_file):
+        cat_file = gaia_cat_file
+        print('Using existing catalog file: %s' % gaia_cat_file)
     else:
         ra, dec, size_deg = get_size(filename)
-        print('Making new GaiaCat file - %.2f %.2f %.2f' % (ra, dec, size_deg))
-        print('do_one - RA, Dec, size: ', ra, dec, size_deg)
-        gaia_file = get_gaia(ra, dec, size_deg)
+        print('Making new catalog file - %.2f %.2f %.2f' % (ra, dec, size_deg))
+        if catalog == 'smash':
+            cat_file = get_smash(ra, dec, size_deg)
+        else:
+            cat_file = get_gaia(ra, dec, size_deg)
 
-    do_xphot(filename, gaia_file, forced, nrows_max, outroot)
+    do_xphot(filename, cat_file, forced, nrows_max, outroot)
     return
 
 
-def do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True, 
-            nrows_max=10000, outroot=''):
+def do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True,
+            nrows_max=10000, outroot='', catalog='gaia'):
     """
-    Process multiple images with optimized Gaia catalog retrieval.
-    
+    Process multiple images with optimized catalog retrieval.
+
     Efficiently processes multiple images by identifying unique field
-    positions and reusing Gaia catalogs for overlapping fields.
+    positions and reusing catalogs for overlapping fields.
 
     Parameters
     ----------
@@ -1245,43 +1247,43 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True
         Maximum sources for forced photometry. Default: 10000.
     outroot : str, optional
         Output filename root. Default: ''.
+    catalog : str, optional
+        Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
+        SMASH is only available over the Magellanic Cloud footprint.
 
     Returns
     -------
     None
         Results written to files.
-    
+
     Raises
     ------
     IOError
         If any file cannot be opened.
-    
+
     Notes
     -----
     **Optimization Strategy:**
-    
+
     1. Calculate field centers and sizes for all files
     2. Identify unique fields (within 0.01° tolerance)
-    3. Retrieve Gaia catalogs only for unique fields
-    4. Map each file to its Gaia catalog
+    3. Retrieve catalogs only for unique fields
+    4. Map each file to its catalog
     5. Process all files using cached catalogs
-    
-    This dramatically reduces Gaia query time when processing many images
-    of the same field (e.g., different filters or epochs).
-    
+
     **Intermediate Files:**
-    
+
     * xpos.txt - All file positions
     * zpos.txt - Unique field positions
-    * xxpos.txt - Files with assigned Gaia catalogs
-    
+    * xxpos.txt - Files with assigned catalogs
+
     Examples
     --------
     >>> files = ['field1_r.fits', 'field1_g.fits', 'field1_i.fits']
     >>> do_many(files, forced=True, nrows_max=5000)
-    Finished getting gaia tables for 1 files
-    Processing images...
+    >>> do_many(files, forced=True, nrows_max=5000, catalog='smash')
     """
+    catalog = catalog.lower()
     xra = []
     xdec = []
     xsize = []
@@ -1302,34 +1304,36 @@ def do_many(filenames=['LMC_c48_T08.r.t060.fits'], gaia_cat_file='', forced=True
 
     print("Finished getting positions")
 
-    gaia_files = []
+    cat_files = []
     for one in zpos:
-        gaia_file = get_gaia(one['RA'], one['Dec'], one['Size'])
-        gaia_files.append(gaia_file)
-    zpos['gaia_file'] = gaia_files
+        if catalog == 'smash':
+            cat_file = get_smash(one['RA'], one['Dec'], one['Size'])
+        else:
+            cat_file = get_gaia(one['RA'], one['Dec'], one['Size'])
+        cat_files.append(cat_file)
+    zpos['cat_file'] = cat_files
 
-    print('Finished getting gaia tables for %d files' % len(zpos))
+    print('Finished getting %s tables for %d files' % (catalog, len(zpos)))
 
     xpos.write('xpos.txt', format='ascii.fixed_width_two_line', overwrite=True)
     zpos.write('zpos.txt', format='ascii.fixed_width_two_line', overwrite=True)
 
-    xpos['gaia_file'] = zpos['gaia_file'][mapping]
+    xpos['cat_file'] = zpos['cat_file'][mapping]
     xpos.write('xxpos.txt', format='ascii.fixed_width_two_line', overwrite=True)
 
-    # Process all files using cached Gaia catalogs
     for one in xpos:
         print('ZZZ', one)
-        do_xphot(one['filename'], one['gaia_file'], forced, nrows_max, outroot)
+        do_xphot(one['filename'], one['cat_file'], forced, nrows_max, outroot)
 
     return
 
 
-def do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True):
+def do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True, catalog='gaia'):
     """
     Process all images in a directory and subdirectories.
-    
+
     Recursively finds all FITS files in a directory tree and processes
-    them with optimized Gaia catalog retrieval.
+    them with optimized catalog retrieval.
 
     Parameters
     ----------
@@ -1339,26 +1343,22 @@ def do_dir(xdir='DECam_SWARP2/LMC_c37/T16', nrows_max=30000, forced=True):
         Maximum sources for forced photometry. Default: 30000.
     forced : bool, optional
         Photometry mode. Default: True.
+    catalog : str, optional
+        Reference catalog to use: ``'gaia'`` (default) or ``'smash'``.
 
     Returns
     -------
     None
         Results written to files.
-    
+
     Notes
     -----
     Uses ImageSum.table_create() to recursively find all FITS files.
-    Then calls do_many() to process with optimized Gaia catalog caching.
-    
-    This is the recommended approach for processing large datasets where
-    multiple images cover the same fields.
-    
+    Then calls do_many() to process with optimized catalog caching.
+
     Examples
     --------
-    >>> do_dir('DECamSWARP2/SMC_c01', nrows_max=20000, forced=True)
-    Starting 145 files
-    Finished getting gaia tables for 12 files
-    Processing images...
+    >>> do_dir('DECamSWARP2/SMC_c01', nrows_max=20000, forced=True, catalog='smash')
     """
 
 
@@ -1367,11 +1367,12 @@ def steer(argv):
     Parse command-line arguments and run PhotCompare.
 
     Usage: PhotCompare.py [-h] [-dir DIRNAME] [-nmax N] [-forced] [-unforced]
-                          [-gcat FILE] [-out NAME] file1 file2 ...
+                          [-cat gaia|smash] [-gcat FILE] [-out NAME] file1 file2 ...
     """
     xdir = ''
     nrows_max = 30000
     forced = True
+    catalog = 'gaia'
     gaia_cat_file = ''
     outroot = ''
     filenames = []
@@ -1394,6 +1395,12 @@ def steer(argv):
             forced = True
         elif argv[i] == '-unforced':
             forced = False
+        elif argv[i] == '-cat':
+            i += 1
+            catalog = argv[i].lower()
+            if catalog not in ('gaia', 'smash'):
+                print('Error: -cat must be gaia or smash, got %s' % argv[i])
+                return
         elif argv[i] == '-gcat':
             i += 1
             gaia_cat_file = argv[i]
@@ -1408,13 +1415,14 @@ def steer(argv):
         i += 1
 
     if xdir != '':
-        do_dir(xdir=xdir, nrows_max=nrows_max, forced=forced)
+        do_dir(xdir=xdir, nrows_max=nrows_max, forced=forced, catalog=catalog)
     elif len(filenames) > 0:
         if len(filenames) == 1:
             do_one(filenames[0], gaia_cat_file=gaia_cat_file, forced=forced,
-                   nrows_max=nrows_max, outroot=outroot)
+                   nrows_max=nrows_max, outroot=outroot, catalog=catalog)
         else:
-            do_many(filenames, forced=forced, nrows_max=nrows_max, outroot=outroot)
+            do_many(filenames, forced=forced, nrows_max=nrows_max, outroot=outroot,
+                    catalog=catalog)
     else:
         print(__doc__)
 
