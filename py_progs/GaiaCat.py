@@ -90,6 +90,8 @@ History:
 260429 ksl Switch catalog queries to MAST as primary source; ESA async
            endpoint retained as fallback.  Add get_gaia_spectra_batch()
            for bulk XP spectrum retrieval.
+260502 ksl Add redo parameter to get_gaia_from_file; skip re-extraction
+           when output file already exists.
 
 Example Usage
 -------------
@@ -136,6 +138,12 @@ from astropy.table import Table, join, hstack
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astroquery.mast import Catalogs
+
+
+# Module-level cache: keyed by resolved file path, holds the full Table.
+# Each worker process populates this on first use and reuses it for every
+# subsequent call, avoiding the cost of re-reading a multi-GB file per extension.
+_GAIA_FILE_CACHE = {}
 
 
 # --------------------------------------------------------------------------------
@@ -593,7 +601,7 @@ def get_gaia_spectra_batch(source_ids, GAIA_CACHE_DIR='./GaiaSpec', redo=False):
 
 
 def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
-                       size_deg=0.3, filename='Gaia_MagClouds.fits', outroot=''):
+                       size_deg=0.3, filename='Gaia_MagClouds.fits', outroot='', redo=False):
     """Extract GAIA sources from a local catalog file within a sky region.
 
     This function performs a rectangular selection from a pre-downloaded GAIA
@@ -614,6 +622,9 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
         in $KRED/xdata/. Default is 'Gaia_MagClouds.fits'.
     outroot : str, optional
         Root name for the output file. If empty, constructs from RA and Dec.
+    redo : bool, optional
+        If True, re-extract and overwrite the output file even if it already
+        exists. Default is False.
 
     Returns
     -------
@@ -646,28 +657,38 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
         >>> print(f"Extracted catalog: {outfile}")
 
     """
-    # 1) Determine input file path - search locally first, then $KRED/xdata/
+    # 1) Compute output path first — depends only on ra/dec/outroot, not the input file.
+    if outroot == '':
+        outroot = '%06.2f_%06.2f' % (ra, dec)
+    os.makedirs('Gaia', exist_ok=True)
+    outfile = f'Gaia/Gaia.{outroot}.fits'
+
+    if not redo and os.path.isfile(outfile):
+        return outfile
+
+    # 2) Locate the input catalog — only needed when we must (re)extract.
     xfilename = ''
     if os.path.isfile(filename):
         xfilename = filename
-        print(f'get_gaia_from_file: Using local file {xfilename}')
     else:
         KRED = os.environ.get("KRED")
         if KRED is not None:
-            candidate = f"{KRED}/xdata/{filename}"
+            candidate = os.path.join(KRED, 'xdata', filename)
             if os.path.isfile(candidate):
                 xfilename = candidate
-                print(f'get_gaia_from_file: Using {xfilename}')
             else:
                 raise IOError(f'Could not locate {filename} locally or in $KRED/xdata/')
         else:
             raise IOError(f'Could not locate {filename} locally and KRED environment variable is not set')
 
-    # read the local table
-    if xfilename.lower().endswith('.fits'):
-        xtab = Table.read(xfilename)
-    else:
-        xtab = ascii.read(xfilename)
+    # Load from cache, or read from disk and cache for this process.
+    if xfilename not in _GAIA_FILE_CACHE:
+        print(f'get_gaia_from_file: Loading {xfilename} into cache')
+        if xfilename.lower().endswith('.fits'):
+            _GAIA_FILE_CACHE[xfilename] = Table.read(xfilename)
+        else:
+            _GAIA_FILE_CACHE[xfilename] = ascii.read(xfilename)
+    xtab = _GAIA_FILE_CACHE[xfilename]
 
     # rectangular selection around (ra, dec)
     dec_min = dec - 0.5 * size_deg
@@ -681,15 +702,9 @@ def get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667,
             (dec_min < xtab['Dec']) & (xtab['Dec'] < dec_max))
     ftab = xtab[mask]
 
-    if outroot == '':
-        outroot = '%06.2f_%06.2f' % (ra, dec)
-    os.makedirs('Gaia', exist_ok=True)
-    outfile = f'Gaia/Gaia.{outroot}.fits'
-
     ftab['RA'].unit = None
     ftab['Dec'].unit = None
     ftab.write(outfile, format='fits', overwrite=True)
-    print(f'Wrote {outfile} with {len(ftab)} objects')
     return outfile
 
 

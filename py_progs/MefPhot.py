@@ -118,6 +118,10 @@ Version History
     MEF primary header copied to extension 0 of output file.
     Extraction parameters written to extension 1 header.
 
+2026-05-02 ksl
+    Fix photutils >= 2.x compatibility: ApertureStats.fwhm and eccentricity
+    now return shaped arrays; use .flat[0] to extract scalar values.
+
 Author
 ------
 Space Telescope Science Institute
@@ -150,7 +154,6 @@ from scipy.spatial import KDTree
 from astropy.wcs import NoConvergence
 from astropy.wcs._wcs import InvalidCoordinateError
 from multiprocessing import Pool
-from tqdm import tqdm
 import multiprocessing as mp
 import traceback
 
@@ -657,10 +660,10 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
             cutout_aper = CircularAperture(cutout_pos, r=rstar)
             cutout_stats = ApertureStats(cutout, cutout_aper, sigma_clip=None)
         
-            if np.isfinite(cutout_stats.fwhm.value):
-                phot_table['FWHM'][i] = cutout_stats.fwhm.value
-            if np.isfinite(cutout_stats.eccentricity):
-                phot_table['Eccentricity'][i] = cutout_stats.eccentricity
+            if np.all(np.isfinite(cutout_stats.fwhm.value)):
+                phot_table['FWHM'][i] = cutout_stats.fwhm.value.flat[0]
+            if np.all(np.isfinite(cutout_stats.eccentricity)):
+                phot_table['Eccentricity'][i] = np.asarray(cutout_stats.eccentricity).flat[0]
 
     phot_table['Max'] = aper_stats.max
     phot_table['Min'] = aper_stats.min
@@ -710,7 +713,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
 
 
 def do_one(filename='foo.fits', outroot='', nrows_max=-1,
-           rstar=6, b_in=8, b_out=12, catalog='gaia'):
+           rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True):
     """
     Process a single multi-extension FITS file.
 
@@ -808,8 +811,9 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         raise IOError
 
     catalog = catalog.lower()
-    print(f'do_one: Starting {filename} with radius {rstar:.1f} '
-          f'and annulus {b_in:.1f} {b_out:.1f} using {catalog} catalog')
+    if verbose:
+        print(f'do_one: Starting {filename} with radius {rstar:.1f} '
+              f'and annulus {b_in:.1f} {b_out:.1f} using {catalog} catalog')
 
     xexptime = x['PRIMARY'].header['EXPTIME']
 
@@ -890,7 +894,8 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
 
     fits.HDUList([primary_hdu, table_hdu]).writeto(outfile, overwrite=True)
     x.close()
-    print(f'do_one: Completed {filename} and written to {outfile}')
+    if verbose:
+        print(f'do_one: Completed {filename} and written to {outfile}')
     return phot
 
 
@@ -934,7 +939,7 @@ def _safe_do_one_with_index(args):
     try:
         numbered_outroot = f"{outroot}_{index:03d}" if outroot else ''
         do_one(filename, outroot=numbered_outroot, nrows_max=nrows_max,
-               rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog)
+               rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, verbose=True)
         return (filename, True, None)
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
@@ -1019,10 +1024,15 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
     args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out, catalog)
                  for i, fname in enumerate(filenames)]
 
+    n = len(filenames)
+    results = []
     with Pool(processes=n_processes) as pool:
-        results = list(tqdm(pool.imap(_safe_do_one_with_index, args_list),
-                           total=len(filenames),
-                           desc="Processing images"))
+        for n_done, result in enumerate(pool.imap(_safe_do_one_with_index, args_list), 1):
+            fname = result[0]
+            ok = result[1]
+            status = 'Completed' if ok else 'FAILED'
+            print(f'{status} {n_done}/{n}: {os.path.basename(fname)}', flush=True)
+            results.append(result)
 
     # Collect failures
     failed_files = []
