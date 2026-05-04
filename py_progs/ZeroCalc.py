@@ -134,11 +134,16 @@ def fit_magnitude_model(data, use_color=False):
     Simple (use_color=False):   m_ref = m_inst + c_0
     Color-corrected (use_color=True): m_ref = m_inst + c_0 + c_1 * color
 
+    Sources are weighted by their photometric uncertainty:
+        sigma_mag = 1.0857 * ErrNet / Net
+    floored at 0.001 mag so a handful of very bright stars do not dominate.
+    Sources with non-positive Net flux are excluded.
+
     Parameters
     ----------
     data : astropy.table.Table
-        Table with columns 'phot_mag', 'target_mag', and (if use_color)
-        'target_color'.
+        Table with columns 'phot_mag', 'target_mag', 'Net', 'ErrNet', and
+        (if use_color) 'target_color'.
     use_color : bool
         If True, include a color term in the fit. Default False.
 
@@ -147,8 +152,20 @@ def fit_magnitude_model(data, use_color=False):
     dict with keys c_0, c_0_err, c_1, c_1_err, rms, table.
     c_1 and c_1_err are 0.0 when use_color=False.
     """
-    mag_obs   = np.asarray(data['phot_mag'], dtype=float)
-    target    = np.asarray(data['target_mag'], dtype=float)
+    # Compute per-source magnitude uncertainties for weighting.
+    # Only sources with positive Net flux get a meaningful uncertainty.
+    net     = np.asarray(data['Net'],    dtype=float)
+    err_net = np.asarray(data['ErrNet'], dtype=float)
+    good    = net > 0
+    data    = data[good]
+    net     = net[good]
+    err_net = err_net[good]
+
+    mag_err = 1.0857 * err_net / net
+    mag_err = np.clip(mag_err, 0.001, np.inf)   # floor at 1 mmag
+
+    mag_obs = np.asarray(data['phot_mag'],   dtype=float)
+    target  = np.asarray(data['target_mag'], dtype=float)
 
     if use_color:
         color = np.asarray(data['target_color'], dtype=float)
@@ -158,7 +175,8 @@ def fit_magnitude_model(data, use_color=False):
 
         popt, pcov = curve_fit(model_wrapper,
                                np.vstack([mag_obs, color]),
-                               target, p0=[0.0, 0.0])
+                               target, p0=[0.0, 0.0],
+                               sigma=mag_err, absolute_sigma=True)
         c_0_fit, c_1_fit = popt
         c_0_err, c_1_err = np.sqrt(np.diag(pcov))
         fitted = mag_obs + c_0_fit + c_1_fit * color
@@ -166,7 +184,8 @@ def fit_magnitude_model(data, use_color=False):
         def model_wrapper(mag, c_0):
             return mag + c_0
 
-        popt, pcov = curve_fit(model_wrapper, mag_obs, target, p0=[0.0])
+        popt, pcov = curve_fit(model_wrapper, mag_obs, target, p0=[0.0],
+                               sigma=mag_err, absolute_sigma=True)
         c_0_fit  = float(popt[0])
         c_0_err  = float(np.sqrt(pcov[0, 0]))
         c_1_fit  = 0.0
@@ -174,7 +193,9 @@ def fit_magnitude_model(data, use_color=False):
         fitted   = mag_obs + c_0_fit
 
     residuals = target - fitted
-    rms = float(np.sqrt(np.mean(residuals**2)))
+    # Weighted RMS: sqrt( sum(w*(res^2)) / sum(w) ) where w = 1/sigma^2
+    weights = 1.0 / mag_err**2
+    rms = float(np.sqrt(np.sum(weights * residuals**2) / np.sum(weights)))
 
     data['mag_model'] = fitted
     data['residual']  = residuals
