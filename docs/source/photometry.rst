@@ -64,15 +64,25 @@ Two calibration paths are available:
 
 **Magnitude calibration** (``ZeroCalc``)
     Fits instrumental magnitudes (measured at a reference zero point of 28)
-    against Gaia or SMASH broadband magnitudes using the model:
+    against Gaia or SMASH broadband magnitudes.  Two modes are available:
+
+    *Simple fit* (default):
 
     .. math::
 
-        m_{\rm Gaia} = m_{\rm inst} + c_0 + c_1 \,(G - R)
+        m_{\rm ref} = m_{\rm inst} + c_0
 
-    where :math:`c_0` is the zero-point offset and :math:`c_1` is a color
-    term.  The derived zero point is :math:`28 + c_0`; this can be compared
-    directly to ``MAGZERO``.
+    *Color-corrected fit* (``-color`` flag):
+
+    .. math::
+
+        m_{\rm ref} = m_{\rm inst} + c_0 + c_1 \,\times\, \mathrm{color}
+
+    where the color predictor is independent of the target band (Gaia R: G−R;
+    Gaia G: B−R; SMASH R: G−R; SMASH G: U−R).  All fits are weighted by the
+    per-source photometric uncertainty so that bright, well-measured stars
+    dominate the solution.  The derived zero point is :math:`28 + c_0` and
+    can be compared directly to ``MAGZERO``.
 
 **Physical flux calibration** (``ZeroPoint``)
     Uses Gaia XP spectra to predict the expected flux at the Hα (6563 Å)
@@ -101,10 +111,12 @@ not need to invoke either catalog module separately.
     MefPhot.py [-cat gaia|smash]  ──► TabPhot/<name>.gaia.fits
         │                               TabPhot/<name>.smash.fits
         ▼
-    ZeroCalc.py [-G|-R] [-smash]  ──► MagZero.<band>.gaia.txt
-                                       MagZero.<band>.smash.txt
-                                       FigZero/<band>_<name>.gaia.png
-                                       FigZero/<band>_<name>.smash.png
+    ZeroCalc.py [-G|-R] [-color] [-smash]  ──► MagZero.<band>.gaia.txt
+                                               MagZero.<band>.gaia.color.txt
+                                               MagZero.<band>.smash.txt
+                                               MagZero.<band>.smash.color.txt
+                                               FigZero/<band>_<name>.gaia[.color].png
+                                               FigZero/<band>_<name>.smash[.color].png
 
     MEF or tile image(s)
         │
@@ -161,25 +173,29 @@ and ``R``, and a ``Catalog`` column (``'Gaia'`` or ``'SMASH'``).
 Step 2: Derive the magnitude zero point
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-``ZeroCalc`` reads one or more ``TabPhot/`` files and fits the linear model
-described above.  Results are written to a summary table and a set of
-diagnostic plots.
+``ZeroCalc`` reads one or more ``TabPhot/`` files and fits the model
+described above.  The default is a simple one-parameter fit; add ``-color``
+for a two-parameter color-corrected fit.  All fits are weighted by the
+per-source photometric uncertainty.
 
 ::
 
-    ZeroCalc.py -G TabPhot/*.gaia.fits           # Gaia G band
-    ZeroCalc.py -R TabPhot/*.gaia.fits           # Gaia R band
-    ZeroCalc.py -R -smash TabPhot/*.smash.fits   # SMASH R band
+    ZeroCalc.py -R TabPhot/*.gaia.fits                  # simple, Gaia R
+    ZeroCalc.py -R -color TabPhot/*.gaia.fits           # color-corrected, Gaia R
+    ZeroCalc.py -G -color TabPhot/*.gaia.fits           # color-corrected, Gaia G (uses B-R)
+    ZeroCalc.py -R -smash TabPhot/*.smash.fits          # simple, SMASH R
+    ZeroCalc.py -R -color -smash TabPhot/*.smash.fits   # color-corrected, SMASH R
 
-Output filenames encode the band and catalog so that Gaia and SMASH runs
-do not overwrite each other:
+Output filenames encode the band, catalog, and fit mode:
 
-* ``MagZero.<band>.gaia.txt`` / ``MagZero.<band>.smash.txt`` – one row
-  per input file with columns ``Filter``, ``Exptime``, ``Root``,
-  ``MagZero`` (= 28 + c_0), ``c_0``, ``c_1``, ``rms``, ``HdrZero``
-  (pipeline MAGZERO), ``Catalog``, ``Filename``
-* ``FigZero/<band>_<root>.gaia.png`` / ``FigZero/<band>_<root>.smash.png``
-  – per-file diagnostic plots
+* ``MagZero.<band>.gaia.txt`` / ``MagZero.<band>.gaia.color.txt`` – simple
+  and color-corrected Gaia runs; one row per input file with columns
+  ``Filter``, ``Exptime``, ``Root``, ``MagZero`` (= 28 + c_0), ``c_0``,
+  ``c_1``, ``rms``, ``HdrZero`` (pipeline MAGZERO), ``Catalog``, ``Filename``
+* ``MagZero.<band>.smash.txt`` / ``MagZero.<band>.smash.color.txt`` – same
+  for SMASH runs
+* ``FigZero/<band>_<root>.gaia[.color].png`` /
+  ``FigZero/<band>_<root>.smash[.color].png`` – per-file diagnostic plots
 
 Step 3: Compare to the MEF header MAGZERO
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
