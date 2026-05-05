@@ -900,7 +900,7 @@ def get_gaia(ra,dec,size):
         outfile=get_gaia_from_file(ra,dec,size)
     except:
         print('Could not get data locally, so trying the GaiaArchive')
-        outfile=get_gaiat_from_archive(ra,dec,size)
+        outfile=get_gaia_from_archive(ra,dec,size)
 
     return outfile
     

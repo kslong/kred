@@ -600,10 +600,13 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
     )
     sources = sources[mask]
 
+    if len(sources) == 0:
+        return 'Error: no valid sources in field after filtering'
+
     # Optionally limit number of sources
     if nrows_max > 0 and len(sources) > nrows_max:
         sources = random_rows(sources, nrows=nrows_max, seed=None)
-    
+
     positions = np.transpose((sources['xcentroid'], sources['ycentroid']))
 
     # Define apertures
@@ -850,15 +853,27 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         height = info['height_deg']
         size = np.sqrt(width*width + height*height) / 2.
         
-        if catalog == 'smash':
-            cat_file = get_smash(ra, dec, size)
-        else:
-            cat_file = get_gaia(ra, dec, size)
-        phot_table = do_forced_photometry(filename, one_extension, cat_file,
-                                          nrows_max, rstar, b_in, b_out)
+        try:
+            if catalog == 'smash':
+                cat_file = get_smash(ra, dec, size)
+            else:
+                cat_file = get_gaia(ra, dec, size)
+            phot_table = do_forced_photometry(filename, one_extension, cat_file,
+                                              nrows_max, rstar, b_in, b_out)
+        except Exception as e:
+            print(f'  Skipping extension {one_extension}: {e}')
+            continue
+
+        if isinstance(phot_table, str):
+            print(f'  Skipping extension {one_extension}: {phot_table}')
+            continue
+
         phot_table['EXT'] = one_extension
         phot_table['CCD'] = image_extensions['NAME'][i]
         phot_tables.append(phot_table)
+
+    if len(phot_tables) == 0:
+        raise RuntimeError(f'No extensions produced valid photometry in {filename}')
 
     phot = vstack(phot_tables, metadata_conflicts='silent')
     phot['Filter'] = xfilter
