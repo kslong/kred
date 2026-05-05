@@ -716,7 +716,7 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
 
 
 def do_one(filename='foo.fits', outroot='', nrows_max=-1,
-           rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True):
+           rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True, redo=False):
     """
     Process a single multi-extension FITS file.
 
@@ -807,13 +807,24 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
     >>> # Limit sources for testing
     >>> phot = do_one('observation.fits', nrows_max=100)
     """
+    # Compute output path before opening the file so we can skip early.
+    catalog = catalog.lower()
+    os.makedirs('TabPhot', exist_ok=True)
+    xoutroot = outroot if outroot else filename.split('/')[-1].replace('.fz', '').replace('.fits', '')
+    cat_suffix = '.smash' if catalog == 'smash' else '.gaia'
+    outfile = f'TabPhot/{xoutroot}{cat_suffix}.fits'
+
+    if not redo and os.path.isfile(outfile):
+        if verbose:
+            print(f'do_one: {outfile} exists, skipping')
+        return
+
     try:
         x = fits.open(filename)
     except:
         print(f'Could not locate {filename}')
         raise IOError
 
-    catalog = catalog.lower()
     if verbose:
         print(f'do_one: Starting {filename} with radius {rstar:.1f} '
               f'and annulus {b_in:.1f} {b_out:.1f} using {catalog} catalog')
@@ -884,13 +895,7 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
     phot['Filename'] = filename
     phot['Catalog'] = 'SMASH' if catalog == 'smash' else 'Gaia'
 
-    # Write output
-    os.makedirs('TabPhot', exist_ok=True)
-    if outroot == '':
-        outroot = filename.split('/')[-1]
-        outroot = outroot.replace('.fz', '').replace('.fits', '')
-    cat_suffix = '.smash' if catalog == 'smash' else '.gaia'
-    outfile = f'TabPhot/{outroot}{cat_suffix}.fits'
+    # Write output  (outfile/xoutroot already computed at top of function)
 
     now = Time.now()
 
@@ -950,11 +955,12 @@ def _safe_do_one_with_index(args):
     This function catches all exceptions to prevent multiprocessing pool
     failures. Exceptions are converted to string messages for reporting.
     """
-    index, filename, outroot, nrows_max, rstar, b_in, b_out, catalog = args
+    index, filename, outroot, nrows_max, rstar, b_in, b_out, catalog, redo = args
     try:
         numbered_outroot = f"{outroot}_{index:03d}" if outroot else ''
         do_one(filename, outroot=numbered_outroot, nrows_max=nrows_max,
-               rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, verbose=True)
+               rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, verbose=True,
+               redo=redo)
         return (filename, True, None)
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
@@ -963,7 +969,7 @@ def _safe_do_one_with_index(args):
 
 
 def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
-            n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia'):
+            n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False):
     """
     Process multiple FITS files in parallel.
 
@@ -1036,7 +1042,7 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
     if n_processes is None:
         n_processes = max(1, mp.cpu_count() - 1)
 
-    args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out, catalog)
+    args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out, catalog, redo)
                  for i, fname in enumerate(filenames)]
 
     n = len(filenames)
@@ -1125,6 +1131,7 @@ def steer(argv):
     b_in = 8
     b_out = 12
     catalog = 'gaia'
+    redo = False
 
     i = 1
     while i < len(argv):
@@ -1137,6 +1144,8 @@ def steer(argv):
         elif argv[i][:4] == '-out':
             i += 1
             root = argv[i]
+        elif argv[i][:5] == '-redo':
+            redo = True
         elif argv[i][:4] == '-cat':
             i += 1
             catalog = argv[i].lower()
@@ -1175,12 +1184,12 @@ def steer(argv):
     if len(filenames) == 1 or np_proc < 2:
         for one_file in filenames:
             do_one(filename=one_file, outroot=root, nrows_max=nrows_max,
-                   rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog)
+                   rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, redo=redo)
         return
 
     do_many(filenames, outroot=root, nrows_max=nrows_max, rstar=rstar,
             b_in=b_in, b_out=b_out, n_processes=np_proc,
-            catalog=catalog)
+            catalog=catalog, redo=redo)
 
 
 if __name__ == "__main__":
