@@ -670,14 +670,12 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
     xfilename = ''
     if os.path.isfile(filename):
         xfilename = filename
-        print(f'get_smash_from_file: using local file {xfilename}')
     else:
         KRED = os.environ.get('KRED')
         if KRED is not None:
             candidate = os.path.join(KRED, 'xdata', filename)
             if os.path.isfile(candidate):
                 xfilename = candidate
-                print(f'get_smash_from_file: using {xfilename}')
             else:
                 raise IOError(f'Could not locate {filename} locally or in $KRED/xdata/')
         else:
@@ -687,11 +685,10 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
 
     global _smash_preassembled_table, _smash_preassembled_path
     if _smash_preassembled_path == xfilename and _smash_preassembled_table is not None:
-        print(f'get_smash_from_file: using in-memory cached table ({len(_smash_preassembled_table):,} rows)')
         xtab = _smash_preassembled_table
     else:
         size_gb = os.path.getsize(xfilename) / 1e9
-        print(f'get_smash_from_file: reading {xfilename} ({size_gb:.1f} GB, slow first time)...')
+        print(f'get_smash_from_file: loading {xfilename} ({size_gb:.1f} GB)...')
         xtab = Table.read(xfilename)
         _smash_preassembled_table = xtab
         _smash_preassembled_path  = xfilename
@@ -717,7 +714,6 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
         (xtab[dec_col] > dec_min) & (xtab[dec_col] < dec_max)
     )
     ftab = xtab[mask]
-    print(f'get_smash_from_file: {len(ftab)} sources in sky region before filtering')
 
     # select_fraction_smash_dr2 expects the raw column name 'rmag'.
     # Pre-assembled files already call it 'R', so rename temporarily.
@@ -725,7 +721,6 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
         ftab.rename_column('R', 'rmag')
 
     ftab = select_fraction_smash_dr2(ftab, rmag_max=rmag_max, keep_frac=keep_frac)
-    print(f'get_smash_from_file: {len(ftab)} sources after select_fraction_smash_dr2')
 
     # Standardise column names to match pipeline convention
     if raw_names:
@@ -745,7 +740,6 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
     outfile = os.path.join(SMASH_CACHE_DIR, f'Smash.{outroot}.fits')
 
     ftab.write(outfile, format='fits', overwrite=True)
-    print(f'get_smash_from_file: wrote {len(ftab)} sources to {outfile}')
     return outfile
 
 
@@ -799,7 +793,6 @@ def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
         outroot = f'{ra:.4f}_{dec:+.4f}_r{rmag_max:.1f}_k{keep_frac:.2f}'
         outfile = os.path.join(SMASH_CACHE_DIR, f'Smash.{outroot}.fits')
         if os.path.exists(outfile):
-            print(f'get_smash: using cached catalog {outfile}')
             return outfile
         return get_smash_from_file(ra, dec, size,
                                    rmag_max=rmag_max, keep_frac=keep_frac,
@@ -815,7 +808,6 @@ def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
     )
     outfile = outroot + '.fits'
     if os.path.exists(outfile):
-        print(f'get_smash: using cached catalog {outfile}')
         return outfile
     do_one(ra, dec, radius=size, outroot=outroot,
            rmag_max=rmag_max, keep_frac=keep_frac, plot=False)
