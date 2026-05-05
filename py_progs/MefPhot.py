@@ -963,7 +963,7 @@ def _safe_do_one_with_index(args):
 
 
 def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
-            n_processes=None, logfile=None, verbose_errors=False, catalog='gaia'):
+            n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia'):
     """
     Process multiple FITS files in parallel.
 
@@ -1060,27 +1060,10 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
     # Report results
     if failed_files:
         print(f"\n{len(failed_files)}/{len(filenames)} files failed to process")
-        print("\nErrors:")
-        for fname, error_msg, tb in failed_files:
-            print(f"\n  {fname}:")
-            print(f"    {error_msg}")
-            if verbose_errors:
-                print("    Full traceback:")
-                for line in tb.split('\n'):
-                    print(f"      {line}")
-
-        if logfile:
-            with open(logfile, 'w') as f:
-                f.write(f"{len(failed_files)}/{len(filenames)} files failed\n\n")
-                for fname, error_msg, tb in failed_files:
-                    f.write(f"{fname}\n")
-                    f.write(f"  Error: {error_msg}\n")
-                    if verbose_errors:
-                        f.write(f"  Traceback:\n")
-                        for line in tb.split('\n'):
-                            f.write(f"    {line}\n")
-                    f.write("\n")
-            print(f"\nFailed filenames and errors written to {logfile}")
+        with open(logfile, 'w') as f:
+            for fname, error_msg, tb in failed_files:
+                f.write(f"{fname} {error_msg}\n")
+        print(f"Failures written to {logfile}")
     else:
         print(f"\nSuccessfully processed all {len(filenames)} files")
 
@@ -1196,7 +1179,7 @@ def steer(argv):
         return
 
     do_many(filenames, outroot=root, nrows_max=nrows_max, rstar=rstar,
-            b_in=b_in, b_out=b_out, n_processes=np_proc, logfile=None,
+            b_in=b_in, b_out=b_out, n_processes=np_proc,
             catalog=catalog)
 
 
