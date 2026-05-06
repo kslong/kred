@@ -621,6 +621,20 @@ def do_one(ra, dec, radius=0.5, outroot='smash_cat', rmag_max=22.0, keep_frac=0.
     return table
 
 
+def clear_preassembled_cache():
+    """Release the module-level SMASH catalog table from memory.
+
+    Call this after pre-caching all tile files and before launching a
+    multiprocessing pool so forked workers inherit a lean parent process
+    rather than a copy of the 15 GB table.
+    """
+    global _smash_preassembled_table, _smash_preassembled_path
+    import gc
+    _smash_preassembled_table = None
+    _smash_preassembled_path  = None
+    gc.collect()
+
+
 def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
                         outroot='', rmag_max=22.0, keep_frac=0.5):
     """
@@ -736,7 +750,7 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
 
     os.makedirs(SMASH_CACHE_DIR, exist_ok=True)
     if outroot == '':
-        outroot = f'{ra:.4f}_{dec:+.4f}'
+        outroot = f'{ra:.2f}_{dec:+.2f}'
     outfile = os.path.join(SMASH_CACHE_DIR, f'Smash.{outroot}.fits')
 
     ftab.write(outfile, format='fits', overwrite=True)
@@ -790,7 +804,7 @@ def get_smash(ra, dec, size, rmag_max=22.0, keep_frac=0.5):
     """
     # Try the pre-assembled local file first
     try:
-        outroot = f'{ra:.4f}_{dec:+.4f}_r{rmag_max:.1f}_k{keep_frac:.2f}'
+        outroot = f'{ra:.2f}_{dec:+.2f}_r{rmag_max:.1f}_k{keep_frac:.2f}'
         outfile = os.path.join(SMASH_CACHE_DIR, f'Smash.{outroot}.fits')
         if os.path.exists(outfile):
             return outfile

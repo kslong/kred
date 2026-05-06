@@ -159,6 +159,7 @@ import traceback
 
 from GaiaCat import get_gaia
 from Smash import get_smash
+import Smash as _Smash
 import ImageSum
 
 
@@ -968,6 +969,97 @@ def _safe_do_one_with_index(args):
         return (filename, False, error_msg, tb)
 
 
+def precache_smash_tiles(filenames):
+    """Load Smash_MagClouds.fits once and write per-tile cache files for all extensions.
+
+    Call this before do_many() when using the SMASH catalog.  All workers
+    will find their tile already cached on disk and never load the large
+    pre-assembled file, keeping per-worker memory low.  After this function
+    returns, call Smash.clear_preassembled_cache() to free the big table
+    before the multiprocessing pool is created.
+
+    Parameters
+    ----------
+    filenames : list of str
+        FITS files that will be passed to do_many().
+    """
+    from astropy.io import fits as _fits
+    import numpy as _np
+
+    # Phase 1: scan all FITS headers to collect unique tile positions.
+    # Key is the outroot string used by get_smash (rounded ra/dec + defaults),
+    # so we can check existence without loading the catalog.
+    rmag_max = 22.0
+    keep_frac = 0.50
+    cache_dir = _Smash.SMASH_CACHE_DIR
+
+    tiles = {}   # outroot -> (ra, dec, size)
+    scan_errors = 0
+
+    for fname in filenames:
+        try:
+            image_extensions = ImageSum.list_image_extensions(fname)
+        except Exception as e:
+            print(f'precache_smash_tiles: cannot read extensions from {fname}: {e}', flush=True)
+            scan_errors += 1
+            continue
+
+        with _fits.open(fname, memmap=True) as hdul:
+            for one_ext in _np.array(image_extensions['EXT']):
+                try:
+                    info = ImageSum.get_image_center_and_size_from_header(hdul[one_ext].header)
+                    ra   = info['center_ra']
+                    dec  = info['center_dec']
+                    w    = info['width_deg']
+                    h    = info['height_deg']
+                    size = _np.sqrt(w * w + h * h) / 2.0
+                    outroot = f'{ra:.2f}_{dec:+.2f}_r{rmag_max:.1f}_k{keep_frac:.2f}'
+                    if outroot not in tiles:
+                        tiles[outroot] = (ra, dec, size)
+                except Exception as e:
+                    print(f'precache_smash_tiles: {fname}[{one_ext}]: {e}', flush=True)
+                    scan_errors += 1
+
+    n_total   = len(tiles)
+    n_already = sum(1 for r in tiles
+                    if os.path.exists(os.path.join(cache_dir, f'Smash.{r}.fits')))
+    n_needed  = n_total - n_already
+
+    print(f'{n_already} Smash catalogs for the tiles already exist.', flush=True)
+    print(f'Creating {n_needed} new Smash catalogs for later use.', flush=True)
+
+    if n_needed == 0:
+        return
+
+    # Phase 2: create the missing tiles, reporting at every 5% milestone.
+    w          = len(str(n_needed))   # field width for aligned counts
+    n_created  = 0
+    n_err      = 0
+    next_pct   = 5                    # next milestone to report
+
+    for outroot, (ra, dec, size) in tiles.items():
+        if os.path.exists(os.path.join(cache_dir, f'Smash.{outroot}.fits')):
+            continue
+        try:
+            get_smash(ra, dec, size)
+            n_created += 1
+            pct = 100.0 * n_created / n_needed
+            if pct >= next_pct:
+                print(f'  Finished {n_created:{w}d} of {n_needed} new Smash catalogs'
+                      f' ({pct:3.0f}%)', flush=True)
+                next_pct += 5
+        except Exception as e:
+            print(f'precache_smash_tiles: error at ra={ra:.2f} dec={dec:+.2f}: {e}', flush=True)
+            n_err += 1
+
+    status = f'{n_created} new Smash catalogs created'
+    if n_err:
+        status += f', {n_err} error(s)'
+    if scan_errors:
+        status += f', {scan_errors} scan error(s)'
+    print(f'precache_smash_tiles: done — {status}', flush=True)
+
+
 def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
             n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False):
     """
@@ -1179,17 +1271,46 @@ def steer(argv):
         print('UNPHYSICAL limits for photometry')
         return
 
-    np_proc = check_smash_memory(np_proc, catalog, n_files=len(filenames))
+    going_parallel = len(filenames) > 1 and np_proc >= 2
+
+    if catalog == 'smash' and going_parallel:
+        # Pre-extract all tile files serially before forking.  Workers find
+        # their tile on disk and never load the 15 GB catalog, so the memory
+        # check below is not needed and would fire a false warning.
+        precache_smash_tiles(filenames)
+        _Smash.clear_preassembled_cache()
+    else:
+        np_proc = check_smash_memory(np_proc, catalog, n_files=len(filenames))
+
+    # Count files that genuinely need processing vs already have output.
+    cat_suffix = '.smash' if catalog == 'smash' else '.gaia'
+    n_todo = 0
+    for fname in filenames:
+        xr = root if root else fname.split('/')[-1].replace('.fz', '').replace('.fits', '')
+        if not os.path.isfile(f'TabPhot/{xr}{cat_suffix}.fits'):
+            n_todo += 1
+    n_already = len(filenames) - n_todo
+
+    if n_already:
+        print(f'{n_already} of {len(filenames)} files already have TabPhot output and will be skipped.',
+              flush=True)
+    if n_todo == 0:
+        print('All files already processed; nothing to do. Use -redo to reprocess.', flush=True)
+        return
 
     if len(filenames) == 1 or np_proc < 2:
+        print(f'Processing {n_todo} file(s) serially.', flush=True)
         for one_file in filenames:
             do_one(filename=one_file, outroot=root, nrows_max=nrows_max,
                    rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, redo=redo)
         return
 
+    print(f'Starting parallel processing of {n_todo} file(s) with {np_proc} workers '
+          f'({n_already} already complete).', flush=True)
     do_many(filenames, outroot=root, nrows_max=nrows_max, rstar=rstar,
             b_in=b_in, b_out=b_out, n_processes=np_proc,
             catalog=catalog, redo=redo)
+    print(f'Done. Processed {n_todo} file(s); {n_already} were already complete.', flush=True)
 
 
 if __name__ == "__main__":
