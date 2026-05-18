@@ -19,7 +19,7 @@ Command Line Usage
 
 ::
 
-    ZeroCalc.py [-h] [-R] [-G] [-color] [-smash] [-out ROOT] file1.fits file2.fits ...
+    ZeroCalc.py [-h] [-R] [-G] [-color] [-smash] [-fig] [-np N] [-out ROOT] file1.fits file2.fits ...
 
     -h        Print this help and exit
     -R        Fit to the reference catalog R band (default)
@@ -115,17 +115,37 @@ Version History
     Gaia R: G-R, Gaia G: B-R, SMASH R: G-R, SMASH G: U-R.
     Output filenames include .color suffix when -color is used.
 
+260518 ksl
+    Performance improvements and usability changes.
+    Add -np N flag for parallel processing via multiprocessing.Pool.
+    Add rasterized=True to all scatter calls in do_fig (no quality loss
+    for PNG output, faster rendering).
+    Set matplotlib Agg backend explicitly so worker processes need no display.
+    Make figure generation opt-in with -fig flag (previously always-on);
+    figure generation was found to be the main per-file bottleneck when
+    processing large batches. Without -fig, throughput is limited by FITS
+    read I/O rather than CPU; fitsio with selective column reads would be
+    the next step if further speedup is needed.
+    Progress reporting now prints index/total and filename per file.
+    Output filenames now include a date suffix (e.g. MagZero.R.gaia.260518.txt)
+    to avoid overwriting previous runs.
+    Fixed latent bug in do_many where a failed file would cause a
+    column-length mismatch when building the output Table.
+
 """
 
 
 import sys
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
 from glob import glob
-from astropy.table import Table, join,vstack
+from astropy.table import Table, join, vstack
 import numpy as np
 from scipy.optimize import curve_fit
-from astropy.table import Table
+from multiprocessing import Pool
+from datetime import date
 
 def fit_magnitude_model(data, use_color=False):
     """
@@ -233,8 +253,8 @@ def do_fig(xtab, band='R', outroot='', catalog='gaia', use_color=False):
     plt.subplot(2,2,1)
     # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
     if 'G' in xtab.colnames:
-        sc=plt.scatter(xtab['G'],xtab['phot_mag'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
-        sc=plt.scatter(xtab['G'],-xtab['phot_mag'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
+        sc=plt.scatter(xtab['G'],xtab['phot_mag'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
+        sc=plt.scatter(xtab['G'],-xtab['phot_mag'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
         cbar=plt.colorbar(sc)
         cbar.set_label(color_label)
         # Make colorbar solid (ignore scatter alpha)
@@ -242,8 +262,8 @@ def do_fig(xtab, band='R', outroot='', catalog='gaia', use_color=False):
             cbar.solids.set_alpha(1.0)
         plt.xlabel(f'{ref_label} G mag')
     else:
-        plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05)
-        plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05)
+        plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05,rasterized=True)
+        plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05,rasterized=True)
         plt.xlabel(f'{ref_label} R mag')
     plt.ylabel('DECam mag')
     plt.plot([11,24],[11,24],'k-')
@@ -258,16 +278,16 @@ def do_fig(xtab, band='R', outroot='', catalog='gaia', use_color=False):
     plt.subplot(2,2,2)
     # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
     if 'G' in xtab.colnames:
-        sc=plt.scatter(xtab['R'],xtab['mag_model'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
-        sc=plt.scatter(xtab['R'],-xtab['mag_model'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
+        sc=plt.scatter(xtab['R'],xtab['mag_model'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
+        sc=plt.scatter(xtab['R'],-xtab['mag_model'],marker='.',alpha=.05,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
         cbar=plt.colorbar(sc)
         cbar.set_label(color_label)
         # Make colorbar solid (ignore scatter alpha)
         if hasattr(cbar, "solids") and cbar.solids is not None:
             cbar.solids.set_alpha(1.0) 
     else:
-        plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05)
-        plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05)
+        plt.scatter(xtab['R'],xtab['phot_mag'],marker='.',alpha=.05,rasterized=True)
+        plt.scatter(xtab['R'],-xtab['phot_mag'],marker='.',alpha=.05,rasterized=True)
     plt.xlabel(f'{ref_label} R mag')
     plt.ylabel('Corrected DECam mag')
     plt.plot([11,24],[11,24],'k-')
@@ -278,8 +298,8 @@ def do_fig(xtab, band='R', outroot='', catalog='gaia', use_color=False):
 
     plt.subplot(2,2,3)
     # plt.plot(xtab['G'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
-    sc=plt.scatter(xtab['G'],xtab['phot_mag']-xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
-    sc=plt.scatter(xtab['G'],xtab['phot_mag']+xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
+    sc=plt.scatter(xtab['G'],xtab['phot_mag']-xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
+    sc=plt.scatter(xtab['G'],xtab['phot_mag']+xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
     cbar=plt.colorbar(sc)
     cbar.set_label(color_label)
     # Make colorbar solid (ignore scatter alpha)
@@ -296,8 +316,8 @@ def do_fig(xtab, band='R', outroot='', catalog='gaia', use_color=False):
     # plt.plot(xtab['R'],27-2.5*np.log10(xtab['aperture_sum']),'.',alpha=.05)
     under=xtab[xtab['phot_mag']>0]
     # plt.text(16,1.5,'Under %d Over %d' % (len(under),len(xtab)-len(under)))
-    sc=plt.scatter(xtab['R'],xtab['mag_model']-xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
-    sc=plt.scatter(xtab['R'],xtab['mag_model']+xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1)
+    sc=plt.scatter(xtab['R'],xtab['mag_model']-xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
+    sc=plt.scatter(xtab['R'],xtab['mag_model']+xtab['R'],marker='.',alpha=.01,c=xtab['target_color'],cmap='plasma',vmin=-1,vmax=1,rasterized=True)
     cbar=plt.colorbar(sc)
     cbar.set_label(color_label)
     # Make colorbar solid (ignore scatter alpha)
@@ -332,7 +352,7 @@ def get_filter_from_filename(filename):
 
 
 def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits', option='R',
-           catalog='gaia', use_color=False):
+           catalog='gaia', use_color=False, use_fig=False):
     '''
     Process a single photometry table and return fit results.
 
@@ -392,12 +412,7 @@ def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits', option='R',
     except:
         xtime=-99.
 
-    print('Filename :', filename)
     results = fit_magnitude_model(xtab[:30000], use_color=use_color)
-    print(f"c_0 = {results['c_0']:.4f} +/- {results['c_0_err']:.4f}")
-    if use_color:
-        print(f"c_1 = {results['c_1']:.4f} +/- {results['c_1_err']:.4f}")
-    print(f"RMS = {results['rms']:.4f}")
     fitted_table = results['table']
 
     outroot = filename.split('/')[-1].replace('.fits', '')
@@ -406,12 +421,36 @@ def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits', option='R',
             outroot = outroot[:-len(_sfx)]
             break
 
-    do_fig(fitted_table, option, outroot, catalog=catalog, use_color=use_color)
+    if use_fig:
+        do_fig(fitted_table, option, outroot, catalog=catalog, use_color=use_color)
 
     return 28.+results['c_0'], results['c_0'], results['c_1'], results['rms'], phot_zero, xfilt, xtime
 
 
-def do_many(filenames, band='G', outroot='MagZero', catalog='gaia', use_color=False):
+def _do_one_safe(args):
+    index, total, filename, band, catalog, use_color, use_fig = args
+    print(f'{index}/{total} {filename}', flush=True)
+    try:
+        return filename, do_one(filename, band, catalog=catalog, use_color=use_color, use_fig=use_fig)
+    except Exception as e:
+        print('Failed on %s' % filename)
+        print(f'Exception: {e}')
+        return filename, None
+
+
+def do_many(filenames, band='G', outroot='MagZero', catalog='gaia', use_color=False, n_processes=1, use_fig=False):
+    if use_fig:
+        print('Figures will be written to FigZero/')
+    else:
+        print('No figures will be generated (use -fig to enable)')
+    total = len(filenames)
+    args = [(i+1, total, f, band, catalog, use_color, use_fig) for i, f in enumerate(filenames)]
+    if n_processes > 1 and len(filenames) > 1:
+        with Pool(processes=n_processes) as pool:
+            raw = pool.map(_do_one_safe, args, chunksize=1)
+    else:
+        raw = [_do_one_safe(a) for a in args]
+
     zz=[]
     cc0=[]
     cc1=[]
@@ -420,26 +459,26 @@ def do_many(filenames, band='G', outroot='MagZero', catalog='gaia', use_color=Fa
     xfilter=[]
     xtime=[]
     root=[]
-    for one in filenames:
-        try:
-            zero,c_0,c_1,rms,hzero,xfilt,xt=do_one(one, band, catalog=catalog, use_color=use_color)
-            zz.append(zero)
-            cc0.append(c_0)
-            cc1.append(c_1)
-            rrms.append(rms)
-            header_zero.append(hzero)
-            xfilter.append(xfilt)
-            xtime.append(xt)
-            one_root=one.split('/')[-1].replace('.fits','')
-            root.append(one_root)
-        except Exception as e:
-            print('Failed on %s' % (one))
-            print(f'Exception: {e}')
+    good_files=[]
+    for one, result in raw:
+        if result is None:
+            continue
+        zero,c_0,c_1,rms,hzero,xfilt,xt = result
+        zz.append(zero)
+        cc0.append(c_0)
+        cc1.append(c_1)
+        rrms.append(rms)
+        header_zero.append(hzero)
+        xfilter.append(xfilt)
+        xtime.append(xt)
+        one_root=one.split('/')[-1].replace('.fits','')
+        root.append(one_root)
+        good_files.append(one)
 
     cat_label    = 'smash' if catalog.lower() == 'smash' else 'gaia'
     color_suffix = '.color' if use_color else ''
     xtab=Table([xfilter,xtime,root,zz,cc0,cc1,rrms,header_zero,
-                [cat_label]*len(root),filenames],
+                [cat_label]*len(root),good_files],
                names=['Filter','Exptime','Root','MagZero','c_0','c_1','rms',
                       'HdrZero','Catalog','Filename'])
     xtab['MagZero'].format='.3f'
@@ -447,7 +486,8 @@ def do_many(filenames, band='G', outroot='MagZero', catalog='gaia', use_color=Fa
     xtab['c_1'].format='.3f'
     xtab['rms'].format='.3f'
     xtab['HdrZero'].format='.3f'
-    outfile = '%s.%s.%s%s.txt' % (outroot, band, cat_label, color_suffix)
+    date_str = date.today().strftime('%y%m%d')
+    outfile = '%s.%s.%s%s.%s.txt' % (outroot, band, cat_label, color_suffix, date_str)
     if os.path.isfile(outfile):
         qtab=Table.read(outfile,format='ascii.fixed_width_two_line')
         i=0
@@ -479,6 +519,8 @@ def steer(argv):
     outroot='MagZero'
     catalog='gaia'
     use_color=False
+    use_fig=False
+    n_processes=1
 
     i=1
     while i<len(argv):
@@ -489,10 +531,15 @@ def steer(argv):
             band='G'
         elif argv[i][:2]=='-R':
             band='R'
+        elif argv[i][:3]=='-np':
+            i+=1
+            n_processes=int(argv[i])
         elif argv[i][:6]=='-smash':
             catalog='smash'
         elif argv[i][:6]=='-color':
             use_color=True
+        elif argv[i][:4]=='-fig':
+            use_fig=True
         elif argv[i][:4]=='-out':
             i+=1
             outroot=argv[i]
@@ -506,7 +553,7 @@ def steer(argv):
             return
         i+=1
 
-    do_many(filenames, band, outroot, catalog=catalog, use_color=use_color)
+    do_many(filenames, band, outroot, catalog=catalog, use_color=use_color, n_processes=n_processes, use_fig=use_fig)
 
 
 
