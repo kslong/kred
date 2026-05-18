@@ -37,15 +37,16 @@ PhotCompare
 
    -nmax N
        Limit the number of positions used for forced photometry from the
-       reference catalog. If nmax < 0, all positions are processed. Default: 30000.
+       Gaia catalog. If nmax < 0, all positions are processed. Default: 30000.
 
    -forced
-       Use forced photometry (default mode). Performs photometry at reference
+       Use forced photometry (default mode). Performs photometry at Gaia
        catalog positions.
 
    -unforced
-       Search for sources in the image, then cross-match positions to the
-       reference catalog. Diagnostic mode useful for checking astrometry.
+       Search for sources in the image, then cross-match positions to Gaia.
+       This is a diagnostic mode useful for checking relative astrometry
+       between Gaia and our images.
 
    -cat gaia|smash
        Reference catalog for source positions (default: gaia).
@@ -112,11 +113,11 @@ PhotCompare
    Notes
    -----
 
-   The most time-consuming operation is catalog retrieval. To optimize:
+   The most time-consuming operation is Gaia catalog retrieval. To optimize:
 
    * Catalogs are cached and reused when processing multiple files with the
      same field center and size
-   * Cached Gaia catalogs are stored in a ``GAIA/`` subdirectory
+   * Cached catalogs are stored in a ``GAIA/`` subdirectory
    * If all files cover the same region, retrieval happens only once
 
    The xmatch output files written to ``TabPhot/`` are the primary input for
@@ -141,10 +142,6 @@ PhotCompare
        Handle photutils >= 2.x returning shaped arrays from
        ``ApertureStats.fwhm`` and ``ApertureStats.eccentricity``; use
        ``.flat[0]`` instead of ``float()`` conversion.
-
-   260502 ksl
-       Added SMASH DR2 as an alternative reference catalog (-cat smash).
-       All catalog-retrieval functions now accept a ``catalog`` parameter.
 
    Author
    ------
@@ -216,9 +213,6 @@ Module Contents
    -----
    Uses ImageSum.table_create() to recursively find all FITS files.
    Then calls do_many() to process with optimized catalog caching.
-
-   This is the recommended approach for processing large datasets where
-   multiple images cover the same fields.
 
    Examples
    --------
@@ -400,9 +394,6 @@ Module Contents
    4. Map each file to its catalog
    5. Process all files using cached catalogs
 
-   This dramatically reduces catalog query time when processing many images
-   of the same field (e.g., different filters or epochs).
-
    **Intermediate Files:**
 
    * xpos.txt - All file positions
@@ -450,15 +441,6 @@ Module Contents
    ------
    ValueError
        If FITS file cannot be opened.
-
-   Notes
-   -----
-   **Catalog Handling:**
-
-   * If gaia_cat_file exists: uses it directly regardless of ``catalog``
-   * Otherwise: calculates field center/size and retrieves a new catalog
-
-   Catalog is cached for reuse in subsequent calls with the same field.
 
    Examples
    --------

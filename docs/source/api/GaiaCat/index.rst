@@ -95,6 +95,8 @@ GaiaCat
    260429 ksl Switch catalog queries to MAST as primary source; ESA async
               endpoint retained as fallback.  Add get_gaia_spectra_batch()
               for bulk XP spectrum retrieval.
+   260502 ksl Add redo parameter to get_gaia_from_file; skip re-extraction
+              when output file already exists.
 
    Example Usage
    -------------
@@ -281,7 +283,7 @@ Module Contents
 
 
 
-.. py:function:: get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667, size_deg=0.3, filename='Gaia_MagClouds.fits', outroot='')
+.. py:function:: get_gaia_from_file(ra=84.92500000000001, dec=-66.27416666666667, size_deg=0.3, filename='Gaia_MagClouds.fits', outroot='', redo=False)
 
    Extract GAIA sources from a local catalog file within a sky region.
 
@@ -303,6 +305,9 @@ Module Contents
        in $KRED/xdata/. Default is 'Gaia_MagClouds.fits'.
    outroot : str, optional
        Root name for the output file. If empty, constructs from RA and Dec.
+   redo : bool, optional
+       If True, re-extract and overwrite the output file even if it already
+       exists. Default is False.
 
    Returns
    -------

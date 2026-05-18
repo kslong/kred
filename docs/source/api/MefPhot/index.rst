@@ -125,8 +125,8 @@ MefPhot
        Extraction parameters written to extension 1 header.
 
    2026-05-02 ksl
-       Unified default aperture parameters across all functions to match CLI
-       defaults: rstar=6, b_in=8, b_out=12.
+       Fix photutils >= 2.x compatibility: ApertureStats.fwhm and eccentricity
+       now return shaped arrays; use .flat[0] to extract scalar values.
 
    Author
    ------
@@ -147,6 +147,7 @@ Functions
    MefPhot.do_one
    MefPhot.get_available_memory
    MefPhot.get_total_memory
+   MefPhot.precache_smash_tiles
    MefPhot.random_rows
    MefPhot.read_table
    MefPhot.steer
@@ -282,7 +283,7 @@ Module Contents
    >>> bright = phot[phot['Net'] > 1000]
 
 
-.. py:function:: do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, n_processes=None, logfile=None, verbose_errors=False, catalog='gaia')
+.. py:function:: do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False)
 
    Process multiple FITS files in parallel.
 
@@ -353,12 +354,12 @@ Module Contents
    ...     print(f"{len(failed)} files failed - see errors.log")
 
 
-.. py:function:: do_one(filename='foo.fits', outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, catalog='gaia')
+.. py:function:: do_one(filename='foo.fits', outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True, redo=False)
 
    Process a single multi-extension FITS file.
 
    Performs forced photometry on all image extensions in a FITS file using
-   a reference catalog. Automatically retrieves catalog sources for each
+   Gaia catalog sources. Automatically retrieves Gaia sources for each
    extension's field of view.
 
    Parameters
@@ -466,6 +467,22 @@ Module Contents
    -------
    int or None
        Total RAM in bytes, or None if it cannot be determined.
+
+
+.. py:function:: precache_smash_tiles(filenames)
+
+   Load Smash_MagClouds.fits once and write per-tile cache files for all extensions.
+
+   Call this before do_many() when using the SMASH catalog.  All workers
+   will find their tile already cached on disk and never load the large
+   pre-assembled file, keeping per-worker memory low.  After this function
+   returns, call Smash.clear_preassembled_cache() to free the big table
+   before the multiprocessing pool is created.
+
+   Parameters
+   ----------
+   filenames : list of str
+       FITS files that will be passed to do_many().
 
 
 .. py:function:: random_rows(tab, nrows, seed=None)
