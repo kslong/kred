@@ -16,7 +16,7 @@ independently derived zero point.
 Overview
 --------
 
-The photometry system comprises seven modules:
+The photometry system comprises the following modules:
 
 .. list-table::
    :header-rows: 1
@@ -30,17 +30,26 @@ The photometry system comprises seven modules:
      - Retrieve SMASH DR2 catalog for Magellanic Cloud fields (alternative to Gaia)
    * - :doc:`MefPhot <api/MefPhot/index>`
      - Forced aperture photometry on MEF images at Gaia or SMASH catalog
-       positions (``-cat gaia|smash``)
+       positions (``-cat gaia|smash``); primary source of ``TabPhot/`` files
+   * - :doc:`CalcZeroPoint <api/CalcZeroPoint/index>`
+     - Quick per-file zero-point estimate (sigma-clipped median) from
+       ``TabPhot/`` files; produces a multi-file summary table with
+       ``delta_zp`` relative to the MEF header ``MAGZERO``
+   * - :doc:`ZeroCalc <api/ZeroCalc/index>`
+     - Weighted regression fit (with optional color term) of the zero point
+       against Gaia or SMASH broadband magnitudes; preferred when a color
+       correction is scientifically important
+   * - :doc:`PhotEval <api/PhotEval/index>`
+     - Multi-frame photometric consistency check: stacks all ``TabPhot/``
+       catalogs for a given filter, groups by SMASH ``Source_name``, and
+       computes per-source scatter statistics (both raw and ZP-corrected)
    * - :doc:`PhotCompare <api/PhotCompare/index>`
      - Aperture photometry on tile/swarped images with catalog cross-match and
        comparison plots (``-cat gaia|smash``)
-   * - :doc:`ZeroCalc <api/ZeroCalc/index>`
-     - Fit a magnitude zero point and color term against Gaia or SMASH
-       broadband magnitudes (``-smash`` flag selects SMASH)
    * - :doc:`ZeroPoint <api/ZeroPoint/index>`
      - Derive a physical flux zero point using Gaia XP spectra
    * - :doc:`PhotAnal <api/PhotAnal/index>`
-     - Multi-filter consistency check; compare photometry across observations
+     - Multi-filter consistency check across a smaller set of files
    * - :doc:`StarFind <api/StarFind/index>`
      - Automatically detect stars for PSF construction
    * - :doc:`PsfBuild <api/PsfBuild/index>`
@@ -60,9 +69,16 @@ to independently derive a zero point from reference catalog stars (Gaia, or
 SMASH for Magellanic Cloud fields) and compare it to the pipeline-supplied
 value.
 
-Two calibration paths are available:
+Three calibration / evaluation paths are available:
 
-**Magnitude calibration** (``ZeroCalc``)
+**Quick zero-point summary** (``CalcZeroPoint``)
+    For each ``TabPhot/`` file, computes ``zp_i = 28 + (ref_mag - phot_mag)``
+    for every star, then takes the sigma-clipped median.  Produces a single
+    summary table (``zeropoints.fits``) with one row per file, including
+    ``delta_zp = zp_calc − MAGZERO``.  Use this for a rapid sanity check of
+    the pipeline-supplied ``MAGZERO`` values across an entire observing run.
+
+**Magnitude calibration by regression** (``ZeroCalc``)
     Fits instrumental magnitudes (measured at a reference zero point of 28)
     against Gaia or SMASH broadband magnitudes.  Two modes are available:
 
@@ -108,15 +124,22 @@ not need to invoke either catalog module separately.
     MEF file(s)
         │
         ▼
-    MefPhot.py [-cat gaia|smash]  ──► TabPhot/<name>.gaia.fits
-        │                               TabPhot/<name>.smash.fits
-        ▼
-    ZeroCalc.py [-G|-R] [-color] [-smash]  ──► MagZero.<band>.gaia.txt
-                                               MagZero.<band>.gaia.color.txt
-                                               MagZero.<band>.smash.txt
-                                               MagZero.<band>.smash.color.txt
-                                               FigZero/<band>_<name>.gaia[.color].png
-                                               FigZero/<band>_<name>.smash[.color].png
+    MefPhot.py [-cat gaia|smash]
+        │
+        ├──► TabPhot/<name>.gaia.fits
+        │    TabPhot/<name>.smash.fits
+        │
+        ├── CalcZeroPoint.py [-filter F]   ──► zeropoints.fits
+        │       (quick sigma-clipped median ZP per file; delta_zp vs MAGZERO)
+        │
+        ├── ZeroCalc.py [-G|-R] [-color] [-smash]
+        │       ──► MagZero.<band>.<cat>[.color].<date>.txt
+        │           FigZero/<band>_<name>.<cat>[.color].png
+        │       (regression ZP fit with optional color term, per file)
+        │
+        └── PhotEval.py [-filter F] [-exp T]
+                ──► phot_eval_<filter>[_<exp>s].fits
+                (per-source scatter across all frames; raw + ZP-corrected)
 
     MEF or tile image(s)
         │
@@ -196,6 +219,61 @@ Output filenames encode the band, catalog, and fit mode:
   for SMASH runs
 * ``FigZero/<band>_<root>.gaia[.color].png`` /
   ``FigZero/<band>_<root>.smash[.color].png`` – per-file diagnostic plots
+
+Step 2b: Quick zero-point summary with CalcZeroPoint
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``CalcZeroPoint`` provides a faster alternative to ``ZeroCalc`` for obtaining
+a per-file zero-point estimate.  Instead of a regression fit it takes the
+sigma-clipped median of the per-star zero-point estimates and reports the
+scatter and number of stars used.  Running with no arguments processes all
+``*.smash.fits`` and ``*.gaia.fits`` files in ``TabPhot/``::
+
+    CalcZeroPoint.py                     # all filters
+    CalcZeroPoint.py -filter r           # r-band only
+    CalcZeroPoint.py -filter N662 -snr 20
+
+The output table ``zeropoints.fits`` has one row per input file.  The
+``delta_zp`` column (= ``zp_calc − MAGZERO``) directly answers the question
+"how far is the pipeline zero point from what we measure?".  A consistent
+offset across many files in the same filter suggests a systematic difference
+between the reference catalog's photometric system and the pipeline, rather
+than file-by-file variation.
+
+.. note::
+
+   **CalcZeroPoint vs ZeroCalc**: use ``CalcZeroPoint`` for a rapid overview
+   and to spot outlier files; use ``ZeroCalc`` when you need a color-corrected
+   fit or want per-file diagnostic plots.  Both read the same ``TabPhot/``
+   files and can be run independently.
+
+Step 2c: Multi-frame consistency check with PhotEval
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+``PhotEval`` addresses a different question: not what the zero point of each
+frame is, but whether sources measured in multiple overlapping frames give
+consistent fluxes.  It stacks all ``TabPhot/`` catalogs for a chosen filter
+and exposure time, groups detections by SMASH ``Source_name``, and computes
+per-source statistics::
+
+    PhotEval.py -filter r -exp 30 -snr 10 -min_n 5
+    PhotEval.py -filter N662 -min_n 3 -o ha_eval.fits
+
+The output table (e.g. ``phot_eval_r_30s.fits``) contains one row per SMASH
+source with the following key columns:
+
+* ``mag_std`` / ``magc_std`` – scatter of raw and ZP-corrected magnitudes
+  across frames.  ``magc_std`` (using ``MAGZERO`` from the MEF header to
+  correct each detection) is the primary repeatability metric.
+* ``mag_err_mean`` – expected photon-noise magnitude error (2.5/ln10 × ErrNet/Net).
+* ``chi2_nu`` / ``chi2_nu_c`` – reduced chi-squared of raw and corrected
+  magnitudes.  Values near 1 indicate photon-noise-limited scatter; values
+  significantly larger than 1 indicate excess frame-to-frame variation.
+
+A ``chi2_nu_c`` median near 1 after applying the ``MAGZERO`` correction means
+the header zero points are accurately capturing the frame-to-frame throughput
+variation.  A persistent excess indicates either an additional systematic (PSF
+variations, flat-fielding) or astrophysical variability in the source sample.
 
 Step 3: Compare to the MEF header MAGZERO
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -410,6 +488,14 @@ Output File Summary
    * - ``TabPhot/xmatch_<name>.fits``
      - PhotCompare, StarFind, PsfPhot
      - Cross-matched photometry tables (no catalog suffix)
+   * - ``zeropoints.fits``
+     - CalcZeroPoint
+     - Per-file zero-point summary (sigma-clipped median): zp_calc, zp_wmean,
+       zp_std, zp_err, zp_mad, n_stars, n_total, delta_zp
+   * - ``phot_eval_<filter>[_<exp>s].fits``
+     - PhotEval
+     - Per-source scatter statistics across all frames: n_detect, mag_mean,
+       mag_std, magc_mean, magc_std, mag_err_mean, chi2_nu, chi2_nu_c
    * - ``MagZero.<band>.gaia.txt``
      - ZeroCalc (default)
      - Per-file zero-point fit results against Gaia (c_0, c_1, rms, Catalog)
