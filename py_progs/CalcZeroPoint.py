@@ -35,7 +35,9 @@ Optional Arguments
     (default: ``TabPhot``).
 
 -filter FILTER
-    Only process files whose name contains FILTER (e.g. ``r``, ``N662``).
+    Only process files whose Filter header value starts with FILTER
+    (e.g. ``r``, ``N662``, ``N673``).  The filter name is read from
+    the ``Filter`` column inside each file, not from the filename.
     Default: process all catalog files found.
 
 -snr MIN_SNR
@@ -145,7 +147,7 @@ def steer(argv):
     files = sorted(glob(pattern_smash) + glob(pattern_gaia))
 
     if filter_str:
-        files = [f for f in files if filter_str in os.path.basename(f)]
+        files = [f for f in files if _file_filter(f) == filter_str]
 
     if not files:
         print(f'No catalog files found in {tabphot_dir}')
@@ -178,6 +180,17 @@ def steer(argv):
     out.write(outfile, overwrite=True)
     print(f'\nWrote {outfile}  ({len(out)} rows)')
     _print_summary(out)
+
+
+def _file_filter(filepath):
+    """Return the short filter name (first token of the Filter column) from a catalog file."""
+    from astropy.io import fits as _fits
+    try:
+        with _fits.open(filepath, memmap=True) as hdul:
+            raw = hdul[1].data['Filter'][0]
+        return _decode(raw).split()[0]
+    except Exception:
+        return None
 
 
 def _decode(val):
@@ -280,7 +293,8 @@ def _print_summary(t):
     print(f'\n--- Summary ---')
     for filt in np.unique(t['Filter']):
         tf = t[t['Filter'] == filt]
-        print(f'  Filter {_decode(filt)!r}  ({len(tf)} files):')
+        short = _decode(filt).split()[0]
+        print(f'  Filter {short!r}  ({len(tf)} files):')
         print(f'    zp_calc  : mean={np.mean(tf["zp_calc"]):.4f}  '
               f'std={np.std(tf["zp_calc"]):.4f}  '
               f'range=[{np.min(tf["zp_calc"]):.4f}, {np.max(tf["zp_calc"]):.4f}]')
@@ -291,7 +305,4 @@ def _print_summary(t):
 
 
 if __name__ == '__main__':
-    if len(sys.argv) > 1:
-        steer(sys.argv)
-    else:
-        print(__doc__)
+    steer(sys.argv)
