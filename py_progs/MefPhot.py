@@ -864,7 +864,7 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         width = info['width_deg']
         height = info['height_deg']
         size = np.sqrt(width*width + height*height) / 2.
-        
+
         try:
             if catalog == 'smash':
                 cat_file = get_smash(ra, dec, size)

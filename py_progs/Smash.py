@@ -228,8 +228,16 @@ def check_cache(ra, dec, radius, tol=1e-4):
             if (abs(cached_ra - ra) < tol and
                 abs(cached_dec - dec) < tol and
                 abs(cached_rad - radius) < tol):
+                cached = Table.read(cache_file)
+                # Reject cache files where id was stored as float — those have
+                # precision-collapsed ids and must be re-queried.
+                if 'id' in cached.colnames:
+                    if cached['id'].dtype.kind == 'f':
+                        print(f"Cache file {cache_file} has float id column; discarding (will re-query)")
+                        return None
+                    cached.rename_column('id', 'Source_name')
                 print(f"Using cached query result from {cache_file}")
-                return Table.read(cache_file)
+                return cached
             else:
                 print(f"Cache file parameters don't match, will re-query")
                 return None
@@ -332,8 +340,18 @@ def smash_cone_search(ra, dec, radius_deg, limit=10000000, verbose=True, use_cac
     )
     LIMIT {limit}
     """
-    # Query returns an Astropy Table directly
-    xtable = qc.query(sql=sql, fmt="table")
+    # Use fmt='csv' so that the 'id' column is returned as a full-precision
+    # text string.  fmt='table' transmits via FITS which converts the varchar
+    # id to float64, silently collapsing distinct archive IDs that differ only
+    # in digits beyond float64 precision (e.g. '48229.230973' and '48229.230978'
+    # both become 48229.23).  CSV avoids this loss entirely.
+    from astropy.io import ascii as _ascii
+    csv_str = qc.query(sql=sql, fmt='csv')
+    xtable = _ascii.read(csv_str, format='csv', guess=False,
+                         converters={'id':        [_ascii.convert_numpy(str)],
+                                     'random_id': [_ascii.convert_numpy(str)]})
+    if 'id' in xtable.colnames:
+        xtable.rename_column('id', 'Source_name')
     print("The cone search returned %d objects compared to the limit of %d or  %.2f percent of the max" % (len(xtable),limit,100.*len(xtable)/limit))
     if verbose:
         xtable.write('foo.fits',format='fits',overwrite=True)
@@ -387,12 +405,18 @@ def select_fraction_smash_dr2(
     # ------------------------------------------------------------
     # 1. Hard magnitude cut + sanity filters
     # ------------------------------------------------------------
+    # prob=99.99 is a sentinel for "not computed" (non-stellar/artifact).
+    # np.isfinite(99.99) is True, so we must exclude it explicitly.
+    # Without this, log(99.99) >> log(real_star_prob) and the score
+    # function would preferentially select non-stellar objects.
+    PROB_SENTINEL = 99.0
     good = (
         np.isfinite(tab['rmag']) &
         np.isfinite(tab['prob']) &
         np.isfinite(tab['chi']) &
         np.isfinite(tab['sharp']) &
         (tab['rmag'] <= rmag_max) &
+        (tab['prob'] < PROB_SENTINEL) &
         (tab['ndetr'] > 0)
     )
 
@@ -596,7 +620,7 @@ def do_one(ra, dec, radius=0.5, outroot='smash_cat', rmag_max=22.0, keep_frac=0.
     table.rename_column('zmag', 'Z')
 
     if outroot == '':
-        outroot = 'Smash_%06.2f_%06.2f_%5.2f' % (ra, dec, radius)
+        outroot = 'Smash_%06.2f_%06.2f_%04.2f' % (ra, dec, radius)
     outfile = outroot + '.fits'
     table.write(outfile, format='fits', overwrite=True)
 
@@ -747,6 +771,9 @@ def get_smash_from_file(ra, dec, size_deg, filename='Smash_MagClouds.fits',
     else:
         # Undo the temporary rename used for filtering
         ftab.rename_column('rmag', 'R')
+
+    if 'id' in ftab.colnames:
+        ftab.rename_column('id', 'Source_name')
 
     os.makedirs(SMASH_CACHE_DIR, exist_ok=True)
     if outroot == '':
