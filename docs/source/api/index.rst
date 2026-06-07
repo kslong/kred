@@ -7,15 +7,16 @@ This page contains auto-generated API reference documentation [#f1]_.
    :titlesonly:
 
 
-   /api/CalcZeroPoint/index
    /api/BackCalc/index
    /api/BackPrep/index
    /api/BackStats/index
    /api/BackSub/index
+   /api/CalcZeroPoint/index
    /api/CleanStars/index
    /api/ColorTest/index
    /api/CutOut/index
    /api/FindOverlaps/index
+   /api/fix_smash_ids/index
    /api/GaiaCat/index
    /api/GetImageFlux/index
    /api/ImageBuilder/index

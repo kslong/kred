@@ -92,11 +92,8 @@ GaiaCat
    251130 ksl Robust handling of astroquery import vs service availability
    251211 ksl Handle gaiaxpy version compatibility (2.1.1 vs 2.1.2)
    250116 ksl Added command-line steering with FITS/WCS support
-   260429 ksl Switch catalog queries to MAST as primary source; ESA async
-              endpoint retained as fallback.  Add get_gaia_spectra_batch()
-              for bulk XP spectrum retrieval.
-   260502 ksl Add redo parameter to get_gaia_from_file; skip re-extraction
-              when output file already exists.
+   260429 ksl Switch catalog queries to MAST as primary source; ESA async endpoint retained as fallback. Add get_gaia_spectra_batch() for bulk XP spectrum retrieval.
+   260502 ksl Add redo parameter to get_gaia_from_file; skip re-extraction when output file already exists.
 
    Example Usage
    -------------

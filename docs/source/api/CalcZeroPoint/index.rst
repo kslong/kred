@@ -19,21 +19,16 @@ CalcZeroPoint
                         [-o OUTPUT]
 
    For each ``*.smash.fits`` or ``*.gaia.fits`` catalog in ``DIR`` (default:
-   ``TabPhot/``), computes a best-fit photometric zero point by comparing
+   ``TabPhot``), computes a best-fit photometric zero point by comparing
    instrumental magnitudes (``phot_mag``, which use a fixed ZP = 28) to
    reference catalog magnitudes (``R`` for SMASH, ``G`` for Gaia).
 
-   The zero point estimate for a single star is::
+   The zero point for a single star is::
 
        zp_i = 28 + (ref_mag_i - phot_mag_i)
 
-   After quality cuts, the distribution of ``zp_i`` values is sigma-clipped
-   and summarised.  The output table has one row per input file and is
-   designed to be compared directly against the ``MAGZERO`` keyword carried
-   in each MEF file header.
-
-   Running with no arguments processes all catalog files found in ``TabPhot/``
-   using default settings.  Use ``-h`` to print this help.
+   After quality cuts, the distribution of ``zp_i`` is sigma-clipped and
+   summarised.  The output table has one row per input file.
 
    Optional Arguments
    ------------------
@@ -43,13 +38,12 @@ CalcZeroPoint
 
    -dir DIR
        Directory containing the ``*.smash.fits`` / ``*.gaia.fits`` catalogs
-       (default: ``TabPhot``).  Run from the working directory containing
-       ``TabPhot/``.
+       (default: ``TabPhot``).
 
    -filter FILTER
-       Only process files whose ``Filter`` column value starts with FILTER
+       Only process files whose Filter header value starts with FILTER
        (e.g. ``r``, ``N662``, ``N673``).  The filter name is read from
-       inside each file, not from the filename.
+       the ``Filter`` column inside each file, not from the filename.
        Default: process all catalog files found.
 
    -snr MIN_SNR
@@ -71,88 +65,37 @@ CalcZeroPoint
        Excludes stars that may be saturated.
 
    -o OUTPUT
-       Output FITS filename (default: ``zeropoints.fits`` in the current
-       directory).
+       Output FITS filename (default: ``zeropoints.fits``).
 
    Output Columns
    --------------
 
-   +------------+------------------------------------------------------------+
-   | Column     | Description                                                |
-   +============+============================================================+
-   | Filename   | Input TabPhot catalog filename (basename)                  |
-   +------------+------------------------------------------------------------+
-   | Filter     | Filter name as stored in the catalog                       |
-   +------------+------------------------------------------------------------+
-   | Exptime    | Exposure time in seconds                                   |
-   +------------+------------------------------------------------------------+
-   | Catalog    | Reference catalog used (``SMASH`` or ``Gaia``)             |
-   +------------+------------------------------------------------------------+
-   | ref_col    | Reference magnitude column used (``R`` or ``G``)           |
-   +------------+------------------------------------------------------------+
-   | MAGZERO    | Zero point from the MEF image header                       |
-   +------------+------------------------------------------------------------+
-   | zp_calc    | Our derived zero point (sigma-clipped median)              |
-   +------------+------------------------------------------------------------+
-   | zp_wmean   | Inverse-variance-weighted mean zero point                  |
-   +------------+------------------------------------------------------------+
-   | zp_std     | Scatter of individual per-star ZP estimates after clipping |
-   +------------+------------------------------------------------------------+
-   | zp_err     | Standard error on ``zp_calc`` (= zp_std / sqrt(n_stars))  |
-   +------------+------------------------------------------------------------+
-   | zp_mad     | Median absolute deviation (robust scatter measure)         |
-   +------------+------------------------------------------------------------+
-   | n_stars    | Stars used after sigma-clipping                            |
-   +------------+------------------------------------------------------------+
-   | n_total    | Stars passing initial quality cuts (before clipping)       |
-   +------------+------------------------------------------------------------+
-   | delta_zp   | ``zp_calc − MAGZERO`` (offset from pipeline value)         |
-   +------------+------------------------------------------------------------+
+   Filename, Filter, Exptime, Catalog, ref_col, MAGZERO,
+   zp_calc, zp_wmean, zp_std, zp_err, zp_mad,
+   n_stars, n_total, delta_zp
 
-   The ``delta_zp`` column is the primary diagnostic: values consistently
-   offset from zero across many files indicate a systematic difference between
-   the reference catalog photometric system and the pipeline zero point.
+   where:
 
-   Relationship to Other Tools
-   ---------------------------
-
-   * **Input**: ``TabPhot/*.smash.fits`` or ``TabPhot/*.gaia.fits`` files
-     produced by :doc:`MefPhot </api/MefPhot/index>`.
-   * **ZeroCalc**: a complementary zero-point tool that uses a weighted linear
-     regression (with optional color term) instead of a sigma-clipped median.
-     ``ZeroCalc`` is preferred when a color term is scientifically important;
-     ``CalcZeroPoint`` is preferred for a quick multi-file summary.  Both
-     tools read the same ``TabPhot/`` files and can be run independently.
-   * **PhotEval**: uses the ``MAGZERO`` values from the MEF headers (not
-     the derived ``zp_calc`` from this script) to apply zero-point corrections
-     in its per-source scatter analysis.
+   * ``zp_calc``  -- sigma-clipped median of individual ZP estimates
+   * ``zp_wmean`` -- inverse-variance-weighted mean ZP
+   * ``zp_std``   -- std of clipped ZP estimates (scatter / repeatability)
+   * ``zp_err``   -- standard error on zp_calc (zp_std / sqrt(n_stars))
+   * ``zp_mad``   -- median absolute deviation of clipped estimates
+   * ``n_stars``  -- number of stars used after sigma-clipping
+   * ``n_total``  -- number of stars passing initial quality cuts
+   * ``delta_zp`` -- zp_calc - MAGZERO (should be ~0 if header ZP is good)
 
    Examples
    --------
 
-   Process all catalog files with default settings::
-
-       CalcZeroPoint.py
-
-   Process r-band files only::
+   Process all SMASH r-band files::
 
        CalcZeroPoint.py -filter r -snr 20
 
-   Process all filters with a brighter magnitude limit::
+   Process all filters, bright stars only::
 
-       CalcZeroPoint.py -mag_hi 14 -mag_lo 19 -o zp_bright.fits
+       CalcZeroPoint.py -mag_hi 13 -mag_lo 18 -o zp_bright.fits
 
-   Version History
-   ---------------
-
-   2026-06-07 ksl
-       Initial coding.
-
-   Author
-   ------
-   Space Telescope Science Institute
-
-   .. moduleauthor:: KSL
 
 
 Functions
@@ -160,40 +103,14 @@ Functions
 
 .. autoapisummary::
 
-   CalcZeroPoint.steer
    CalcZeroPoint.do_one
+   CalcZeroPoint.steer
 
 
 Module Contents
 ---------------
 
-.. py:function:: steer(argv)
-
-   Parse command-line arguments, find catalog files, and call
-   :func:`do_one` for each.
-
 .. py:function:: do_one(filepath, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo)
 
-   Compute the zero point for a single TabPhot catalog file.
+.. py:function:: steer(argv)
 
-   Parameters
-   ----------
-   filepath : str
-       Path to a ``*.smash.fits`` or ``*.gaia.fits`` catalog file.
-   snr_min : float
-       Minimum SNR cut applied before computing ZP estimates.
-   ref_col_override : str or None
-       If given, use this column as the reference magnitude; otherwise
-       ``'R'`` for SMASH and ``'G'`` for Gaia.
-   n_sigma : float
-       Sigma threshold for iterative sigma-clipping.
-   mag_hi : float
-       Bright magnitude limit (exclude brighter stars).
-   mag_lo : float
-       Faint magnitude limit (exclude fainter stars).
-
-   Returns
-   -------
-   dict or None
-       Dictionary of output columns (one row of the summary table), or
-       ``None`` if the file cannot be read or has too few usable stars.

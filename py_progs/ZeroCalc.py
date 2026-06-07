@@ -154,9 +154,9 @@ def fit_magnitude_model(data, use_color=False):
     Simple (use_color=False):   m_ref = m_inst + c_0
     Color-corrected (use_color=True): m_ref = m_inst + c_0 + c_1 * color
 
-    Sources are weighted by their photometric uncertainty:
-        sigma_mag = 1.0857 * ErrNet / Net
-    floored at 0.001 mag so a handful of very bright stars do not dominate.
+    Sources are weighted by their photometric uncertainty
+    (sigma_mag = 1.0857 * ErrNet / Net), floored at 0.001 mag so a handful
+    of very bright stars do not dominate.
     Sources with non-positive Net flux are excluded.
 
     Parameters
