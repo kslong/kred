@@ -6,57 +6,82 @@
 
 Space Telescope Science Institute
 
-Synopsis
+Command Line Usage
+------------------
+
+::
+
+    MefPrep.py [-h] [-all] [-finish] [-back_none] [-back_min] [-np N]
+               [-zp COLUMN] FIELD [FIELD ...]
+
+Rescales individual DECam CCD images to a common flux scale (1 DN = mag 28)
+and optionally subtracts an initial background estimate.  Output files are
+written to ``DECam_PREP/{field}/data/``.
+
+Prerequisites: MEF files downloaded into the standard directory structure and
+``MefSum.py`` run to create the ``Summary/{field}_mef.tab`` inventory tables.
+
+Optional Arguments
+------------------
+
+-h
+    Print this help and exit.
+
+-all
+    Process all fields found under ``DECam_MEF/`` (interactive confirmation
+    required).
+
+-finish
+    Skip output files that already exist (do not reprocess).
+
+-back_none
+    Do not subtract any background estimate.
+
+-back_min
+    Subtract the minimum CCD background across all detectors in each exposure
+    (instead of the default mode estimate).
+
+-np N
+    Number of parallel worker processes (default: 1).
+
+-zp COLUMN
+    Use empirical zero points from the named column in
+    ``Summary/{field}_mef.tab`` (e.g. ``-zp ZP_smash_r``) instead of the
+    ``MAGZERO`` header keyword.  The value must satisfy ``20 < ZP < 35``; if
+    the column is absent or the value is invalid, the script falls back to the
+    header ``MAGZERO`` with a warning.  Generates ``ZP_USE`` and
+    ``ZP_SRC`` keywords in every output header.
+
+Output Header Keywords
+----------------------
+
+* ``ZP_USE`` -- zero point actually applied for flux scaling
+* ``ZP_SRC`` -- source of that zero point (column name or ``MAGZERO``)
+* ``XFACTOR``     -- multiplicative scale factor applied to pixel data
+* ``SUB_BACK``    -- ``TRUE`` / ``FALSE`` depending on whether background was subtracted
+* ``GAIN``, ``SATURAT``, ``RDNOISE`` -- rescaled detector properties
+
+Examples
 --------
 
-Prepare files for combining with Swarp
+Standard single-field run with background subtraction (mode)::
 
-This is where any processing of the individal files is done that cannot be done by swarp.
+    MefPrep.py -np 8 LMC_c42
 
-Prior to running PrepFiles one must have
+Re-run using empirical SMASH r-band zero points::
 
-* Downloaded the MEF and put them in the standard directory structure
-* Run MefSum on the appropriate fields to create tables that contain the RA's and DECs of the corrners of CCDs
+    MefPrep.py -np 8 -zp ZP_smash_r LMC_c42
 
-Run this routine to rescale the images to the same magnitude scale and to subtract
-and initial estimate of the background.  The default background is estimated from a
-biased median (calculated with in the MefSum stage)  The default is to use the median
-value in each of the CCDs for an individual
-exposure.  One can modify this with the options indicated below
+Skip already-processed files, no background subtraction::
 
-Description
------------
-
-If the preliminaries indicated above have taken place, MefPrep will create directories if
-    necessary to store the results.  The program then reads tables files in the Summary directory
-    where there is a table that identify the Mef files and extensions associated with them.
-    it then processes the each Mefile individual.
-
-    The output files are stored in directories named data, that have specific place in the
-    file structure.  The output images are all scaled to so that one dn represents mag27,
-    based on estimates obtained from the NOIRLAB community pipeline.
-
-    So all of the processed files for LMC_c42 will be stored in DECam_PREP/LMC_c42/data
-
-    With this approach, one must create links to the appropriate files using TileSetup
-
-Primary Routines
-----------------
-
-Notes:
-
-    As written one can only PrepFiles from a specific MEF directory
-
-    Here unlike MefSum.py, individual filess are processed with  individual
-    threads, so generally speaking all requested threads are utilized
+    MefPrep.py -finish -back_none LMC_c42
 
 Notes
 -----
 
-As written one can only PrepFiles from a specific MEF directory
-
-    Here unlike MefSum.py, individual filess are processed with  individual
-    threads, so generally speaking all requested threads are utilized
+Unlike ``MefSum.py``, individual files are processed in separate threads so
+all requested cores are typically utilised.  If too many files are open
+simultaneously, reduce ``-np``.
 
 Version History
 ---------------
@@ -66,6 +91,11 @@ Version History
 
 230621 ksl
     Revised so that the default is to subtract background
+
+260608 ksl
+    Add -zp COLUMN to use empirical zero points from Summary/_mef.tab instead
+    of the header MAGZERO.  ZP_USE and ZP_SRC written to output headers.
+    Fixed pre-existing bug where computed back value was not passed to prep_one_det.
 
 """
 
@@ -93,7 +123,7 @@ SUMDIR='Summary/'
 
 
 def prep_one_det(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.fits.fz',ext='S2',
-                     prepdir='DECam_PREP/LMC_c42/T07/',back=0, redo=True):
+                     prepdir='DECam_PREP/LMC_c42/T07/',back=0, redo=True, magzero=None, zp_col=''):
     '''
     Prepare one file for combining with swarp.  This version scales by MAGZERO
     where 1DN will be a flux corresponding to mag 28
@@ -102,7 +132,7 @@ def prep_one_det(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.f
     230504 - Removed .fz from output file names.  Note that this does not mean that the
     data is not compressed.   Added extra keywords to primary header of output file
     that may be useful for swarp, including the rescaled saturation level
-    
+
     230611 - Addapted from prep_one_file.  This version allows for several backgroud
     options, based on information assembled by MEFSum
 
@@ -126,14 +156,19 @@ def prep_one_det(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.f
     hdu1=f[ext].copy()
     fout=fits.HDUList([hdu0,hdu1])
 
+    if magzero is not None:
+        zp = magzero
+        zp_src = zp_col if zp_col else 'table'
+    else:
+        zp = fout[0].header['MAGZERO']
+        zp_src = 'MAGZERO'
 
-    factor=10**(0.4*(28.0 - fout[0].header['MAGZERO']))
+    factor=10**(0.4*(28.0 - zp))
     fout[1].data*=factor
 
-    # mean,median,std=sigma_clipped_stats(f[1].data,sigma_lower=3,sigma_upper=2,grow=3)
-
-
-    fout[0].header['XFACTOR']=factor
+    fout[0].header['XFACTOR'] = factor
+    fout[0].header['ZP_USE'] = (zp,     'Zero point used for flux scaling')
+    fout[0].header['ZP_SRC'] = (zp_src, 'ZP source: column name or MAGZERO')
 
     if back!=0:
         fout[0].header['SUB_BACK']='TRUE'
@@ -162,7 +197,7 @@ def prep_one_det(filename='DECam_MEF/LMC_c42/mef/c4d_211111_024404_ooi_N673_v1.f
 
 
 
-def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type='min',redo=False,outdir=''):
+def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type='min',redo=False,outdir='',zp_col=''):
     '''
     Split the mef files into their individual extenstions and prepare them for the downstream parts of the processing
     
@@ -189,13 +224,12 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     
     mef_file='%s/%s_mef.tab' % (SUMDIR,field)
     try:
-        
         mef=ascii.read(mef_file)
         mef=mef[mef['Root']==root]
     except:
         print('MefPrep: Error: Could not locate %s' % (mef_file))
         return
-    
+
     det_file='%s/%s_det.tab' % (SUMDIR,field)
     try:
         det=ascii.read(det_file)
@@ -203,11 +237,9 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     except:
         print('MefPrep: Error: Could not locate %s' % (det_file))
         return
-    
+
     time_start=timeit.default_timer()
-    
-    # print(len(det),len(mef))
-    
+
     if back_type=='none':
         back=0
     elif back_type=='mode':
@@ -219,25 +251,35 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     else:
         print('MefPrep: Error: Unknown option for background subtraction %s' % (back_type))
         return
-    
-    # print(back)
-    # exist_ok should prevent makdirs from throwing an error if the directory already exists
-    
+
+    # resolve zero point: use named column from _mef.tab if valid, else fall back to header
+    magzero = None
+    if zp_col:
+        if zp_col in mef.colnames:
+            val = float(mef[zp_col][0])
+            if np.isfinite(val) and 20.0 < val < 35.0:
+                magzero = val
+            else:
+                print('MefPrep: Warning: %s=%s for %s is invalid, falling back to header MAGZERO' % (zp_col, val, root))
+        else:
+            print('MefPrep: Warning: column %s not in %s, falling back to header MAGZERO' % (zp_col, mef_file))
+
     if outdir=='':
         outdir='%s/%s/data/' % (CCDDIR,field)
     if os.path.isdir(outdir)==False:
         print('MefPrep: Creating Prep Dir as :',outdir)
         os.makedirs(outdir,exist_ok=True)
-    
+
     mef_fits_file='DECam_MEF/%s/mef/%s.fits.fz' % (field,root)
-    
+
     ndone=0
     for one in det:
         outfile='%s/%s_%s.fits' % (outdir,root,one['EXTNAME'])
         if os.path.isfile(outfile) and redo==False :
             pass
         else:
-            prep_one_det(mef_fits_file,one['EXTNAME'],outdir)
+            prep_one_det(mef_fits_file, one['EXTNAME'], outdir, back=back, redo=redo,
+                         magzero=magzero, zp_col=zp_col)
             ndone+=1
     
     elapsed = timeit.default_timer() - time_start
@@ -249,7 +291,7 @@ def prep_one_mef(field='LMC_c42',root='c4d_190109_061931_ooi_N662_v1',back_type=
     
 
 
-def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir=''):
+def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir='',zp_col=''):
     '''
     Prep a field with a single processor
 
@@ -280,7 +322,7 @@ def prep_one_field(field='LMC_c42',back_type='none',redo=False,outdir=''):
             elapsed = timeit.default_timer() - start_time
             print('MefPrep: Completed %4d of %4d files in %f s' % (i,nn,elapsed))
 
-        prep_one_mef(field=field,root=one['Root'],back_type=back_type,redo=redo,outdir=outdir)
+        prep_one_mef(field=field,root=one['Root'],back_type=back_type,redo=redo,outdir=outdir,zp_col=zp_col)
         i+=1
         
     elapsed = timeit.default_timer() - start_time
@@ -298,7 +340,7 @@ def get_no_jobs(jobs):
     return njobs
 
 
-def xprep_one_field(field='LMC_c42',back_type='none', redo=False,outdir='',nproc=4):
+def xprep_one_field(field='LMC_c42',back_type='none', redo=False,outdir='',nproc=4,zp_col=''):
     '''
     Process the mef files in a field usingwith using more than one core.
 
@@ -329,7 +371,8 @@ def xprep_one_field(field='LMC_c42',back_type='none', redo=False,outdir='',nproc
 
     jobs=[]
     for one in xtab:
-        p=multiprocessing.Process(target=prep_one_mef,args=[field,one['Root'],back_type,redo,outdir])
+        p=multiprocessing.Process(target=prep_one_mef,args=[field,one['Root'],back_type,redo,outdir],
+                                   kwargs={'zp_col': zp_col})
         jobs.append(p)
 
 
@@ -373,10 +416,11 @@ def steer(argv):
     '''
     fields=[]
     xall=False
-    redo=True 
+    redo=True
     nproc=1
-    xback='mode' 
+    xback='mode'
     outdir=''
+    zp_col=''
 
     i=1
     while i<len(argv):
@@ -394,6 +438,9 @@ def steer(argv):
         elif argv[i]=='-np':
             i+=1
             nproc=int(argv[i])
+        elif argv[i]=='-zp':
+            i+=1
+            zp_col=argv[i]
         elif argv[i][0]=='-':
             print('Error: Unknown switch  %s' % argv[i])
             return
@@ -424,14 +471,14 @@ def steer(argv):
 
     for one_field in fields:
         open_log('%s.log' % one_field,reinitialize=False)
-        log_message('Starting MefPrep on %s with back set to %s' %(one_field,xback))
+        log_message('Starting MefPrep on %s with back=%s zp_col=%s' %(one_field,xback,zp_col if zp_col else 'MAGZERO'))
 
         if nproc<2:
-             prep_one_field(one_field,xback,redo)
+             prep_one_field(one_field,xback,redo,outdir,zp_col)
         else:
             print('Processing in parallel with %d cores' % (nproc))
-            xprep_one_field(one_field,xback,redo,outdir,nproc)
-        log_message('Finished MefPrep on %s with back set to %s' %(one_field,xback))
+            xprep_one_field(one_field,xback,redo,outdir,nproc,zp_col)
+        log_message('Finished MefPrep on %s with back=%s zp_col=%s' %(one_field,xback,zp_col if zp_col else 'MAGZERO'))
         close_log()
 
     elapsed = timeit.default_timer() - xtime_start

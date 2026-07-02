@@ -141,6 +141,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 import os
 from glob import glob
+from astropy.io import fits
 from astropy.table import Table, join, vstack
 import numpy as np
 from scipy.optimize import curve_fit
@@ -369,12 +370,15 @@ def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits', option='R',
         Color predictor is chosen independent of the target band:
         Gaia R: G-R, Gaia G: B-R, SMASH R: G-R, SMASH G: U-R.
     '''
+    _hdr = {}
     try:
-        xtab=Table.read(filename)
-    except:
+        with fits.open(filename) as hdul:
+            _hdr = dict(hdul[1].header)
+        xtab = Table.read(filename)
+    except Exception:
         try:
-            xtab=Table.read(filename,format='ascii.fixed_width_two_line')
-        except:
+            xtab = Table.read(filename, format='ascii.fixed_width_two_line')
+        except Exception:
             print('Could not read %s' % filename)
             return
 
@@ -395,22 +399,27 @@ def do_one(filename='TabPhot/c4d_241122_023910_ooi_N673_v1.fits', option='R',
     xtab = xtab[mask]
     xtab = xtab[xtab['Max'] < 45000]
 
-    try:
-        phot_zero=np.median(xtab['MAGZERO'])
-    except:
-        phot_zero=-99.
+    # file-level metadata: header first, column fallback for old files
+    if 'MAGZERO' in _hdr:
+        phot_zero = float(_hdr['MAGZERO'])
+    elif 'MAGZERO' in xtab.colnames:
+        phot_zero = float(np.median(xtab['MAGZERO']))
+    else:
+        phot_zero = -99.
 
-    try:
-        xfilt=xtab['Filter'][0]
-        word=xfilt.split()
-        xfilt=word[0]
-    except:
-        xfilt=get_filter_from_filename(filename)
+    if 'FILTER' in _hdr:
+        xfilt = str(_hdr['FILTER']).split()[0]
+    elif 'Filter' in xtab.colnames:
+        xfilt = str(xtab['Filter'][0]).split()[0]
+    else:
+        xfilt = get_filter_from_filename(filename)
 
-    try:
-        xtime=xtab['Exptime'][0]
-    except:
-        xtime=-99.
+    if 'EXPTIME' in _hdr:
+        xtime = float(_hdr['EXPTIME'])
+    elif 'Exptime' in xtab.colnames:
+        xtime = float(xtab['Exptime'][0])
+    else:
+        xtime = -99.
 
     results = fit_magnitude_model(xtab[:30000], use_color=use_color)
     fitted_table = results['table']
@@ -481,6 +490,9 @@ def do_many(filenames, band='G', outroot='MagZero', catalog='gaia', use_color=Fa
                 [cat_label]*len(root),good_files],
                names=['Filter','Exptime','Root','MagZero','c_0','c_1','rms',
                       'HdrZero','Catalog','Filename'])
+    if len(xtab) == 0:
+        print('ZeroCalc: no successful results, nothing written.')
+        return
     xtab['MagZero'].format='.3f'
     xtab['c_0'].format='.3f'
     xtab['c_1'].format='.3f'

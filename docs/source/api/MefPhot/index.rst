@@ -56,15 +56,18 @@ MefPhot
 
    Extension 0 carries the primary header copied from the input MEF file.
    Extension 1 is a FITS table with header keywords DATE, FILE, RADIUS,
-   B_IN, B_OUT, and CATALOG, and columns including:
+   B_IN, B_OUT, CATALOG, FIELD, ROOT, and DETNAME, and columns including:
 
    * Source positions (pixel and sky coordinates)
    * Raw and background-subtracted fluxes with uncertainties
    * FWHM and eccentricity measurements
    * Instrumental magnitudes (zero point = 28)
    * Reference catalog photometry (RA, Dec, G, R, ...)
-   * EXT, CCD, Filter, Exptime, MAGZERO, SEEING, Filename
-   * Catalog: 'Gaia' or 'SMASH'
+   * EXT, CCD (per-row provenance columns)
+
+     File-level metadata is in the extension 1 header, not repeated per row:
+     FILTER, EXPTIME, MAGZERO, SEEING, CATALOG, RADIUS, B_IN, B_OUT,
+     FILE, FIELD, ROOT, DETNAME.
 
    Examples
    --------
@@ -127,6 +130,11 @@ MefPhot
    2026-05-02 ksl
        Fix photutils >= 2.x compatibility: ApertureStats.fwhm and eccentricity
        now return shaped arrays; use .flat[0] to extract scalar values.
+
+   2026-06-08 ksl
+       Add FIELD, ROOT, DETNAME keywords to extension 1 header, parsed from
+       the input file path, so downstream tools can identify the source MEF
+       without reparsing filenames.
 
    Author
    ------

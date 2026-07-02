@@ -61,10 +61,11 @@ Optional Arguments
 -o OUTPUT
     Output FITS filename (default: ``zeropoints.fits``).
 
+
 Output Columns
 --------------
 
-Filename, Filter, Exptime, Catalog, ref_col, MAGZERO,
+Filename, Root, Field, Filter, Exptime, Catalog, ref_col, MAGZERO,
 zp_calc, zp_wmean, zp_std, zp_err, zp_mad,
 n_stars, n_total, delta_zp
 
@@ -89,14 +90,100 @@ Process all SMASH r-band files::
 Process all filters, bright stars only::
 
     CalcZeroPoint.py -mag_hi 13 -mag_lo 18 -o zp_bright.fits
+
+If the catalog files carry a ``FIELD`` header keyword (written by MefPhot),
+``Summary/{field}_mef.tab`` is updated automatically with columns
+``ZP_{catalog}_{band}``, ``ZP_std_{catalog}_{band}``, ``ZP_n_{catalog}_{band}``
+(e.g. ``ZP_smash_r``, ``ZP_gaia_g``).  Only rows for MEF roots processed in
+this run are touched; other rows and pre-existing ZP columns are left unchanged.
 """
 
 import sys
 import os
 import numpy as np
+from collections import defaultdict
 from glob import glob
+from astropy.io import fits
+from astropy.io import ascii as asc
 from astropy.table import Table
 from astropy.stats import sigma_clip, mad_std
+
+
+def run(filter_str=None, tabphot_dir='TabPhot', snr_min=20.0,
+        ref_col_override=None, n_sigma=3.0, mag_lo=21.0, mag_hi=15.0,
+        outfile='zeropoints.fits'):
+    """Process all TabPhot catalogs for one filter and return the per-file results Table.
+
+    Writes ``outfile`` (default ``zeropoints.fits``) and updates
+    ``Summary/{field}_mef.tab`` as side effects.  Returns None if no files
+    are found or no results are produced.
+
+    Parameters
+    ----------
+    filter_str : str or None
+        Filter to select (e.g. ``'r'``, ``'N662'``).  None means all filters.
+    tabphot_dir : str
+        Directory containing ``*.smash.fits`` / ``*.gaia.fits`` catalogs.
+    snr_min : float
+        Minimum SNR for a star to be included (default 20).
+    ref_col_override : str or None
+        Override the reference magnitude column (default: auto from catalog).
+    n_sigma : float
+        Sigma-clipping threshold (default 3).
+    mag_lo, mag_hi : float
+        Faint and bright magnitude limits for reference stars (default 21, 15).
+    outfile : str or None
+        Output FITS filename.  Pass None to skip writing.
+    """
+    pattern_smash = os.path.join(tabphot_dir, '*.smash.fits')
+    pattern_gaia  = os.path.join(tabphot_dir, '*.gaia.fits')
+    files = sorted(glob(pattern_smash) + glob(pattern_gaia))
+
+    if filter_str:
+        files = [f for f in files if _file_filter(f) == filter_str]
+
+    if not files:
+        print(f'CalcZeroPoint: no catalog files found in {tabphot_dir}'
+              + (f' for filter {filter_str}' if filter_str else ''))
+        return None
+
+    print(f'CalcZeroPoint: processing {len(files)} catalog files'
+          + (f' (filter={filter_str})' if filter_str else '') + ' ...')
+
+    rows = []
+    for f in files:
+        row = do_one(f, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo)
+        if row is not None:
+            rows.append(row)
+            print(f'  {os.path.basename(f):55s}  '
+                  f'zp_calc={row["zp_calc"]:7.4f}  '
+                  f'MAGZERO={row["MAGZERO"]:7.4f}  '
+                  f'delta={row["delta_zp"]:+.4f}  '
+                  f'std={row["zp_std"]:.4f}  '
+                  f'n={row["n_stars"]}')
+
+    if not rows:
+        print('CalcZeroPoint: no results computed.')
+        return None
+
+    out = Table(rows=rows)
+    for col in ['zp_calc', 'zp_wmean', 'zp_std', 'zp_err', 'zp_mad',
+                'MAGZERO', 'delta_zp']:
+        out[col].format = '.4f'
+
+    if outfile:
+        out.write(outfile, overwrite=True)
+        print(f'\nCalcZeroPoint: wrote {outfile}  ({len(out)} rows)')
+    _print_summary(out)
+
+    by_field = defaultdict(list)
+    for r in rows:
+        if r['Field']:
+            by_field[r['Field']].append(r)
+    for field, field_rows in by_field.items():
+        update_mef_tab(field_rows, field)
+
+    return out
 
 
 def steer(argv):
@@ -142,53 +229,19 @@ def steer(argv):
             print(f'Unknown argument: {argv[i]}')
             return
 
-    pattern_smash = os.path.join(tabphot_dir, '*.smash.fits')
-    pattern_gaia = os.path.join(tabphot_dir, '*.gaia.fits')
-    files = sorted(glob(pattern_smash) + glob(pattern_gaia))
-
-    if filter_str:
-        files = [f for f in files if _file_filter(f) == filter_str]
-
-    if not files:
-        print(f'No catalog files found in {tabphot_dir}')
-        return
-
-    print(f'Processing {len(files)} catalog files ...')
-
-    rows = []
-    for f in files:
-        row = do_one(f, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo)
-        if row is not None:
-            rows.append(row)
-            print(f'  {os.path.basename(f):55s}  '
-                  f'zp_calc={row["zp_calc"]:7.4f}  '
-                  f'MAGZERO={row["MAGZERO"]:7.4f}  '
-                  f'delta={row["delta_zp"]:+.4f}  '
-                  f'std={row["zp_std"]:.4f}  '
-                  f'n={row["n_stars"]}')
-
-    if not rows:
-        print('No results computed.')
-        return
-
-    out = Table(rows=rows)
-
-    for col in ['zp_calc', 'zp_wmean', 'zp_std', 'zp_err', 'zp_mad',
-                'MAGZERO', 'delta_zp']:
-        out[col].format = '.4f'
-
-    out.write(outfile, overwrite=True)
-    print(f'\nWrote {outfile}  ({len(out)} rows)')
-    _print_summary(out)
+    run(filter_str=filter_str, tabphot_dir=tabphot_dir, snr_min=snr_min,
+        ref_col_override=ref_col_override, n_sigma=n_sigma,
+        mag_lo=mag_lo, mag_hi=mag_hi, outfile=outfile)
 
 
 def _file_filter(filepath):
-    """Return the short filter name (first token of the Filter column) from a catalog file."""
-    from astropy.io import fits as _fits
+    """Return the short filter name from the ext 1 header (FILTER) or legacy Filter column."""
     try:
-        with _fits.open(filepath, memmap=True) as hdul:
-            raw = hdul[1].data['Filter'][0]
-        return _decode(raw).split()[0]
+        with fits.open(filepath, memmap=True) as hdul:
+            hdr = hdul[1].header
+            if 'FILTER' in hdr:
+                return _decode(hdr['FILTER']).split()[0]
+            return _decode(hdul[1].data['Filter'][0]).split()[0]
     except Exception:
         return None
 
@@ -205,13 +258,37 @@ def _decode(val):
 
 def do_one(filepath, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo):
     try:
-        t = Table.read(filepath)
+        with fits.open(filepath) as hdul:
+            hdr = hdul[1].header
+            t = Table(hdul[1].data)
     except Exception as e:
         print(f'  Warning: cannot read {filepath}: {e}')
         return None
 
-    # determine catalog type and reference column
-    catalog = _decode(t['Catalog'][0]) if 'Catalog' in t.colnames else 'unknown'
+    # file-level metadata: header takes priority, columns are fallback for old files
+    def _hdr_or_col(key, col, default):
+        if key in hdr:
+            return hdr[key]
+        if col in t.colnames:
+            return np.unique(t[col])[0]
+        return default
+
+    catalog     = _decode(_hdr_or_col('CATALOG', 'Catalog', 'unknown'))
+    filt        = _decode(_hdr_or_col('FILTER',  'Filter',  ''))
+    magzero_hdr = float(_hdr_or_col('MAGZERO', 'MAGZERO', 28.0))
+    exptime     = float(_hdr_or_col('EXPTIME',  'Exptime',  np.nan))
+    field       = _decode(hdr['FIELD']) if 'FIELD' in hdr else ''
+
+    # MEF root: always derive from the TabPhot output filename — it is named
+    # after the MEF root regardless of whether MefPhot ran on MEF or PREP files.
+    stem = os.path.basename(filepath)
+    for sfx in ('.smash.fits', '.gaia.fits', '.fits'):
+        if stem.endswith(sfx):
+            stem = stem[:-len(sfx)]
+            break
+    root = stem
+
+    # determine reference column
     if ref_col_override:
         ref_col = ref_col_override
     elif catalog.upper() == 'SMASH':
@@ -222,11 +299,6 @@ def do_one(filepath, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo):
     if ref_col not in t.colnames:
         print(f'  Warning: {filepath} has no column {ref_col!r}, skipping')
         return None
-
-    # header-level metadata (same for all rows in one file)
-    magzero_hdr = float(np.unique(t['MAGZERO'])[0]) if 'MAGZERO' in t.colnames else 28.0
-    filt = _decode(np.unique(t['Filter'])[0]) if 'Filter' in t.colnames else ''
-    exptime = float(np.unique(t['Exptime'])[0]) if 'Exptime' in t.colnames else np.nan
 
     # quality cuts
     mask = (t['SNR'] >= snr_min) & (t['Net'] > 0)
@@ -273,20 +345,78 @@ def do_one(filepath, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo):
 
     return {
         'Filename': os.path.basename(filepath),
-        'Filter': filt,
-        'Exptime': exptime,
-        'Catalog': catalog,
-        'ref_col': ref_col,
-        'MAGZERO': magzero_hdr,
-        'zp_calc': zp_calc,
+        'Root':     root,
+        'Field':    field,
+        'Filter':   filt,
+        'Exptime':  exptime,
+        'Catalog':  catalog,
+        'ref_col':  ref_col,
+        'MAGZERO':  magzero_hdr,
+        'zp_calc':  zp_calc,
         'zp_wmean': zp_wmean,
-        'zp_std': zp_std,
-        'zp_err': zp_err,
-        'zp_mad': zp_mad,
-        'n_stars': n_stars,
-        'n_total': n_total,
+        'zp_std':   zp_std,
+        'zp_err':   zp_err,
+        'zp_mad':   zp_mad,
+        'n_stars':  n_stars,
+        'n_total':  n_total,
         'delta_zp': zp_calc - magzero_hdr,
     }
+
+
+def update_mef_tab(rows, field):
+    """Add or update ZP columns in Summary/{field}_mef.tab from CalcZeroPoint results.
+
+    Columns are named ZP_{catalog}_{band}, ZP_std_{catalog}_{band},
+    ZP_n_{catalog}_{band} (e.g. ZP_smash_r, ZP_gaia_g).  Only rows whose
+    Root appears in this run are touched; all other rows are left unchanged.
+    New columns are initialised to NaN / 0 before filling.
+    """
+    tab_path = f'Summary/{field}_mef.tab'
+    if not os.path.isfile(tab_path):
+        print(f'CalcZeroPoint: {tab_path} not found, skipping summary update')
+        return
+
+    mef = asc.read(tab_path)
+
+    # group rows by (catalog, ref_col) — each combination gets its own column set
+    combos = defaultdict(list)
+    for r in rows:
+        key = (_decode(r['Catalog']).lower(), r['ref_col'].lower())
+        combos[key].append(r)
+
+    for (catalog, ref_col), combo_rows in combos.items():
+        col_zp  = f'ZP_{catalog}_{ref_col}'
+        col_std = f'ZP_std_{catalog}_{ref_col}'
+        col_n   = f'ZP_n_{catalog}_{ref_col}'
+
+        if col_zp not in mef.colnames:
+            mef[col_zp]  = np.full(len(mef), np.nan)
+        if col_std not in mef.colnames:
+            mef[col_std] = np.full(len(mef), np.nan)
+        if col_n not in mef.colnames:
+            mef[col_n]   = np.zeros(len(mef), dtype=int)
+        mef[col_zp].info.format  = '.3f'
+        mef[col_std].info.format = '.3f'
+
+        # one TabPhot file per MEF root; use its within-file stats directly
+        n_updated = 0
+        for r in combo_rows:
+            root = r['Root']
+            if not root:
+                continue
+            idx = np.where(np.array(mef['Root']) == root)[0]
+            if len(idx) == 0:
+                print(f'  Warning: root {root!r} not found in {tab_path}')
+                continue
+            mef[col_zp][idx[0]]  = float(r['zp_calc'])
+            mef[col_std][idx[0]] = float(r['zp_std'])
+            mef[col_n][idx[0]]   = int(r['n_stars'])
+            n_updated += 1
+
+        print(f'  {col_zp}: updated {n_updated} of {len(mef)} rows')
+
+    asc.write(mef, tab_path, format='fixed_width_two_line', overwrite=True)
+    print(f'Wrote updated {tab_path}')
 
 
 def _print_summary(t):
@@ -294,14 +424,16 @@ def _print_summary(t):
     for filt in np.unique(t['Filter']):
         tf = t[t['Filter'] == filt]
         short = _decode(filt).split()[0]
-        print(f'  Filter {short!r}  ({len(tf)} files):')
-        print(f'    zp_calc  : mean={np.mean(tf["zp_calc"]):.4f}  '
-              f'std={np.std(tf["zp_calc"]):.4f}  '
-              f'range=[{np.min(tf["zp_calc"]):.4f}, {np.max(tf["zp_calc"]):.4f}]')
-        print(f'    delta_zp : mean={np.mean(tf["delta_zp"]):.4f}  '
-              f'std={np.std(tf["delta_zp"]):.4f}')
-        print(f'    zp_std   : median={np.median(tf["zp_std"]):.4f}  (per-file scatter)')
-        print(f'    n_stars  : median={np.median(tf["n_stars"]):.0f}')
+        for exptime in np.unique(tf['Exptime']):
+            te = tf[tf['Exptime'] == exptime]
+            print(f'  Filter {short!r}  exptime={exptime:.0f}s  ({len(te)} files):')
+            print(f'    zp_calc  : mean={np.mean(te["zp_calc"]):.4f}  '
+                  f'std={np.std(te["zp_calc"]):.4f}  '
+                  f'range=[{np.min(te["zp_calc"]):.4f}, {np.max(te["zp_calc"]):.4f}]')
+            print(f'    delta_zp : mean={np.mean(te["delta_zp"]):.4f}  '
+                  f'std={np.std(te["delta_zp"]):.4f}')
+            print(f'    zp_std   : median={np.median(te["zp_std"]):.4f}  (per-file scatter)')
+            print(f'    n_stars  : median={np.median(te["n_stars"]):.0f}')
 
 
 if __name__ == '__main__':

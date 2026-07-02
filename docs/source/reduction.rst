@@ -69,7 +69,14 @@ results in ``DECam_PREP/``. For example, processing ``LMC_c45`` creates data in
     MefPrep.py -np 8 LMC_c42
 
 By default, subtracts the median value of the mode across all CCDs from each
-exposure.
+exposure.  The flux scaling uses the ``MAGZERO`` keyword from each MEF header
+as supplied by the NOIRLAB community pipeline, placing all images on a scale
+where 1 DN corresponds to magnitude 28.  This is the standard approach and is
+sufficient in most cases.
+
+If you need to verify that the ``MAGZERO`` values are mutually consistent
+across exposures, or to replace them with empirically-derived zero points, see
+:doc:`relative_photometry`.
 
 .. important::
 

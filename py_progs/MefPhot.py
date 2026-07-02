@@ -50,15 +50,18 @@ runs on the same input do not overwrite each other::
 
 Extension 0 carries the primary header copied from the input MEF file.
 Extension 1 is a FITS table with header keywords DATE, FILE, RADIUS,
-B_IN, B_OUT, and CATALOG, and columns including:
+B_IN, B_OUT, CATALOG, FIELD, ROOT, and DETNAME, and columns including:
 
 * Source positions (pixel and sky coordinates)
 * Raw and background-subtracted fluxes with uncertainties
 * FWHM and eccentricity measurements
 * Instrumental magnitudes (zero point = 28)
 * Reference catalog photometry (RA, Dec, G, R, ...)
-* EXT, CCD, Filter, Exptime, MAGZERO, SEEING, Filename
-* Catalog: 'Gaia' or 'SMASH'
+* EXT, CCD (per-row provenance columns)
+
+  File-level metadata is in the extension 1 header, not repeated per row:
+  FILTER, EXPTIME, MAGZERO, SEEING, CATALOG, RADIUS, B_IN, B_OUT,
+  FILE, FIELD, ROOT, DETNAME.
 
 Examples
 --------
@@ -121,6 +124,11 @@ Version History
 2026-05-02 ksl
     Fix photutils >= 2.x compatibility: ApertureStats.fwhm and eccentricity
     now return shaped arrays; use .flat[0] to extract scalar values.
+
+2026-06-08 ksl
+    Add FIELD, ROOT, DETNAME keywords to extension 1 header, parsed from
+    the input file path, so downstream tools can identify the source MEF
+    without reparsing filenames.
 
 Author
 ------
@@ -452,7 +460,8 @@ def read_table(filename):
 
 def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
                          object_file='objects.txt', nrows_max=-1,
-                         rstar=6, b_in=8, b_out=12, add_psf_metrics=True):
+                         rstar=6, b_in=8, b_out=12, add_psf_metrics=True,
+                         mag_bright=14.0, mag_faint=22.0):
     """
     Perform forced aperture photometry at specified sky positions.
 
@@ -570,6 +579,14 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
     if 'G' in sources.colnames:
         good = np.isfinite(sources['R'])
         sources = sources[good]
+        if mag_bright is not None or mag_faint is not None:
+            ref = np.array(sources['R'], dtype=float)
+            mag_mask = np.ones(len(sources), dtype=bool)
+            if mag_bright is not None:
+                mag_mask &= ref >= mag_bright
+            if mag_faint is not None:
+                mag_mask &= ref <= mag_faint
+            sources = sources[mag_mask]
 
     coords = SkyCoord(ra=np.array(sources['RA'])*u.deg, dec=np.array(sources['Dec'])*u.deg)
 
@@ -717,7 +734,8 @@ def do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1,
 
 
 def do_one(filename='foo.fits', outroot='', nrows_max=-1,
-           rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True, redo=False):
+           rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True, redo=False,
+           mag_bright=14.0, mag_faint=22.0):
     """
     Process a single multi-extension FITS file.
 
@@ -822,9 +840,9 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
 
     try:
         x = fits.open(filename)
-    except:
-        print(f'Could not locate {filename}')
-        raise IOError
+    except Exception as e:
+        print(f'MefPhot: could not open {filename}: {e}')
+        return
 
     if verbose:
         print(f'do_one: Starting {filename} with radius {rstar:.1f} '
@@ -871,7 +889,8 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
             else:
                 cat_file = get_gaia(ra, dec, size)
             phot_table = do_forced_photometry(filename, one_extension, cat_file,
-                                              nrows_max, rstar, b_in, b_out)
+                                              nrows_max, rstar, b_in, b_out,
+                                              mag_bright=mag_bright, mag_faint=mag_faint)
         except Exception as e:
             print(f'  Skipping extension {one_extension}: {e}')
             continue
@@ -888,13 +907,6 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
         raise RuntimeError(f'No extensions produced valid photometry in {filename}')
 
     phot = vstack(phot_tables, metadata_conflicts='silent')
-    phot['Filter'] = xfilter
-    phot['Exptime'] = xexptime
-    phot['MAGZERO'] = magzero
-    phot['SEEING'] = ssee
-    phot['Star_rad'] = srad
-    phot['Filename'] = filename
-    phot['Catalog'] = 'SMASH' if catalog == 'smash' else 'Gaia'
 
     # Write output  (outfile/xoutroot already computed at top of function)
 
@@ -910,8 +922,32 @@ def do_one(filename='foo.fits', outroot='', nrows_max=-1,
     table_hdu.header['RADIUS'] = (rstar, 'Aperture radius in pixels')
     table_hdu.header['B_IN'] = (b_in, 'Inner background annulus radius in pixels')
     table_hdu.header['B_OUT'] = (b_out, 'Outer background annulus radius in pixels')
+    table_hdu.header['MAGBRITE'] = (mag_bright, 'Catalog bright mag limit (R)')
+    table_hdu.header['MAGFAINT'] = (mag_faint,  'Catalog faint mag limit (R)')
     table_hdu.header['CATALOG'] = ('SMASH' if catalog == 'smash' else 'Gaia',
                                    'Reference catalog used for source positions')
+    table_hdu.header['FILTER']  = (xfilter,   'DECam filter')
+    table_hdu.header['EXPTIME'] = (xexptime,  'Exposure time in seconds')
+    table_hdu.header['MAGZERO'] = (magzero,   'Magnitude zero point')
+    table_hdu.header['SEEING']  = (ssee,      'Seeing FWHM in arcsec')
+
+    _parts = filename.replace('\\', '/').split('/')
+    try:
+        _idx = next(j for j, p in enumerate(_parts) if p.startswith('DECam_'))
+        _xfield = _parts[_idx + 1] if _idx + 1 < len(_parts) - 1 else ''
+    except StopIteration:
+        _xfield = ''
+    _stem = _parts[-1].replace('.fz', '').replace('.fits', '')
+    if '_' in _stem:
+        _xroot, _xccd = _stem.rsplit('_', 1)
+        import re as _re
+        if not _re.match(r'^[SN]\d{1,2}$', _xccd):  # not a DECam CCD name
+            _xroot, _xccd = _stem, ''
+    else:
+        _xroot, _xccd = _stem, ''
+    table_hdu.header['FIELD']   = (_xfield,     'Field name')
+    table_hdu.header['ROOT']    = (_xroot[:68], 'MEF root filename')
+    table_hdu.header['DETNAME'] = (_xccd,       'CCD detector name')
 
     fits.HDUList([primary_hdu, table_hdu]).writeto(outfile, overwrite=True)
     x.close()
@@ -956,12 +992,12 @@ def _safe_do_one_with_index(args):
     This function catches all exceptions to prevent multiprocessing pool
     failures. Exceptions are converted to string messages for reporting.
     """
-    index, filename, outroot, nrows_max, rstar, b_in, b_out, catalog, redo = args
+    index, filename, outroot, nrows_max, rstar, b_in, b_out, catalog, redo, mag_bright, mag_faint = args
     try:
         numbered_outroot = f"{outroot}_{index:03d}" if outroot else ''
         do_one(filename, outroot=numbered_outroot, nrows_max=nrows_max,
                rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, verbose=True,
-               redo=redo)
+               redo=redo, mag_bright=mag_bright, mag_faint=mag_faint)
         return (filename, True, None)
     except Exception as e:
         error_msg = f"{type(e).__name__}: {str(e)}"
@@ -1061,7 +1097,8 @@ def precache_smash_tiles(filenames):
 
 
 def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
-            n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False):
+            n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False,
+            mag_bright=14.0, mag_faint=22.0):
     """
     Process multiple FITS files in parallel.
 
@@ -1134,7 +1171,7 @@ def do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12,
     if n_processes is None:
         n_processes = max(1, mp.cpu_count() - 1)
 
-    args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out, catalog, redo)
+    args_list = [(i, fname, outroot, nrows_max, rstar, b_in, b_out, catalog, redo, mag_bright, mag_faint)
                  for i, fname in enumerate(filenames)]
 
     n = len(filenames)
@@ -1224,6 +1261,8 @@ def steer(argv):
     b_out = 12
     catalog = 'gaia'
     redo = False
+    mag_bright = 14.0
+    mag_faint = 22.0
 
     i = 1
     while i < len(argv):
@@ -1254,6 +1293,12 @@ def steer(argv):
             b_in = float(argv[i])
             i += 1
             b_out = float(argv[i])
+        elif argv[i][:10] == '-mag_bright':
+            i += 1
+            mag_bright = float(argv[i])
+        elif argv[i][:9] == '-mag_faint':
+            i += 1
+            mag_faint = float(argv[i])
         elif argv[i][0] == '-':
             print('Error: unknown switch:', argv[i])
             return
@@ -1264,58 +1309,76 @@ def steer(argv):
             filenames.append(argv[i])
         i += 1
 
+    if not filenames:
+        print('MefPhot: no input files specified')
+        return
+
+    missing = [f for f in filenames if not os.path.isfile(f)]
+    if missing:
+        for f in missing:
+            print(f'MefPhot: file not found: {f}')
+        filenames = [f for f in filenames if os.path.isfile(f)]
+    if not filenames:
+        print('MefPhot: no valid input files found')
+        return
+
     print(f'Starting with {len(filenames)} filenames and rstar of {rstar:.1f} '
-          f'and background annulus of {b_in:.1f} {b_out:.1f} using {catalog} catalog')
+          f'and background annulus of {b_in:.1f} {b_out:.1f} using {catalog} catalog '
+          f'(mag range {mag_bright:.1f}–{mag_faint:.1f})')
 
     if rstar > b_in or b_in > b_out:
         print('UNPHYSICAL limits for photometry')
         return
 
-    going_parallel = len(filenames) > 1 and np_proc >= 2
-
-    if catalog == 'smash' and going_parallel:
-        # Pre-extract all tile files serially before forking.  Workers find
-        # their tile on disk and never load the 15 GB catalog, so the memory
-        # check below is not needed and would fire a false warning.
-        precache_smash_tiles(filenames)
-        _Smash.clear_preassembled_cache()
-    else:
-        np_proc = check_smash_memory(np_proc, catalog, n_files=len(filenames))
-
-    # Count files that genuinely need processing vs already have output.
+    # Determine which files genuinely need processing before any expensive setup.
     cat_suffix = '.smash' if catalog == 'smash' else '.gaia'
-    n_todo = 0
+    todo_files = []
     for fname in filenames:
         xr = root if root else fname.split('/')[-1].replace('.fz', '').replace('.fits', '')
-        if not os.path.isfile(f'TabPhot/{xr}{cat_suffix}.fits'):
-            n_todo += 1
-    n_already = len(filenames) - n_todo
+        if redo or not os.path.isfile(f'TabPhot/{xr}{cat_suffix}.fits'):
+            todo_files.append(fname)
+    n_already = len(filenames) - len(todo_files)
 
     if n_already:
         print(f'{n_already} of {len(filenames)} files already have TabPhot output and will be skipped.',
               flush=True)
-    if n_todo == 0:
+    if not todo_files:
         print('All files already processed; nothing to do. Use -redo to reprocess.', flush=True)
         return
 
-    if len(filenames) == 1 or np_proc < 2:
-        print(f'Processing {n_todo} file(s) serially.', flush=True)
-        for one_file in filenames:
+    going_parallel = len(todo_files) > 1 and np_proc >= 2
+
+    if catalog == 'smash' and going_parallel:
+        # Pre-extract only the tiles needed by files that will actually be processed.
+        # Workers find their tile on disk and never load the 15 GB catalog.
+        precache_smash_tiles(todo_files)
+        _Smash.clear_preassembled_cache()
+    else:
+        np_proc = check_smash_memory(np_proc, catalog, n_files=len(todo_files))
+
+    if not going_parallel:
+        print(f'Processing {len(todo_files)} file(s) serially.', flush=True)
+        for one_file in todo_files:
             do_one(filename=one_file, outroot=root, nrows_max=nrows_max,
-                   rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, redo=redo)
+                   rstar=rstar, b_in=b_in, b_out=b_out, catalog=catalog, redo=redo,
+                   mag_bright=mag_bright, mag_faint=mag_faint)
         return
 
-    print(f'Starting parallel processing of {n_todo} file(s) with {np_proc} workers '
+    print(f'Starting parallel processing of {len(todo_files)} file(s) with {np_proc} workers '
           f'({n_already} already complete).', flush=True)
-    do_many(filenames, outroot=root, nrows_max=nrows_max, rstar=rstar,
+    do_many(todo_files, outroot=root, nrows_max=nrows_max, rstar=rstar,
             b_in=b_in, b_out=b_out, n_processes=np_proc,
-            catalog=catalog, redo=redo)
-    print(f'Done. Processed {n_todo} file(s); {n_already} were already complete.', flush=True)
+            catalog=catalog, redo=redo,
+            mag_bright=mag_bright, mag_faint=mag_faint)
+    print(f'Done. Processed {len(todo_files)} file(s); {n_already} were already complete.', flush=True)
 
 
 if __name__ == "__main__":
     import sys
-    if len(sys.argv) > 1:
-        steer(sys.argv)
-    else:
-        print(__doc__)
+    try:
+        if len(sys.argv) > 1:
+            steer(sys.argv)
+        else:
+            print(__doc__)
+    except KeyboardInterrupt:
+        print('\nMefPhot: interrupted')

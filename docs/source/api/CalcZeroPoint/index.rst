@@ -67,10 +67,11 @@ CalcZeroPoint
    -o OUTPUT
        Output FITS filename (default: ``zeropoints.fits``).
 
+
    Output Columns
    --------------
 
-   Filename, Filter, Exptime, Catalog, ref_col, MAGZERO,
+   Filename, Root, Field, Filter, Exptime, Catalog, ref_col, MAGZERO,
    zp_calc, zp_wmean, zp_std, zp_err, zp_mad,
    n_stars, n_total, delta_zp
 
@@ -96,6 +97,12 @@ CalcZeroPoint
 
        CalcZeroPoint.py -mag_hi 13 -mag_lo 18 -o zp_bright.fits
 
+   If the catalog files carry a ``FIELD`` header keyword (written by MefPhot),
+   ``Summary/{field}_mef.tab`` is updated automatically with columns
+   ``ZP_{catalog}_{band}``, ``ZP_std_{catalog}_{band}``, ``ZP_n_{catalog}_{band}``
+   (e.g. ``ZP_smash_r``, ``ZP_gaia_g``).  Only rows for MEF roots processed in
+   this run are touched; other rows and pre-existing ZP columns are left unchanged.
+
 
 
 Functions
@@ -105,6 +112,7 @@ Functions
 
    CalcZeroPoint.do_one
    CalcZeroPoint.steer
+   CalcZeroPoint.update_mef_tab
 
 
 Module Contents
@@ -113,4 +121,14 @@ Module Contents
 .. py:function:: do_one(filepath, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo)
 
 .. py:function:: steer(argv)
+
+.. py:function:: update_mef_tab(rows, field)
+
+   Add or update ZP columns in Summary/{field}_mef.tab from CalcZeroPoint results.
+
+   Columns are named ZP_{catalog}_{band}, ZP_std_{catalog}_{band},
+   ZP_n_{catalog}_{band} (e.g. ZP_smash_r, ZP_gaia_g).  Only rows whose
+   Root appears in this run are touched; all other rows are left unchanged.
+   New columns are initialised to NaN / 0 before filling.
+
 

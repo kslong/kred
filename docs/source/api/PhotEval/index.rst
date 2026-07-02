@@ -66,13 +66,21 @@ PhotEval
        Output FITS filename (default: ``phot_eval_<FILTER>_<EXPTIME>.fits``
        in the current directory).
 
+   -zp_table FILE
+       FITS table of empirical zero points (e.g. ``zeropoints.fits`` produced
+       by CalcZeroPoint).  Must contain ``Filename`` and ``zp_calc`` columns.
+       When supplied, a second set of corrected magnitudes is computed using
+       ``zp_calc`` in place of the header ``MAGZERO``, giving additional output
+       columns ``magc_emp_*`` and ``chi2_nu_emp`` for direct comparison.
+
    Output Columns
    --------------
 
    Source_name, RA, Dec, n_detect,
-   mag_mean, mag_wmean, mag_median, mag_std,       (raw, ZP = 28)
-   magc_mean, magc_wmean, magc_median, magc_std,   (corrected, ZP = MAGZERO)
-   mag_err_mean, snr_mean, chi2_nu, chi2_nu_c
+   mag_mean, mag_wmean, mag_median, mag_std,           (raw, ZP = 28)
+   magc_mean, magc_wmean, magc_median, magc_std,       (corrected, ZP = MAGZERO)
+   magc_emp_mean, magc_emp_wmean, magc_emp_median, magc_emp_std,  (empirical ZP, if -zp_table given)
+   mag_err_mean, snr_mean, chi2_nu, chi2_nu_c, chi2_nu_emp
 
    Examples
    --------
@@ -84,6 +92,10 @@ PhotEval
    Evaluate Ha (N662) band, all exposure times::
 
        PhotEval.py -filter N662 -min_n 3 -o ha_eval.fits
+
+   Compare header MAGZERO vs empirical ZP from CalcZeroPoint::
+
+       PhotEval.py -filter r -zp_table zeropoints.fits -o phot_eval_r_emp.fits
 
 
 
@@ -99,7 +111,7 @@ Functions
 Module Contents
 ---------------
 
-.. py:function:: do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile)
+.. py:function:: do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile, zp_lookup=None)
 
 .. py:function:: steer(argv)
 
