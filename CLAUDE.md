@@ -66,40 +66,12 @@ Swarp.py -all -bsub LMC_c42
 CleanStars.py -all LMC_c42
 ```
 
-## Work in Progress (2026-06-08) — NOT YET TESTED OR COMMITTED
+## Photometric Consistency Workflow (committed 2026-07-01)
 
-The following files have uncommitted modifications implementing an empirical
-zero-point workflow. Do not commit until the user has tested them.
-
-**Modified files:**
-- `py_progs/MefPhot.py` — adds `FIELD`, `ROOT`, `DETNAME`, `FILTER`, `EXPTIME`,
-  `MAGZERO`, `SEEING` to the ext 1 FITS header; removes those same values from
-  the per-row table (they were constant across all rows). Old files with those
-  columns as table data are still handled via fallback.
-- `py_progs/CalcZeroPoint.py` — reads `FIELD`/`ROOT` from header; auto-updates
-  `Summary/{field}_mef.tab` with `ZP_{cat}_{band}` / `ZP_std_{cat}_{band}` /
-  `ZP_n_{cat}_{band}` columns after each run (no `-field` arg needed).
-- `py_progs/ZeroCalc.py` — reads metadata from ext 1 header (column fallback
-  for old files).
-- `py_progs/PhotEval.py` — same header-first metadata read.
-- `py_progs/MefPrep.py` — new `-zp COLUMN` flag to use empirical ZP from
-  `Summary/_mef.tab`; writes `ZP_USE` and `ZP_SRC` to output headers;
-  also fixes pre-existing bug where `back` was not passed to `prep_one_det`.
-- `docs/source/relative_photometry.rst` — inter-frame consistency; contains `empirical-zp` section.
-- `docs/source/absolute_photometry.rst` — physical flux calibration (ZeroCalc, ZeroPoint, PhotCompare).
-- `docs/source/photometry.rst` — Step 2b expanded.
-
-**Testing checklist before committing:**
-1. MefPhot: FIELD/ROOT/DETNAME/FILTER/EXPTIME/MAGZERO/SEEING/CATALOG in ext 1
-   header; old columns (Filter, Exptime, MAGZERO, SEEING, Filename, Catalog,
-   Star_rad) absent from the table.
-2. CalcZeroPoint: `zeropoints.fits` has Root/Field; `Summary/{field}_mef.tab`
-   gains ZP columns; incremental re-run only updates processed rows.
-3. ZeroCalc and PhotEval: no crashes on new-format files.
-4. MefPrep `-zp ZP_smash_r`: ZP_USE/ZP_SRC in output; fallback warning
-   when column missing or value invalid.
-
-See memory entry `project_empirical_zp.md` for full design notes.
+Run `CheckPhot.py LMC_c42` to execute the full intra- and inter-filter
+consistency check.  Key output in `Summary/{field}_phot_check_intra.fits`
+and `Summary/{field}_phot_check_inter.fits`.  See
+`docs/source/relative_photometry.rst` for full interpretation guide.
 
 ## Architecture
 
