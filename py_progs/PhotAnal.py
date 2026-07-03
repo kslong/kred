@@ -91,28 +91,42 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from astropy.table import Table, join, vstack
+from astropy.table import Table, join
 from astropy.io import fits
 from astropy.stats import sigma_clipped_stats
 
 
-def load_filter_data(filenames, filter_name):
+def load_filter_data(filenames, filter_name, extra_zp_lookups=None):
     """
     Load all .gaia.fits TabPhot files matching filter_name.
 
-    Returns an Astropy Table with one row per star:
-      Source_name, magc (median across files), G, R (Gaia magnitudes).
+    Returns (aggregate, chunks) where aggregate is an Astropy Table with one
+    row per star: Source_name, magc (median across files using header MAGZERO),
+    G, R (Gaia magnitudes), and optionally magc_{name} for each entry in
+    extra_zp_lookups.  chunks is the list of per-file tables (before
+    aggregation) needed for per-image-pair statistics.
+
+    Parameters
+    ----------
+    extra_zp_lookups : dict of {name: {basename: zp_calc}}, optional
+        Additional ZP sources (e.g. {'gaia_g': {...}, 'smash_r': {...}}).
+        Files not in a lookup get NaN for that ZP source.
     """
+    extra_safes = []
+    if extra_zp_lookups:
+        extra_safes = [n.replace('-', '_') for n in extra_zp_lookups]
+
     chunks = []
     n_files = 0
 
     for fname in filenames:
+        basename = os.path.basename(fname)
         try:
             with fits.open(fname) as hdul:
                 hdr = dict(hdul[1].header)
             tab = Table.read(fname)
         except Exception as e:
-            print(f'PhotAnal: cannot read {os.path.basename(fname)}: {e}')
+            print(f'PhotAnal: cannot read {basename}: {e}')
             continue
 
         # Filter name: header first, column fallback
@@ -130,7 +144,7 @@ def load_filter_data(filenames, filter_name):
         if magzero is None and 'MAGZERO' in tab.colnames:
             magzero = float(np.nanmedian(tab['MAGZERO']))
         if magzero is None:
-            print(f'PhotAnal: no MAGZERO in {os.path.basename(fname)}, skipping')
+            print(f'PhotAnal: no MAGZERO in {basename}, skipping')
             continue
 
         # Quality: drop saturated pixels and non-finite phot_mag
@@ -143,9 +157,17 @@ def load_filter_data(filenames, filter_name):
         if len(tab) == 0:
             continue
 
-        tab['magc'] = np.array(tab['phot_mag'], dtype=float) + float(magzero) - 28.0
+        phot = np.array(tab['phot_mag'], dtype=float)
+        tab['magc'] = phot + float(magzero) - 28.0
 
-        keep = ['Source_name', 'magc']
+        # Extra ZP sources — NaN for files not in the lookup
+        if extra_zp_lookups:
+            for (name, lkup), safe in zip(extra_zp_lookups.items(), extra_safes):
+                zp_emp = float(lkup.get(basename, np.nan))
+                tab[f'magc_{safe}'] = phot + zp_emp - 28.0 if np.isfinite(zp_emp) else np.nan
+
+        keep = ['Source_name', 'magc'] + [f'magc_{s}' for s in extra_safes
+                                           if f'magc_{s}' in tab.colnames]
         for col in ('G', 'R'):
             if col in tab.colnames:
                 keep.append(col)
@@ -154,42 +176,101 @@ def load_filter_data(filenames, filter_name):
 
     if not chunks:
         print(f'PhotAnal: no usable files found for filter "{filter_name}"')
-        return None
+        return None, []
 
     print(f'PhotAnal: {n_files} files loaded for filter {filter_name}')
-    all_data = vstack(chunks)
 
-    # Per-source median magc (aggregate repeated measurements of the same star)
-    groups = all_data.group_by('Source_name')
-    has_G = 'G' in all_data.colnames
-    has_R = 'R' in all_data.colnames
+    # Per-source median magc using pandas groupby (much faster than astropy group_by
+    # on million-row tables)
+    import pandas as pd
 
-    snames, magc_meds, G_meds, R_meds = [], [], [], []
-    for grp in groups.groups:
-        vals = np.array(grp['magc'], dtype=float)
-        vals = vals[np.isfinite(vals)]
-        if len(vals) == 0:
+    # Build a flat pandas DataFrame from the per-file chunks
+    frames = []
+    for c in chunks:
+        d = {'Source_name': [str(x) for x in c['Source_name']],
+             'magc':        np.array(c['magc'], dtype=float)}
+        for col in ('G', 'R'):
+            if col in c.colnames:
+                d[col] = np.array(c[col], dtype=float)
+        for s in extra_safes:
+            col = f'magc_{s}'
+            if col in c.colnames:
+                d[col] = np.array(c[col], dtype=float)
+        frames.append(pd.DataFrame(d))
+
+    df = pd.concat(frames, ignore_index=True)
+
+    agg_dict = {'magc': 'median'}
+    for col in ('G', 'R'):
+        if col in df.columns:
+            agg_dict[col] = 'median'
+    for s in extra_safes:
+        col = f'magc_{s}'
+        if col in df.columns:
+            agg_dict[col] = 'median'
+
+    agg = df.groupby('Source_name', sort=False).agg(agg_dict).reset_index()
+    print(f'PhotAnal: {len(agg):,} unique sources for filter {filter_name}')
+
+    return Table.from_pandas(agg), chunks
+
+
+def _compute_pair_stats(chunks1, chunks2, min_stars=20, mag_lim=19.0,
+                        magc_col='magc'):
+    """Compute the scatter of per-image-pair mean Δmag.
+
+    For each (filter1 file, filter2 file) pair, matches stars by Source_name,
+    computes the mean Δmag for that pair, then returns the MAD scatter of
+    those per-pair means.  Only stars with R <= mag_lim are used so that
+    the pair mean is driven by high-S/N detections.
+
+    Parameters
+    ----------
+    magc_col : str
+        Column name to use for calibrated magnitude (default 'magc' = MAGZERO;
+        use e.g. 'magc_gaia_g' to compute pair scatter with Gaia G ZP).
+
+    Returns (N_pairs, mean_pair_delta_mag, std_pair_delta_mag).
+    """
+    from astropy.stats import mad_std as _mad_std
+
+    def _to_dict(tab):
+        col = magc_col if magc_col in tab.colnames else 'magc'
+        names = np.array([str(n) for n in tab['Source_name']])
+        magcs = np.array(tab[col], dtype=float)
+        ok = np.isfinite(magcs)
+        if 'R' in tab.colnames:
+            r = np.array(tab['R'], dtype=float)
+            ok &= np.isfinite(r) & (r >= 15.0) & (r <= mag_lim)
+        return dict(zip(names[ok], magcs[ok]))
+
+    dicts1 = [_to_dict(t) for t in chunks1]
+    dicts2 = [_to_dict(t) for t in chunks2]
+    sets2  = [set(d) for d in dicts2]
+
+    pair_means = []
+    for d1 in dicts1:
+        if not d1:
             continue
-        snames.append(str(grp['Source_name'][0]))
-        magc_meds.append(float(np.median(vals)))
-        if has_G:
-            gv = np.array(grp['G'], dtype=float)
-            gv = gv[np.isfinite(gv)]
-            G_meds.append(float(np.median(gv)) if len(gv) > 0 else np.nan)
-        if has_R:
-            rv = np.array(grp['R'], dtype=float)
-            rv = rv[np.isfinite(rv)]
-            R_meds.append(float(np.median(rv)) if len(rv) > 0 else np.nan)
+        s1 = set(d1)
+        for d2, s2 in zip(dicts2, sets2):
+            common = s1 & s2
+            if len(common) < min_stars:
+                continue
+            delta = np.array([d1[n] - d2[n] for n in common])
+            ok = np.isfinite(delta)
+            if ok.sum() < min_stars:
+                continue
+            pair_means.append(float(np.mean(delta[ok])))
 
-    cols = {'Source_name': snames, 'magc': magc_meds}
-    if has_G:
-        cols['G'] = G_meds
-    if has_R:
-        cols['R'] = R_meds
-    return Table(cols)
+    if len(pair_means) < 2:
+        return 0, np.nan, np.nan
+    arr = np.array(pair_means)
+    return len(arr), float(np.mean(arr)), float(_mad_std(arr))
 
 
-def do_compare(filenames, filter1, filter2, outfile=None, do_plot=True):
+def do_compare(filenames, filter1, filter2, outfile=None, do_plot=True,
+               extra_zp_lookups=None, _preloaded=None):
     """
     Cross-match filter1 and filter2 photometry and report inter-filter scatter.
 
@@ -205,11 +286,27 @@ def do_compare(filenames, filter1, filter2, outfile=None, do_plot=True):
         Output FITS table path.  Default: filter_compare_<f1>_<f2>.fits.
     do_plot : bool
         If True, save a PNG diagnostic plot.
+    extra_zp_lookups : dict of {name: {basename: zp_calc}}, optional
+        Additional ZP sources to evaluate in parallel (e.g. from CheckPhot's
+        CalcZeroPoint runs).  For each name the same sigma metrics are
+        computed and stored in the output meta as STD_DM_{name},
+        STD_RE_{name}, N_PR_{name}, STD_PD_{name}.
+    _preloaded : tuple of two (Table, list) pairs, optional
+        Pre-loaded (tab, chunks) from load_filter_data() for (filter1, filter2).
+        When supplied, load_filter_data() is skipped (avoids redundant I/O when
+        a filter appears in multiple pairs).
     """
-    print(f'\nPhotAnal: loading {filter1} data...')
-    tab1 = load_filter_data(filenames, filter1)
-    print(f'PhotAnal: loading {filter2} data...')
-    tab2 = load_filter_data(filenames, filter2)
+    if _preloaded is not None:
+        # Copy so in-place renames below don't corrupt the caller's cache
+        (tab1_raw, chunks1), (tab2_raw, chunks2) = _preloaded
+        tab1, tab2 = tab1_raw.copy(), tab2_raw.copy()
+    else:
+        print(f'\nPhotAnal: loading {filter1} data...')
+        tab1, chunks1 = load_filter_data(filenames, filter1,
+                                         extra_zp_lookups=extra_zp_lookups)
+        print(f'PhotAnal: loading {filter2} data...')
+        tab2, chunks2 = load_filter_data(filenames, filter2,
+                                         extra_zp_lookups=extra_zp_lookups)
 
     if tab1 is None or tab2 is None:
         return None
@@ -269,6 +366,10 @@ def do_compare(filenames, filter1, filter2, outfile=None, do_plot=True):
     def _frac_pct(sigma):
         return (10 ** (abs(sigma) / 2.5) - 1.0) * 100.0
 
+    # Per-image-pair scatter: how consistently are the two filters matched image-to-image?
+    print(f'PhotAnal: computing per-image-pair statistics...')
+    n_pairs, mean_pair_dm, std_pair_dm = _compute_pair_stats(chunks1, chunks2)
+
     # ---- Print summary ----
     print()
     print(f'--- Inter-filter consistency: {filter1} vs {filter2} ---')
@@ -281,6 +382,10 @@ def do_compare(filenames, filter1, filter2, outfile=None, do_plot=True):
         print(f'  Color term b (G−R)       : {b:+.4f} mag/mag')
         print(f'  Scatter (after color)    : σ = {std_res:.4f} mag  '
               f'→ {_frac_pct(std_res):.1f}% typical stellar residual  [floor]')
+    if n_pairs >= 2:
+        print(f'  Image-pair scatter       : N_pairs={n_pairs}  '
+              f'std_pair_dmag={std_pair_dm:.4f} mag  '
+              f'(image-to-image ZP variation between filters)')
     print()
 
     # ---- Output table ----
@@ -300,12 +405,61 @@ def do_compare(filenames, filter1, filter2, outfile=None, do_plot=True):
         out['delta_mag_corrected'] = corr
     if 'R_1' in matched.colnames:
         out['R_Gaia'] = np.array(matched['R_1'], dtype=float)
-    out.meta['FILTER1'] = filter1
-    out.meta['FILTER2'] = filter2
-    out.meta['MEAN_DM'] = round(float(mean_d), 5)
-    out.meta['STD_DM'] = round(float(std_d), 5)
-    out.meta['COLOR_B'] = round(float(b), 5)
-    out.meta['STD_RES'] = round(float(std_res), 5)
+    out.meta['FILTER1']   = filter1
+    out.meta['FILTER2']   = filter2
+    out.meta['MEAN_DM']   = round(float(mean_d),       5)
+    out.meta['STD_DM']    = round(float(std_d),        5)
+    out.meta['COLOR_B']   = round(float(b),            5)
+    out.meta['STD_RES']   = round(float(std_res),      5)
+    out.meta['N_PAIRS']   = int(n_pairs)
+    out.meta['MEAN_PDM']  = round(float(mean_pair_dm), 5) if np.isfinite(mean_pair_dm) else np.nan
+    out.meta['STD_PDM']   = round(float(std_pair_dm),  5) if np.isfinite(std_pair_dm)  else np.nan
+
+    # ---- Extra ZP sources: compute the same sigma metrics ----
+    if extra_zp_lookups:
+        # Collect G−R colors (same for all ZP sources)
+        color_ok = None
+        if has_color:
+            color_ok = np.isfinite(color) & np.isfinite(delta)
+
+        for name, _ in extra_zp_lookups.items():
+            safe = name.replace('-', '_')
+            c1 = f'magc_{safe}_1'
+            c2 = f'magc_{safe}_2'
+            if c1 not in matched.colnames or c2 not in matched.colnames:
+                continue
+            de = np.array(matched[c1], dtype=float) - np.array(matched[c2], dtype=float)
+            ok_e = np.isfinite(de) & (np.abs(de) < 5.0)
+            if 'R_1' in matched.colnames:
+                ok_e &= np.isfinite(np.array(matched['R_1'], dtype=float))
+            if ok_e.sum() < 10:
+                continue
+
+            _, mean_e, std_e = sigma_clipped_stats(de[ok_e], sigma=3.0)
+
+            # Color correction using same G−R colors
+            std_res_e = std_e
+            if has_color and color_ok is not None:
+                ok_ce = ok_e & color_ok
+                if ok_ce.sum() > 20:
+                    cf = np.polyfit(color[ok_ce], de[ok_ce], 1)
+                    res_e = de[ok_ce] - (cf[1] + cf[0] * color[ok_ce])
+                    _, _, std_res_e = sigma_clipped_stats(res_e, sigma=3.0)
+
+            np_e, _, std_pdm_e = _compute_pair_stats(chunks1, chunks2,
+                                                      magc_col=f'magc_{safe}')
+            print(f'  [{name}]  sigma_total={std_e:.4f}  '
+                  f'sigma_residual={std_res_e:.4f}  '
+                  f'std_pair_dmag={std_pdm_e:.4f}')
+
+            # FITS header keys: 8-char limit; encode first 2 chars of safe name
+            tag = safe[:2].upper()  # 'GA' for gaia_g, 'SM' for smash_r
+            out.meta[f'SDTM_{tag}'] = round(float(std_e),     5)
+            out.meta[f'STRE_{tag}'] = round(float(std_res_e), 5)
+            out.meta[f'NPR_{tag}']  = int(np_e)
+            out.meta[f'SPDT_{tag}'] = round(float(std_pdm_e), 5) \
+                                      if np.isfinite(std_pdm_e) else np.nan
+
     out.write(outfile, overwrite=True)
     print(f'PhotAnal: wrote {outfile}')
 

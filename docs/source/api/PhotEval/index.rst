@@ -45,7 +45,8 @@ PhotEval
 
    -filter FILTER
        Filter string used to select files, e.g. ``r``, ``N662``, ``N673``.
-       Files matching ``*<FILTER>*req.smash.fits`` are read.
+       Files matching ``*<FILTER>*req.smash.fits`` are preferred; if none
+       exist for that filter, ``*<FILTER>*req.gaia.fits`` are used instead.
        Default: ``r``.
 
    -exp EXPTIME
@@ -111,7 +112,7 @@ Functions
 Module Contents
 ---------------
 
-.. py:function:: do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile, zp_lookup=None)
+.. py:function:: do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile, zp_lookup=None, extra_zp_lookups=None, files=None)
 
 .. py:function:: steer(argv)
 

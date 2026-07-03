@@ -111,7 +111,7 @@ from astropy.stats import sigma_clip, mad_std
 
 def run(filter_str=None, tabphot_dir='TabPhot', snr_min=20.0,
         ref_col_override=None, n_sigma=3.0, mag_lo=21.0, mag_hi=15.0,
-        outfile='zeropoints.fits'):
+        outfile='zeropoints.fits', files=None):
     """Process all TabPhot catalogs for one filter and return the per-file results Table.
 
     Writes ``outfile`` (default ``zeropoints.fits``) and updates
@@ -122,8 +122,10 @@ def run(filter_str=None, tabphot_dir='TabPhot', snr_min=20.0,
     ----------
     filter_str : str or None
         Filter to select (e.g. ``'r'``, ``'N662'``).  None means all filters.
+        Ignored when ``files`` is supplied.
     tabphot_dir : str
         Directory containing ``*.smash.fits`` / ``*.gaia.fits`` catalogs.
+        Ignored when ``files`` is supplied.
     snr_min : float
         Minimum SNR for a star to be included (default 20).
     ref_col_override : str or None
@@ -134,16 +136,19 @@ def run(filter_str=None, tabphot_dir='TabPhot', snr_min=20.0,
         Faint and bright magnitude limits for reference stars (default 21, 15).
     outfile : str or None
         Output FITS filename.  Pass None to skip writing.
+    files : list of str or None
+        Explicit list of TabPhot file paths.  When provided, ``tabphot_dir``
+        and ``filter_str`` are ignored for file selection.
     """
-    pattern_smash = os.path.join(tabphot_dir, '*.smash.fits')
-    pattern_gaia  = os.path.join(tabphot_dir, '*.gaia.fits')
-    files = sorted(glob(pattern_smash) + glob(pattern_gaia))
-
-    if filter_str:
-        files = [f for f in files if _file_filter(f) == filter_str]
+    if files is None:
+        pattern_smash = os.path.join(tabphot_dir, '*.smash.fits')
+        pattern_gaia  = os.path.join(tabphot_dir, '*.gaia.fits')
+        files = sorted(glob(pattern_smash) + glob(pattern_gaia))
+        if filter_str:
+            files = [f for f in files if _file_filter(f) == filter_str]
 
     if not files:
-        print(f'CalcZeroPoint: no catalog files found in {tabphot_dir}'
+        print(f'CalcZeroPoint: no catalog files found'
               + (f' for filter {filter_str}' if filter_str else ''))
         return None
 

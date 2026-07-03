@@ -287,32 +287,123 @@ Running the complete check: CheckPhot
 --------------------------------------
 
 ``CheckPhot.py`` runs the full intra-filter and inter-filter workflow in a
-single command and writes two concise summary tables::
+single command::
 
     CheckPhot.py LMC_c42
     CheckPhot.py -np 16 LMC_c42           # more parallel workers for MefPhot
     CheckPhot.py -no_mefphot LMC_c42      # skip MefPhot if TabPhot/ already exists
+    CheckPhot.py -o mydir LMC_c42         # write all outputs to mydir/ instead
+    CheckPhot.py -summary CheckPhot/LMC_c42_phot_check.fits   # reprint summary only
 
 It runs ``MefPhot`` (SMASH + Gaia), ``CalcZeroPoint``, ``PhotEval``, and
-``PhotAnal`` in sequence, then prints a two-table summary and writes:
+``PhotAnal`` in sequence.  All output files are collected in a single
+``CheckPhot/`` directory (override with ``-o DIR``) to avoid cluttering
+the working directory.  All filenames include the field name so multiple
+fields share the directory without collision.  The final summary is a
+single FITS file with two named table extensions::
 
-* ``Summary/{field}_phot_check_intra.fits``
-* ``Summary/{field}_phot_check_inter.fits``
+    CheckPhot/LMC_c42_phot_check.fits   # ext INTRA + INTER
 
 
-Interpreting the intra-filter table
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Image groups
+^^^^^^^^^^^^^
+
+``CheckPhot`` reads ``config/DeMCELS_images.txt`` (or the file named by
+``-config``) to determine which exposures belong together.  Each named
+*Image group* identifies a set of exposures that will be co-added into one
+mosaic tile:
 
 .. code-block:: text
 
-    Filter N_files N_stars_zp mean_delta_zp std_delta_zp N_sources chi2_nu_c_med chi2_nu_c_90
-    ------ ------- ---------- ------------- ------------ --------- ------------- ------------
-         r      60   14199208       -0.0233       0.0220    522529        0.9961       4.3871
-      N662      34    7753892        0.0044       0.0580    533454        1.6982      19.5661
-      N673      60   13613626        0.0063       0.0503    536902        1.1741      21.2342
-      N708      72   14500032        0.0640       0.0616    488251        1.3733      11.7555
+    # Image   FILTER  EXPTIME
+    N662       N662    400
+    N662       N662    600
+    N662       N662    800
+    N662_s     N662     30
+    N662_s     N662     60
+    r          r        30
+    r          r        60
+    r_s        r         5
 
-**std_delta_zp** (MAD scatter of per-file MAGZERO deviations, robust to
+Groups whose label ends in ``_s`` are *short-exposure* (shallow) groups;
+all others are *long-exposure*.  The INTRA table has one row per Image
+group that has matching files in ``TabPhot/``.  The INTER table compares
+every pair of groups within the same tier (long or short) that have
+different filters — these are auto-generated, so no filter list needs to
+be hard-coded.
+
+
+Intermediate products in ``CheckPhot/``:
+
+* ``{field}_zeropoints_{label}.fits``         — CalcZeroPoint per-file ZP table
+* ``{field}_phot_eval_{label}.fits``          — PhotEval per-source chi² table
+* ``{field}_filter_compare_{l1}_{l2}.fits``   — PhotAnal matched-star table
+
+To read the summary tables in Python::
+
+    from astropy.table import Table
+    intra = Table.read('CheckPhot/LMC_c42_phot_check.fits', hdu='INTRA')
+    inter = Table.read('CheckPhot/LMC_c42_phot_check.fits', hdu='INTER')
+
+The ``-summary`` flag re-reads an existing FITS file and reprints the
+formatted comparison without rerunning any photometry::
+
+    CheckPhot.py -summary CheckPhot/LMC_c42_phot_check.fits
+
+The same output can be generated from Python::
+
+    import CheckPhot
+    CheckPhot.summarize('CheckPhot/LMC_c42_phot_check.fits')
+
+or, if you already have the tables in memory::
+
+    from astropy.table import Table
+    intra = Table.read('CheckPhot/LMC_c42_phot_check.fits', hdu='INTRA')
+    inter = Table.read('CheckPhot/LMC_c42_phot_check.fits', hdu='INTER')
+    CheckPhot._print_summary(intra, inter, 'LMC_c42')
+
+
+Interpreting the intra-filter table (INTRA)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The INTRA extension has one row per active Image group.  Zero-point
+columns are named ``{stat}_{catalog}_{ref}`` where ``{catalog}`` is
+``smash`` or ``gaia`` and ``{ref}`` is the reference band (``r``, ``g``).
+The per-source consistency columns are at the right.
+
+.. code-block:: text
+
+  Image      Filt     N_src  chi2_emp   MagZero    GaiaG   SmashR  best
+  ---------- ----- --------  --------  -------- -------- --------  -------
+  N662       N662    525648     1.913    0.0123   0.0441   0.0131  MagZero/SmashR
+  N662_s     N662    225356     0.813    0.0362   0.0450   0.0341  MagZero/SmashR
+  N673       N673    527994     1.112    0.0113   0.0161   0.0104  MagZero/SmashR
+  N673_s     N673    270392     0.762    0.0146   0.0188   0.0129  MagZero/SmashR
+  N708       N708    473965     1.329    0.0106   0.0508   0.0148  MagZero
+  N708_s     N708    280882     0.921    0.0634   0.0259   0.0146  SmashR
+  r          r       511339     0.926    0.0104   0.0131   0.0098  MagZero/SmashR
+  r_s        r       336795     0.853    0.0149   0.0420   0.0129  MagZero/SmashR
+
+The three ``sigma_c_*`` columns show the per-star scatter of
+:math:`m_c = m_{\rm phot} + \mathrm{ZP_{ref}} - 28` across all frames
+of the same Image group, for three different choices of zero-point
+reference.  They answer the question: *if we scale all frames of this
+group to ZP = 28 using reference X, how consistently does the same star
+come out?*
+
+**sigma_c_magzero** — uses the header ``MAGZERO`` (pipeline default).
+
+**sigma_c_gaia_g** — uses a ZP measured directly from Gaia G magnitudes
+for each frame.  For broadband (r) filters this is competitive; for
+narrowband filters the broad Gaia G passband introduces a color-term
+scatter that makes it worse than ``MAGZERO``.
+
+**sigma_c_smash_r** — uses a ZP measured from SMASH r magnitudes.  This
+is competitive with ``MAGZERO`` for most groups and wins clearly when
+``MAGZERO`` is inconsistent (e.g. N708_s, where sigma_c_magzero = 0.063
+vs sigma_c_smash_r = 0.015).
+
+**std_dzp_{ref}** (MAD scatter of per-file MAGZERO deviations, robust to
 outlier exposures):
 
 * < 0.03 mag — excellent; header ``MAGZERO`` values are mutually consistent.
@@ -320,58 +411,79 @@ outlier exposures):
   atmospheric variability in the filter bandpass.
 * > 0.06 mag — investigate; consider the empirical ZP correction below.
 
-**mean_delta_zp** (systematic offset of header MAGZERO from measured ZP):
+**mean_dzp_{ref}** (systematic offset of header MAGZERO from measured ZP):
 
 * A small mean (< 0.02 mag) with low scatter is fine; it reflects a color
   term between the catalog and the DECam system.
-* A large mean (> 0.05 mag) for one filter, as seen for N708 above (+0.064),
-  means the pipeline MAGZERO is systematically wrong for that filter.  This
-  will leave a scale error after ``MefPrep`` that affects CleanStars.
-  Check whether the same offset is present in both emission-line filters
-  used for subtraction — if the offset is equal it cancels in the
+* A large mean (> 0.05 mag) means the pipeline MAGZERO is systematically
+  wrong for that group.  Check whether the same offset is present in both
+  filters used for subtraction — if the offset is equal it cancels in the
   inter-filter comparison.
 
-**chi2_nu_c_med** (frame-to-frame consistency relative to photon noise):
+**chi2_nu_c_emp_med** (frame-to-frame consistency relative to photon noise,
+empirical noise model):
 
-* ≈ 1 — perfect (r-band in the example); MAGZERO values are consistent at
-  the photon-noise level.
+* ≈ 1 — frames are mutually consistent at the photon-noise level.
 * 1.1–1.7 — moderate excess scatter; typical for narrowband filters where
   atmospheric airglow or extended nebulosity affects the background.
-* chi2_nu_c_90 >> 1 — the high-chi2 tail in N662 and N673 consists largely
-  of genuine emission-line objects (Be stars, symbiotic stars, etc.) varying
-  intrinsically in H\ |alpha| / [SII].  This is astrophysics, not a
+* ``chi2_nu_c_90 >> 1`` — the high-chi2 tail in N662 and N673 consists
+  largely of genuine emission-line objects (Be stars, symbiotic stars, etc.)
+  varying intrinsically in H\ |alpha| / [SII].  This is astrophysics, not a
   calibration problem.
 
 .. |alpha| unicode:: U+03B1
 
 
-Interpreting the inter-filter table
-^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+Interpreting the inter-filter table (INTER)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The INTER extension has one row per Image-group pair.  Pairs are formed
+automatically within each tier: all combinations of long-exposure groups
+with different filters, and separately all combinations of short-exposure
+groups with different filters.  The columns ``Image1``, ``Image2``,
+``Filter1``, ``Filter2`` identify each pair.
 
 .. code-block:: text
 
-    Filter1 Filter2 N_stars mean_delta_mag sigma_total sigma_residual residual_pct color_term_b
-    ------- ------- ------- -------------- ----------- -------------- ------------ ------------
-          r    N662  788480        -0.0279      0.0781         0.0612       5.8025       0.1063
-          r    N673  808748        -0.0284      0.0666         0.0510       4.8122       0.0870
-       N708    N662  786383        -0.0043      0.0761         0.0610       5.7791      -0.0908
-       N708    N673  803152         0.0054      0.0712         0.0537       5.0664      -0.1100
+  Pair                    N_stars     ---- sigma_c ----       resid_MZ  resid%    ---- std_dzp ----
+                                    MagZero    GaiaG   SmashR                    MagZero    GaiaG   SmashR
+  ---------------------- --------  -------- -------- --------  --------  ------  -------- -------- --------
+  r × N662                 780502    0.0724   0.0726   0.0723    0.0568     5.4%    0.0257   0.0159   0.0370
+  r × N673                 803780    0.0617   0.0617   0.0617    0.0471     4.4%    0.0166   0.0148   0.0233
+  r × N708                 800114    0.1126   0.1128   0.1125    0.0793     7.6%    0.0215   0.0124   0.0293
+  N662 × N673              780732    0.0323   0.0328   0.0322    0.0325     3.0%    0.0219   0.0130   0.0360
+  N662 × N708              782266    0.0726   0.0732   0.0721    0.0571     5.4%    0.0263   0.0122   0.0403
+  N673 × N708              800184    0.0628   0.0630   0.0627    0.0465     4.4%    0.0207   0.0138   0.0268
+
+**sigma_c_magzero / sigma_c_gaia_g / sigma_c_smash_r** (scatter of
+:math:`m_{c,F1} - m_{c,F2}` per matched star, for three ZP references):
+
+These three columns are the inter-filter analogue of the same-named
+columns in the INTRA table.  The meaning is: *after correcting both
+filters to ZP = 28 using reference X, how much does the same star's
+flux ratio scatter from star to star?*  For the long-exposure LMC_c42
+pairs above, all three references give essentially identical values —
+the dominant scatter is stellar color diversity, not calibration noise.
+
+**sigma_residual / residual_pct** (continuum subtraction floor):
+
+The scatter that remains after fitting and subtracting the best-fit
+color term (Gaia G−R).  This is the irreducible floor for ``CleanStars``
+stellar subtraction.  Values of 4–8% are typical for DECam broadband vs
+narrowband comparisons because of the stellar color diversity in the
+LMC/SMC.  A 6% residual means the brightest stars leave ±6% flux rings
+after continuum subtraction.  This floor cannot be improved by better
+photometric calibration — it is set by the physics of the stellar
+population.
 
 **mean_delta_mag** (systematic inter-filter offset):
 
-* |mean| < 0.03 mag — acceptable; a small multiplicative correction is
+* |Δmag| < 0.03 mag — acceptable; a small multiplicative correction is
   applied implicitly by the mean subtraction in CleanStars.
-* |mean| > 0.05 mag — significant; consider adjusting MAGZERO for one of
+* |Δmag| > 0.05 mag — significant; consider adjusting MAGZERO for one of
   the two filters.
 
-**residual_pct** (minimum stellar residual after best mean + color
-correction):
-
-* This is the irreducible floor for CleanStars stellar subtraction.  Values
-  of 5–6% are typical for DECam broadband vs narrowband comparisons because
-  of the stellar color diversity in the LMC/SMC.
-* Expressed as a fraction of stellar DN: a 6% residual means the brightest
-  stars will leave ±6% flux rings after continuum subtraction.
+.. |Δmag| replace:: \|mean_delta_mag\|
 
 **color_term_b** (slope of Δmag vs Gaia G−R):
 
@@ -381,12 +493,47 @@ correction):
 * The sign flips to negative for N708 vs narrowband because N708 lies
   red-ward of the emission lines.
 
-**What the numbers above imply for this field**: the r-band calibration
-is excellent.  The N708 systematic offset of +0.064 mag warrants attention,
-but since N708 vs N662 shows a near-zero inter-filter mean (−0.004 mag),
-the offset is shared by both filters and largely cancels in the
-CleanStars subtraction.  The ~5–6% residual floor is intrinsic to the
-stellar population and cannot be improved by better photometric calibration.
+**std_dzp_magzero / std_dzp_gaia_g / std_dzp_smash_r** (image-to-image
+variation in the inter-filter mean offset, for three ZP references):
+
+Each (Image1 file, Image2 file) pair contributes one mean Δmag; ``std_dzp``
+is the MAD scatter of those per-pair means.  This is the inter-filter
+analogue of ``std_dzp`` in the INTRA table: it measures how consistently
+*any two specific images* from the two groups are scaled relative to each
+other.
+
+* Values ≲ 0.02 mag mean image-to-image calibration is stable.
+* Values > 0.05 mag suggest individual image pairs are poorly matched and
+  the continuum subtraction will vary from one set of images to another.
+
+Note that for the long-exposure pairs above, Gaia G gives the smallest
+``std_dzp`` (~0.012–0.016 mag vs ~0.017–0.026 for MAGZERO), though the
+difference is small compared with ``sigma_residual``.
+
+
+Printed summary
+^^^^^^^^^^^^^^^^^
+
+At the end of every ``CheckPhot`` run (and when called with ``-summary``),
+a formatted comparison table is printed that places the three ZP references
+side by side and marks which is best for each Image group.  The INTRA
+section shows ``sigma_c`` for each ZP reference and the empirical chi2.
+The INTER section shows ``sigma_c`` and ``resid_MZ`` (the continuum
+subtraction floor using MAGZERO), with pairs sorted so that broadband ×
+narrowband pairs appear first, r listed first within each pair, and
+short-exposure pairs grouped separately below the long-exposure pairs.
+
+**Choosing a zero-point reference**: for most Image groups and filter pairs,
+``MAGZERO`` and ``SMASH r`` give essentially identical ``sigma_c``, and
+``GAIA G`` is noticeably worse for narrowband filters.  The main exception
+is any Image group where the MAGZERO values are internally inconsistent
+(``sigma_c_magzero >> sigma_c_smash_r``); in that case ``SMASH r`` is
+the better choice for MefPrep rescaling.  The ``best`` column in the
+printed INTRA summary flags this automatically.
+
+The continuum subtraction floor (``residual_pct``) is the same regardless
+of which ZP reference is used, because it is set by stellar color diversity
+rather than calibration accuracy.
 
 
 .. _empirical-zp:
@@ -452,3 +599,9 @@ Output Files
      - Per-star: ``n_detect``, ``magc_std``, ``chi2_nu_c``,
        ``mag_err_mean``, and (with ``-zp_table``) ``magc_emp_std``,
        ``chi2_nu_emp``
+   * - ``CheckPhot/{field}_phot_check.fits``
+     - CheckPhot
+     - Two-extension FITS: ``INTRA`` (one row per Image group) and
+       ``INTER`` (one row per Image-group pair).  Contains
+       ``sigma_c_magzero``, ``sigma_c_gaia_g``, ``sigma_c_smash_r``,
+       ``std_dzp_*``, ``sigma_residual``, ``residual_pct``

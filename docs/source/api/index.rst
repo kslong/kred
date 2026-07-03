@@ -12,6 +12,7 @@ This page contains auto-generated API reference documentation [#f1]_.
    /api/BackStats/index
    /api/BackSub/index
    /api/CalcZeroPoint/index
+   /api/CheckPhot/index
    /api/CleanStars/index
    /api/ColorTest/index
    /api/CutOut/index

@@ -103,7 +103,7 @@ Functions
 Module Contents
 ---------------
 
-.. py:function:: do_compare(filenames, filter1, filter2, outfile=None, do_plot=True)
+.. py:function:: do_compare(filenames, filter1, filter2, outfile=None, do_plot=True, extra_zp_lookups=None, _preloaded=None)
 
    Cross-match filter1 and filter2 photometry and report inter-filter scatter.
 
@@ -119,14 +119,32 @@ Module Contents
        Output FITS table path.  Default: filter_compare_<f1>_<f2>.fits.
    do_plot : bool
        If True, save a PNG diagnostic plot.
+   extra_zp_lookups : dict of {name: {basename: zp_calc}}, optional
+       Additional ZP sources to evaluate in parallel (e.g. from CheckPhot's
+       CalcZeroPoint runs).  For each name the same sigma metrics are
+       computed and stored in the output meta as STD_DM_{name},
+       STD_RE_{name}, N_PR_{name}, STD_PD_{name}.
+   _preloaded : tuple of two (Table, list) pairs, optional
+       Pre-loaded (tab, chunks) from load_filter_data() for (filter1, filter2).
+       When supplied, load_filter_data() is skipped (avoids redundant I/O when
+       a filter appears in multiple pairs).
 
 
-.. py:function:: load_filter_data(filenames, filter_name)
+.. py:function:: load_filter_data(filenames, filter_name, extra_zp_lookups=None)
 
    Load all .gaia.fits TabPhot files matching filter_name.
 
-   Returns an Astropy Table with one row per star:
-     Source_name, magc (median across files), G, R (Gaia magnitudes).
+   Returns (aggregate, chunks) where aggregate is an Astropy Table with one
+   row per star: Source_name, magc (median across files using header MAGZERO),
+   G, R (Gaia magnitudes), and optionally magc_{name} for each entry in
+   extra_zp_lookups.  chunks is the list of per-file tables (before
+   aggregation) needed for per-image-pair statistics.
+
+   Parameters
+   ----------
+   extra_zp_lookups : dict of {name: {basename: zp_calc}}, optional
+       Additional ZP sources (e.g. {'gaia_g': {...}, 'smash_r': {...}}).
+       Files not in a lookup get NaN for that ZP source.
 
 
 .. py:function:: steer(argv)

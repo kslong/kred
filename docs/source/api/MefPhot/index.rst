@@ -191,7 +191,7 @@ Module Contents
        The number of processes to actually use (may be adjusted by the user).
 
 
-.. py:function:: do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1, object_file='objects.txt', nrows_max=-1, rstar=6, b_in=8, b_out=12, add_psf_metrics=True)
+.. py:function:: do_forced_photometry(filename='LMC_c48_T08.r.t060.fits', image_ext=1, object_file='objects.txt', nrows_max=-1, rstar=6, b_in=8, b_out=12, add_psf_metrics=True, mag_bright=14.0, mag_faint=22.0)
 
    Perform forced aperture photometry at specified sky positions.
 
@@ -291,7 +291,7 @@ Module Contents
    >>> bright = phot[phot['Net'] > 1000]
 
 
-.. py:function:: do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False)
+.. py:function:: do_many(filenames, outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, n_processes=None, logfile='ErrorsMefPhot.txt', verbose_errors=False, catalog='gaia', redo=False, mag_bright=14.0, mag_faint=22.0)
 
    Process multiple FITS files in parallel.
 
@@ -362,7 +362,7 @@ Module Contents
    ...     print(f"{len(failed)} files failed - see errors.log")
 
 
-.. py:function:: do_one(filename='foo.fits', outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True, redo=False)
+.. py:function:: do_one(filename='foo.fits', outroot='', nrows_max=-1, rstar=6, b_in=8, b_out=12, catalog='gaia', verbose=True, redo=False, mag_bright=14.0, mag_faint=22.0)
 
    Process a single multi-extension FITS file.
 

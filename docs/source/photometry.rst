@@ -101,11 +101,13 @@ Tool Overview
      - Inter-filter consistency: compares the same star's DN across two
        filters (e.g. r and N662); reports scatter and color term that
        set the floor on CleanStars continuum subtraction quality
-   * - CheckPhot
+   * - :doc:`CheckPhot <api/CheckPhot/index>`
      - Relative
      - One-command wrapper: runs MefPhot (SMASH + Gaia), CalcZeroPoint,
-       PhotEval, and PhotAnal in sequence; writes concise intra- and
-       inter-filter summary tables to ``Summary/``
+       PhotEval, and PhotAnal in sequence; groups exposures by Image label
+       from ``DeMCELS_images.txt``; writes ``CheckPhot/{field}_phot_check.fits``
+       with INTRA and INTER table extensions and prints a formatted
+       comparison summary
    * - :doc:`StarFind <api/StarFind/index>`
      - Absolute
      - Detect stars for PSF construction

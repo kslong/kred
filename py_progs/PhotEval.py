@@ -164,22 +164,29 @@ def steer(argv):
     do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile, zp_lookup)
 
 
-def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile, zp_lookup=None):
-    pattern_smash = os.path.join(tabphot_dir, f'*{filter_str}*req.smash.fits')
-    pattern_gaia  = os.path.join(tabphot_dir, f'*{filter_str}*req.gaia.fits')
-    files = sorted(glob(pattern_smash))
-    if files:
-        pattern_used = pattern_smash
-        catalog_used = 'smash'
+def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
+            zp_lookup=None, extra_zp_lookups=None, files=None):
+    if files is not None:
+        smash = [f for f in files if f.endswith('.smash.fits')]
+        files = smash if smash else [f for f in files if f.endswith('.gaia.fits')]
+        catalog_used = 'smash' if smash else 'gaia'
+        if not files:
+            print(f'PhotEval: no usable files in supplied list for {filter_str}')
+            return None
+        print(f'Reading {len(files)} catalog files ({catalog_used}) for image group ...')
     else:
-        files = sorted(glob(pattern_gaia))
-        pattern_used = pattern_gaia
-        catalog_used = 'gaia'
-    if not files:
-        print(f'No files matching {pattern_smash} or {pattern_gaia}')
-        return
-
-    print(f'Reading {len(files)} catalog files matching *{filter_str}*req.{catalog_used}.fits ...')
+        pattern_smash = os.path.join(tabphot_dir, f'*{filter_str}*req.smash.fits')
+        pattern_gaia  = os.path.join(tabphot_dir, f'*{filter_str}*req.gaia.fits')
+        files = sorted(glob(pattern_smash))
+        if files:
+            catalog_used = 'smash'
+        else:
+            files = sorted(glob(pattern_gaia))
+            catalog_used = 'gaia'
+        if not files:
+            print(f'No files matching {pattern_smash} or {pattern_gaia}')
+            return None
+        print(f'Reading {len(files)} catalog files matching *{filter_str}*req.{catalog_used}.fits ...')
 
     per_row_cols = ['Source_name', 'phot_mag', 'Net', 'ErrNet', 'SNR', 'RA', 'Dec', 'prob']
 
@@ -188,6 +195,7 @@ def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
 
     chunks = []
     for f in files:
+        basename = os.path.basename(f)
         try:
             with fits.open(f) as hdul:
                 hdr = hdul[1].header
@@ -201,11 +209,14 @@ def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
             t['Filter']  = str(hdr['FILTER']) if 'FILTER' in hdr else (
                 str(t['Filter'][0]) if 'Filter' in t.colnames else '')
             if have_emp:
-                basename = os.path.basename(f)
                 zp_emp = zp_lookup.get(basename, np.nan)
                 if np.isfinite(zp_emp):
                     n_emp_matched += 1
                 t['ZP_EMP'] = float(zp_emp)
+            if extra_zp_lookups:
+                for lname, lkup in extra_zp_lookups.items():
+                    safe = lname.replace('-', '_')
+                    t[f'ZP_{safe}'] = float(lkup.get(basename, np.nan))
             chunks.append(t.to_pandas())
         except Exception as e:
             print(f'  Warning: could not read {f}: {e}')
@@ -256,6 +267,20 @@ def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
     if have_emp:
         data['mag_emp'] = data['phot_mag'] + data['ZP_EMP'] - 28.0
 
+    # extra ZP sources (e.g. gaia_g, smash_r) — each produces magc_std_{name}
+    extra_names = []
+    if extra_zp_lookups:
+        for lname in extra_zp_lookups:
+            safe = lname.replace('-', '_')
+            col = f'ZP_{safe}'
+            if col in data.columns:
+                data[f'mag_{safe}'] = np.where(
+                    np.isfinite(data[col]),
+                    data['phot_mag'] + data[col] - 28.0,
+                    np.nan,
+                )
+                extra_names.append(safe)
+
     # --- vectorized groupby aggregation ---
     grp = data.groupby('Source_name', sort=False)
 
@@ -281,6 +306,8 @@ def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
             magc_emp_median=('mag_emp', 'median'),
             magc_emp_std=('mag_emp', 'std'),
         )
+    for safe in extra_names:
+        agg_dict[f'magc_std_{safe}'] = (f'mag_{safe}', 'std')
     agg = grp.agg(**agg_dict).reset_index()
 
     # weighted means and reduced chi^2 for both raw and corrected magnitudes
@@ -346,6 +373,10 @@ def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
         out_cols += ['magc_mean', 'magc_wmean', 'magc_median', 'magc_std']
     if have_emp:
         out_cols += ['magc_emp_mean', 'magc_emp_wmean', 'magc_emp_median', 'magc_emp_std']
+    for safe in extra_names:
+        col = f'magc_std_{safe}'
+        if col in stats.columns:
+            out_cols.append(col)
     out_cols += ['mag_err_mean', 'snr_mean', 'chi2_nu']
     if have_magzero:
         out_cols += ['chi2_nu_c']
@@ -357,6 +388,10 @@ def do_eval(tabphot_dir, filter_str, exptime, snr_min, prob_min, min_n, outfile,
     for col in ['mag_mean', 'mag_wmean', 'mag_std', 'mag_err_mean',
                 'magc_mean', 'magc_wmean', 'magc_std',
                 'magc_emp_mean', 'magc_emp_wmean', 'magc_emp_std']:
+        if col in out.colnames:
+            out[col].format = '.4f'
+    for safe in extra_names:
+        col = f'magc_std_{safe}'
         if col in out.colnames:
             out[col].format = '.4f'
     for col in ['chi2_nu', 'chi2_nu_c', 'chi2_nu_emp']:
@@ -374,16 +409,41 @@ def _print_summary(t):
     n = len(t)
     if n == 0:
         return
-    print(f'\n--- Summary ({n:,} sources) ---')
-    print(f'  mag_std  : median={np.median(t["mag_std"]):.4f}  '
-          f'90th%={np.percentile(t["mag_std"], 90):.4f}  (raw, ZP=28)')
+
+    # bright-star subset: photon noise < 10 mmag — calibration dominates scatter
+    err = np.array(t['mag_err_mean'], dtype=float)
+    bright = np.isfinite(err) & (err < 0.010)
+    nb = int(bright.sum())
+
+    print(f'\n--- Summary ({n:,} sources; {nb:,} bright [phot_err<10 mmag]) ---')
+
+    def _ms(col, mask=None):
+        v = np.array(t[col], dtype=float)
+        if mask is not None:
+            v = v[mask]
+        v = v[np.isfinite(v)]
+        if len(v) == 0:
+            return 'n/a', 'n/a'
+        return f'{np.median(v):.4f}', f'{np.percentile(v, 90):.4f}'
+
+    med, p90 = _ms('mag_std')
+    print(f'  magc_std (raw ZP=28)  : median={med}  90th%={p90}')
     if 'magc_std' in t.colnames:
-        print(f'  magc_std    : median={np.median(t["magc_std"]):.4f}  '
-              f'90th%={np.percentile(t["magc_std"], 90):.4f}  (header MAGZERO)')
+        med_all, p90_all = _ms('magc_std')
+        med_b,   p90_b   = _ms('magc_std', bright)
+        print(f'  magc_std (MAGZERO)    : median={med_all}  90th%={p90_all}  '
+              f'[bright: median={med_b}]')
     if 'magc_emp_std' in t.colnames:
-        print(f'  magc_emp_std: median={np.median(t["magc_emp_std"]):.4f}  '
-              f'90th%={np.percentile(t["magc_emp_std"], 90):.4f}  (empirical ZP)')
-    print(f'  mag_err     : median={np.median(t["mag_err_mean"]):.4f}  (photon noise)')
+        med_all, _ = _ms('magc_emp_std')
+        med_b,   _ = _ms('magc_emp_std', bright)
+        print(f'  magc_emp_std (emp ZP) : median={med_all}  [bright: median={med_b}]')
+    for col in t.colnames:
+        if col.startswith('magc_std_') and col not in ('magc_std',):
+            label = col.replace('magc_std_', '')
+            med_all, _ = _ms(col)
+            med_b,   _ = _ms(col, bright)
+            print(f'  {col:<22}: median={med_all}  [bright: median={med_b}]  ({label})')
+    print(f'  mag_err (photon noise): median={_ms("mag_err_mean")[0]}')
     good = t[~np.isnan(t['chi2_nu'])]
     if len(good):
         print(f'  chi2_nu     : median={np.median(good["chi2_nu"]):.3f}  '

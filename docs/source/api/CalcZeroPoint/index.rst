@@ -111,6 +111,7 @@ Functions
 .. autoapisummary::
 
    CalcZeroPoint.do_one
+   CalcZeroPoint.run
    CalcZeroPoint.steer
    CalcZeroPoint.update_mef_tab
 
@@ -119,6 +120,37 @@ Module Contents
 ---------------
 
 .. py:function:: do_one(filepath, snr_min, ref_col_override, n_sigma, mag_hi, mag_lo)
+
+.. py:function:: run(filter_str=None, tabphot_dir='TabPhot', snr_min=20.0, ref_col_override=None, n_sigma=3.0, mag_lo=21.0, mag_hi=15.0, outfile='zeropoints.fits', files=None)
+
+   Process all TabPhot catalogs for one filter and return the per-file results Table.
+
+   Writes ``outfile`` (default ``zeropoints.fits``) and updates
+   ``Summary/{field}_mef.tab`` as side effects.  Returns None if no files
+   are found or no results are produced.
+
+   Parameters
+   ----------
+   filter_str : str or None
+       Filter to select (e.g. ``'r'``, ``'N662'``).  None means all filters.
+       Ignored when ``files`` is supplied.
+   tabphot_dir : str
+       Directory containing ``*.smash.fits`` / ``*.gaia.fits`` catalogs.
+       Ignored when ``files`` is supplied.
+   snr_min : float
+       Minimum SNR for a star to be included (default 20).
+   ref_col_override : str or None
+       Override the reference magnitude column (default: auto from catalog).
+   n_sigma : float
+       Sigma-clipping threshold (default 3).
+   mag_lo, mag_hi : float
+       Faint and bright magnitude limits for reference stars (default 21, 15).
+   outfile : str or None
+       Output FITS filename.  Pass None to skip writing.
+   files : list of str or None
+       Explicit list of TabPhot file paths.  When provided, ``tabphot_dir``
+       and ``filter_str`` are ignored for file selection.
+
 
 .. py:function:: steer(argv)
 
