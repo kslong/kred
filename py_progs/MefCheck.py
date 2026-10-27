@@ -48,6 +48,8 @@ Version History
 
 230706 ksl
     Coding begun
+261027 ksl
+    SKYORDER no longer required (not written by V6 CP); missing values recorded as -1
 
 """
 
@@ -78,7 +80,8 @@ def test(filename='c4d_190108_063145_ooi_N662_v1.fits.fz', outputfile='out.txt')
     x = fits.open(filename, memmap=True)
     for i, hdu in enumerate(x):
         if i == 0:
-            for keyword in ['EXPTIME', 'SEEING','MAGZERO','SKYORDER']:
+            # SKYORDER is not required, since newer (V6) versions of the CP do not write it
+            for keyword in ['EXPTIME', 'SEEING','MAGZERO']:
                 if keyword not in hdu.header:
                     warnings.warn(f"Missing keyword '{keyword}' in extension {i}", UserWarning)
         else:
@@ -138,10 +141,10 @@ def check_mefs(field='LMC_c45'):
     for one in files:
         xx=do_one(one)
         xstat.append(xx)
-        try: 
+        try:
             xorder=fits.getval(one,'SKYORDER',0)
         except:
-            xorder=100
+            xorder=-1      # keyword missing, as expected for V6 CP data
         skyorder.append(xorder)
 
     xfiles=[]
@@ -153,12 +156,16 @@ def check_mefs(field='LMC_c45'):
     qtab=Table([xfiles,xstat,skyorder],names=['Filename','Header_Quality','SKYORDER'])
     qtab.write('Summary/%s_mef_qual.tab' % field,format='ascii.fixed_width_two_line',overwrite=True)
 
+    nmissing=np.sum(qtab['SKYORDER']==-1)
+    if nmissing:
+        print('Note: %d of %d files in %s have no SKYORDER keyword (expected for V6 CP data; recorded as -1)' % (nmissing,len(qtab),field))
+
     ztab=qtab[qtab['SKYORDER']>1]
     if len(ztab):
         print('WARNING: there are %d files in %s with SKYORDER > 1; this may be OK in certain situations' % (len(ztab),field))
         for one in ztab:
             print('file %50s has SKYORDER %3d' % (one['Filename'],one['SKYORDER']))
-    else:
+    elif nmissing==0:
         print('All files in field %s have SKYORDER 1' % field)
 
 

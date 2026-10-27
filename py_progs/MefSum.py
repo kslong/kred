@@ -213,8 +213,12 @@ def get_mef_overview(field='LMC_c45'):
         name=name.replace('.fits.fz','')  
         record=[name]  
         for one_key in keys:
-            record.append(get_keyword(one_key,x[0]))
-        
+            value=get_keyword(one_key,x[0])
+            # SKYORDER is not written by newer (V6) versions of the CP; record it as -1
+            if one_key=='SKYORDER' and value=='Unknown':
+                value=-1
+            record.append(value)
+
         records.append(record)
         x.close()
         
@@ -249,12 +253,15 @@ def get_mef_overview(field='LMC_c45'):
         os.remove('goo_%s.txt' %field)
         ztab.sort(['FILTER','EXPTIME'])
         ztab.write('Summary/%s_mef.tab' % field ,format='ascii.fixed_width_two_line',overwrite=True)
-        zztab=ztab[ztab['SKYORDER']!=1]
+        nmissing=np.sum(ztab['SKYORDER']==-1)
+        if nmissing:
+            print('Note: %d of %d good files have no SKYORDER keyword (expected for V6 CP data; recorded as -1)' % (nmissing,len(ztab)))
+        zztab=ztab[ztab['SKYORDER']>1]
         if len(zztab):
             print('Warning -- these files have SKYORDER >1; OK in some circumstances)')
             for one_row in zztab:
                 print('Skyorder %2d for %30s in field %s' % (one_row['SKYORDER'],one_row['Root'],one_row['Field']))
-        else:
+        elif nmissing==0:
             print('All good images have SKYORDER 1')
 
     if len(bad)>0:
